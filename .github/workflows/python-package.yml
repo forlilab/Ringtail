@@ -1,0 +1,57 @@
+name: Tests
+
+on:
+  push:
+    branches: [adng, develop, release]
+  pull_request:
+    branches: [adng, develop, release]
+  workflow_dispatch:   # allows manual runs from the Actions tab
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / py${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false   # let every OS report, don't cancel siblings on first failure
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.9", "3.11"]
+
+    defaults:
+      run:
+        shell: bash -el {0}   # login shell so the micromamba env is activated on all OSes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up environment (conda-forge via micromamba)
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: ringtail-ci
+          cache-environment: true
+          condarc: |
+            channels:
+              - conda-forge
+          create-args: >-
+            python=${{ matrix.python-version }}
+            rdkit
+            meeko
+            numpy
+            scipy
+            pandas
+            python-duckdb
+            pytest
+
+      # KNOWN ISSUE: the write path currently requires a Meeko method that is only
+      # on Meeko's `develop` branch, not yet in a conda-forge release. Until that
+      # Meeko version is published, the write/parse tests will FAIL on every OS.
+      # To get a green run in the meantime, uncomment the step below (verify the
+      # repo/branch), and remove it once conda-forge Meeko includes the method.
+      # - name: (temporary) install Meeko from develop
+      #   run: pip install --no-deps --force-reinstall git+https://github.com/forlilab/Meeko.git@develop
+
+      - name: Install Ringtail (deps are conda-managed)
+        run: pip install -e . --no-deps
+
+      - name: Run tests
+        run: pytest test/ -v

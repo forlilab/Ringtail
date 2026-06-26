@@ -5,7 +5,7 @@ Changes in Ringtail
 Changes in 3.0: Faster and smaller, and lots of new functionality
 ******************************************************************
 
-Ringtail 3 comes with support for the new ADNG docking engine <#TODOlink>, now uses the DuckDB database engine by default, and includes an overhauled database schema leading to faster screening and filtering. There are new output options including CSV export with custom column choices without needing to know SQL, and new or improved command line tools to handle database merging and compression/decompression. Overall a Ringtail database now takes up less space, and is significantly faster filter and screen. 
+Ringtail 3 comes with support for the new `AD6 docking engine <https://github.com/forlilab/AutoDock>`, now uses the DuckDB database engine by default, and includes an overhauled database schema leading to faster screening and filtering. There are new output options including CSV export with custom column choices without needing to know SQL, and new or improved command line tools to handle database merging and compression/decompression. Overall a Ringtail database now takes up less space, and is significantly faster filter and screen. 
 
 Performance metrics
 ===================
@@ -36,7 +36,7 @@ Database size scales roughly linearly with the number of stored poses (~0.6 KB p
 
 Enhancements to the codebase
 ==============================
-* Works with ADNG SDF file docking output, and allows receptor to be provided as a `json`
+* Works with AD6 SDF file docking output, and allows receptor to be provided as a `json`
 * DuckDB backend offered as an alternative to SQLite, with overall similar database creating times and significantly enhanced filtering times and smaller file size
 * The Ringtail database schema is now fully defined in `schema.py`, and most storage level methods uses a custom QueryBuilder class to handle building of SQL dynamically (and with specific backend dialects)
 * Abandoned using views to store filtered poses in favor of a long-and-skinny `Filtered_poses` and `Filters` tables, significantly speeding up filtering and especially progressive filtering
@@ -47,7 +47,7 @@ Enhancements to the codebase
 * The method `export_bookmark_db` uses enhanced logic which speeds up the creation of a new subset database
 * It's now possible to assign status/flags to poses via the API using `update_pose_status`, such as Accepted/1, Maybe/2, Rejected/3 or 0 to remove status
 * New method `merge_databases` which will safely merge one or more secondary database with the database currently initialized as a Ringtail object. 
-* New method to (re-)calculate interactions for vina and ADNG results. This will delete all interactions present and calculate them all anew based on current receptor data in the database and given vdw and hb cutoffs. Useful if interactions were not calculated during database creation, or if user wants to re-calculate them with new interaction cutoff distances. 
+* New method to (re-)calculate interactions for vina and AD6 results. This will delete all interactions present and calculate them all anew based on current receptor data in the database and given vdw and hb cutoffs. Useful if interactions were not calculated during database creation, or if user wants to re-calculate them with new interaction cutoff distances. 
 * Interaction calculations uses a k-d tree of the receptor atoms and batched lookup for all provided poses, built once instead of per pose as previously done, and all atoms in the pose are checked in batch instead of one by one, significantly reducing time to calculate interactions 
 * Ringtail database version is now tracked in a `ringtail_schema_version` table (SQLite `PRAGMA user_version` has been depreceated)
 * A more flexible Pytests harness for advanced users and dvelopers

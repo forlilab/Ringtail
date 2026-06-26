@@ -396,7 +396,7 @@ class RingtailCore:
     def add_mol(
         self,
         mols: Union[Iterable[Chem.Mol], Chem.Mol],
-        docking_mode: str = "adng",
+        docking_mode: str = "ad6",
         calculate_interactions: bool = RingtailDefaults.calculate_interactions,
         interaction_cutoffs: list = RingtailDefaults.interaction_cutoffs,
         receptor_string: str = None,
@@ -410,7 +410,7 @@ class RingtailCore:
 
         Args:
             mols (Chem.Mol | Iterable[Chem.Mol]): docked molecule(s) with pose properties
-            docking_mode (str): must be "adng"
+            docking_mode (str): must be "ad6"
             calculate_interactions (bool): whether to calculate and store interactions
             interaction_cutoffs (list): [hb_cutoff, vdw_cutoff] in ångströms
             receptor_string (str): receptor PDBQT or polymer JSON string; fetched from DB if omitted
@@ -419,7 +419,7 @@ class RingtailCore:
             finalize (bool): reserved for future use
         """
         docking_mode = validate_docking_mode(docking_mode)
-        if docking_mode != "adng":
+        if docking_mode != "ad6":
             raise OptionError(
                 f"Docking mode {docking_mode} is not currently valid for adding Mols directly."
             )
@@ -2196,7 +2196,7 @@ class RingtailCore:
         Args:
             docking_mode (str)
             items (Iterable): items to be parsed
-            parse_fn (Callable): function used to parse the results (e.g., vina or adng parser)
+            parse_fn (Callable): function used to parse the results (e.g., vina or ad6 parser)
             duplicate_handling (str): how to deal with duplicates
             num_poses (int): num poses to store for each
             chunk_size (int): how many results to parse before writing to db

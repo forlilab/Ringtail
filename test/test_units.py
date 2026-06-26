@@ -693,62 +693,62 @@ class TestVinaHandling:
             assert warning in f.read()
 
 
-class TestADNGHandling:
+class TestAD6Handling:
     def test_stream(self, tmp_db):
         rdkit = pytest.importorskip("rdkit")
         from rdkit import Chem
 
-        tmp_db.save_receptor(str(TEST_DATA / "adng/helix--scofu01.json"))
+        tmp_db.save_receptor(str(TEST_DATA / "ad6/helix--scofu01.json"))
         suppl = Chem.SDMolSupplier(
-            str(TEST_DATA / "adng/docked_ligands.sdf"), removeHs=False
+            str(TEST_DATA / "ad6/docked_ligands.sdf"), removeHs=False
         )
         tmp_db.add_mol(suppl)
         assert tmp_db.table_length("Results") == 9
         assert tmp_db.table_length("Interactions") == 60
 
     def test_file_add(self, tmp_db):
-        adng_path = TEST_DATA / "adng"
+        ad6_path = TEST_DATA / "ad6"
         tmp_db.add_results_from_files(
-            docking_results=str(adng_path),
-            receptor_file=str(adng_path / "helix--scofu01.json"),
+            docking_results=str(ad6_path),
+            receptor_file=str(ad6_path / "helix--scofu01.json"),
             save_receptor=True,
-            docking_mode="adng",
+            docking_mode="ad6",
         )
         assert tmp_db.table_length("Results") == 9
         assert tmp_db.table_length("Interactions") == 60
 
     def test_file_add_no_interactions(self, tmp_db):
-        adng_path = TEST_DATA / "adng"
+        ad6_path = TEST_DATA / "ad6"
         tmp_db.add_results_from_files(
-            docking_results=str(adng_path),
+            docking_results=str(ad6_path),
             calculate_interactions=False,
-            docking_mode="adng",
+            docking_mode="ad6",
         )
         assert tmp_db.table_length("Results") == 9
         assert tmp_db.table_length("Interactions") == 0
 
     def test_calc_interactions_deferred(self, tmp_db):
-        adng_path = TEST_DATA / "adng"
+        ad6_path = TEST_DATA / "ad6"
         tmp_db.add_results_from_files(
-            docking_results=str(adng_path),
+            docking_results=str(ad6_path),
             calculate_interactions=False,
-            docking_mode="adng",
+            docking_mode="ad6",
         )
         assert tmp_db.table_length("Interactions") == 0
 
-        tmp_db.save_receptor(str(adng_path / "helix--scofu01.json"))
+        tmp_db.save_receptor(str(ad6_path / "helix--scofu01.json"))
         tmp_db.add_interactions()
         assert tmp_db.table_length("Results") == 9
         assert tmp_db.table_length("Interactions") == 60
 
     def test_add_interactions_recalc_larger_cutoffs(self, tmp_db):
         # populate with interactions at the default cutoffs (3.7 HB, 4.0 VDW)
-        adng_path = TEST_DATA / "adng"
+        ad6_path = TEST_DATA / "ad6"
         tmp_db.add_results_from_files(
-            docking_results=str(adng_path),
-            receptor_file=str(adng_path / "helix--scofu01.json"),
+            docking_results=str(ad6_path),
+            receptor_file=str(ad6_path / "helix--scofu01.json"),
             save_receptor=True,
-            docking_mode="adng",
+            docking_mode="ad6",
         )
         interactions_before = tmp_db.table_length("Interactions")
         hb_before = tmp_db.db_query("SELECT SUM(num_hb) FROM Results")[0][0]
@@ -771,12 +771,12 @@ class TestADNGHandling:
         assert hb_after > hb_before
 
     def test_filtering(self, tmp_db):
-        adng_path = TEST_DATA / "adng"
+        ad6_path = TEST_DATA / "ad6"
         tmp_db.add_results_from_files(
-            docking_results=str(adng_path),
-            receptor_file=str(adng_path / "helix--scofu01.json"),
+            docking_results=str(ad6_path),
+            receptor_file=str(ad6_path / "helix--scofu01.json"),
             save_receptor=True,
-            docking_mode="adng",
+            docking_mode="ad6",
         )
         count, _ = tmp_db.filter(
             eworst=-13, ligand_substruct=["C=O"], vdw_interactions=[(":VAL::", True)]

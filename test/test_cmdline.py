@@ -82,14 +82,14 @@ class TestInputs:
         assert rc == 0
         assert cli.count("Ligands") == 75
 
-    def test_adng_input(self, cli):
+    def test_ad6_input(self, cli):
         rc = cli.write(
             "-m",
-            "adng",
+            "ad6",
             "--docking_results",
-            str(TEST_DATA / "adng"),
+            str(TEST_DATA / "ad6"),
             "-rf",
-            str(TEST_DATA / "adng/helix--scofu01.json"),
+            str(TEST_DATA / "ad6/helix--scofu01.json"),
             "-sr",
         )
         assert rc == 0
@@ -109,7 +109,9 @@ class TestInputs:
         assert cli.count("Results") == 6
 
     def test_overwrite(self, cli):
-        cli.write("-m", "adgpu", "--docking_results", str(TEST_DATA / "adgpu/filelist2.txt"))
+        cli.write(
+            "-m", "adgpu", "--docking_results", str(TEST_DATA / "adgpu/filelist2.txt")
+        )
         count_before = cli.count("Ligands")
         rc = cli.write(
             "-m",
@@ -124,7 +126,9 @@ class TestInputs:
         assert count_after == 3
 
     def test_overwrite_false(self, cli):
-        cli.write("-m", "adgpu", "--docking_results", str(TEST_DATA / "adgpu/filelist1.txt"))
+        cli.write(
+            "-m", "adgpu", "--docking_results", str(TEST_DATA / "adgpu/filelist1.txt")
+        )
         rc = cli.write(
             "-m", "adgpu", "--docking_results", str(TEST_DATA / "adgpu/filelist1.txt")
         )
@@ -205,7 +209,9 @@ class TestOutputs:
     def test_output_log_and_csv(self, cli, tmp_path):
         import csv
 
-        cli.write("-m", "adgpu", "--docking_results", str(TEST_DATA / "adgpu/filelist1.txt"))
+        cli.write(
+            "-m", "adgpu", "--docking_results", str(TEST_DATA / "adgpu/filelist1.txt")
+        )
         log_file = tmp_path / "filter_log.txt"
         csv_file = tmp_path / "hits.csv"
         rc = cli.read(
@@ -241,19 +247,26 @@ class TestOutputs:
         assert float(rows[0][score_idx]) == pytest.approx(-6.66, abs=0.01)
 
     def test_export_table_csv(self, cli, tmp_path):
-        cli.write("-m", "adgpu", "--docking_results", str(TEST_DATA / "adgpu/filelist1.txt"))
+        cli.write(
+            "-m", "adgpu", "--docking_results", str(TEST_DATA / "adgpu/filelist1.txt")
+        )
         rc = cli.read("-s", "Ligands", "-xs")
         assert rc == 0
         assert Path(tmp_path / "Ligands.csv").exists()
 
     def test_export_query_csv(self, cli):
-        cli.write("-m", "adgpu", "--docking_results", str(TEST_DATA / "adgpu/filelist1.txt"))
+        cli.write(
+            "-m", "adgpu", "--docking_results", str(TEST_DATA / "adgpu/filelist1.txt")
+        )
         rc = cli.read("--export_query_csv", "SELECT * FROM Results")
         assert rc == 0
 
     def test_interaction_tolerance(self, cli):
         rc = cli.write(
-            "-m", "adgpu", "--docking_results", str(TEST_DATA / "adgpu/group1/127458.dlg.gz")
+            "-m",
+            "adgpu",
+            "--docking_results",
+            str(TEST_DATA / "adgpu/group1/127458.dlg.gz"),
         )
         assert rc == 0
         assert cli.count("Interactions") == 53
@@ -282,7 +295,9 @@ class TestOutputs:
         assert cli.count("Interactions") == 57
 
     def test_max_poses(self, cli, tmp_path):
-        cli.write("-m", "adgpu", "--docking_results", str(TEST_DATA / "adgpu/filelist1.txt"))
+        cli.write(
+            "-m", "adgpu", "--docking_results", str(TEST_DATA / "adgpu/filelist1.txt")
+        )
         count_default = cli.count("Results")
 
         db_max1 = str(tmp_path / "max1.db")
@@ -329,7 +344,9 @@ class TestFilters:
 
     @pytest.fixture(autouse=True)
     def setup_db(self, cli):
-        cli.write("-m", "adgpu", "--docking_results", str(TEST_DATA / "adgpu/filelist1.txt"))
+        cli.write(
+            "-m", "adgpu", "--docking_results", str(TEST_DATA / "adgpu/filelist1.txt")
+        )
         self.cli = cli
 
     def test_eworst(self):

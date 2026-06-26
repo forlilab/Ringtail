@@ -240,7 +240,7 @@ Keywords pertaining to database write and file handling
     "max_poses", "Number of top-scoring poses to save in database", "|default_max_poses|"
     "store_all_poses", "Flag to indicate that all poses should be stored in database", "|default_store_all_poses|"
     "interaction_tolerance", "Adds the interactions for poses within some tolerance RMSD range of the top pose in a cluster to that top pose. Can use as flag with default tolerance of 0.8, or give other value as desired [note]_ ", "|default_interaction_tolerance|"
-    "no_interactions", "If interactions for ADNG or vina results should not be calculated and stored", "False"
+    "no_interactions", "If interactions for AD6 or vina results should not be calculated and stored", "False"
     "interaction_cutoffs", "Use values other than defaults for distance cutoffs for measuring interactions between ligand and receptor in angstroms. Give as string, separating cutoffs for hydrogen bonds and VDW with comma (in that order). E.g. '3.7,4.0' will set the cutoff for hydrogen bonds to 3.7 angstroms and for VDW to 4.0.", "|default_interaction_cutoffs|"
     "max_proc", "Maximum number of subprocesses to spawn during database writing.", "Num available CPUs"
     "append_results", "Add new docking files to existing database given with input_db", "|default_append_results|"

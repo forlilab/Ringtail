@@ -69,7 +69,7 @@ M  END
 >  <ScrubInfo>  (1) 
 {"isomerGroup": 0, "isomerId": 0, "confId": 0, "nr_conformers:": 1, "nr_isomers:": 1}
 
->  <adng_free_energy>  (1) 
+>  <autodock_free_energy>  (1) 
 -13.039999999999999
 
 >  <pose_id>  (1) 
@@ -147,7 +147,7 @@ M  END
 >  <ScrubInfo>  (2) 
 {"isomerGroup": 0, "isomerId": 0, "confId": 0, "nr_conformers:": 1, "nr_isomers:": 1}
 
->  <adng_free_energy>  (2) 
+>  <autodock_free_energy>  (2) 
 -12.6
 
 >  <pose_id>  (2) 
@@ -189,7 +189,7 @@ M  END
 >  <ScrubInfo>  (3) 
 {"isomerGroup": 0, "isomerId": 0, "confId": 0, "nr_conformers:": 1, "nr_isomers:": 1}
 
->  <adng_free_energy>  (3) 
+>  <autodock_free_energy>  (3) 
 -16.739999999999998
 
 >  <pose_id>  (3) 
@@ -231,7 +231,7 @@ M  END
 >  <ScrubInfo>  (4) 
 {"isomerGroup": 0, "isomerId": 0, "confId": 0, "nr_conformers:": 1, "nr_isomers:": 1}
 
->  <adng_free_energy>  (4) 
+>  <autodock_free_energy>  (4) 
 -16.719999999999999
 
 >  <pose_id>  (4) 
@@ -273,7 +273,7 @@ M  END
 >  <ScrubInfo>  (5) 
 {"isomerGroup": 0, "isomerId": 0, "confId": 0, "nr_conformers:": 1, "nr_isomers:": 1}
 
->  <adng_free_energy>  (5) 
+>  <autodock_free_energy>  (5) 
 -16.649999999999999
 
 >  <pose_id>  (5) 
@@ -321,7 +321,7 @@ M  END
 >  <ScrubInfo>  (6) 
 {"isomerGroup": 0, "isomerId": 0, "confId": 0, "nr_conformers:": 1, "nr_isomers:": 1}
 
->  <adng_free_energy>  (6) 
+>  <autodock_free_energy>  (6) 
 -14.77
 
 >  <pose_id>  (6) 
@@ -369,7 +369,7 @@ M  END
 >  <ScrubInfo>  (7) 
 {"isomerGroup": 0, "isomerId": 0, "confId": 0, "nr_conformers:": 1, "nr_isomers:": 1}
 
->  <adng_free_energy>  (7) 
+>  <autodock_free_energy>  (7) 
 -14.35
 
 >  <pose_id>  (7) 
@@ -437,7 +437,7 @@ M  END
 >  <ScrubInfo>  (8) 
 {"isomerGroup": 0, "isomerId": 0, "confId": 0, "nr_conformers:": 1, "nr_isomers:": 1}
 
->  <adng_free_energy>  (8) 
+>  <autodock_free_energy>  (8) 
 -12.44
 
 >  <pose_id>  (8) 
@@ -505,7 +505,7 @@ M  END
 >  <ScrubInfo>  (9) 
 {"isomerGroup": 0, "isomerId": 0, "confId": 0, "nr_conformers:": 1, "nr_isomers:": 1}
 
->  <adng_free_energy>  (9) 
+>  <autodock_free_energy>  (9) 
 -12.210000000000001
 
 >  <pose_id>  (9) 

@@ -4,9 +4,9 @@
 API procedures
 ###############
 
-The Ringtail API allows for a more advanced and flexible use of Ringtail where the user can create their own scripts. In the case of the docking engines that can output docking results directly as a variable, instead of writing to the file system, including vina and ADNG, Ringtail can be directly integrated in the virtual screen pipeline and write docking results to the database directly. 
+The Ringtail API allows for a more advanced and flexible use of Ringtail where the user can create their own scripts. In the case of the docking engines that can output docking results directly as a variable, instead of writing to the file system, including vina and AD6, Ringtail can be directly integrated in the virtual screen pipeline and write docking results to the database directly. 
 
-The Ringtail API can thus process output files from both ADNG (SDFs), AutoDock-GPU (DLGs), and vina (PDBQTs), as well as ADNG dicts and vina strings. Ringtail is intended to be used for a set of docking results for a single target and binding site. This may include multiple ligand libraries as long as the target and binding site is the same as Ringtail only allows one receptor per database (checks are performed based on provided receptor name). However, if you do multiple screens with e.g., different binding pockets for the same receptor, this information will not be checked, and Ringtail will allow any data to be appended to a database as long as the receptor name is the same. One receptor JSON (or PDBQT) may also be saved to the database. Ringtail has tools for performing comparisons of ligands with different targets (:ref:`compare`).
+The Ringtail API can thus process output files from both AD6 (SDFs), AutoDock-GPU (DLGs), and vina (PDBQTs), as well as AD6 dicts and vina strings. Ringtail is intended to be used for a set of docking results for a single target and binding site. This may include multiple ligand libraries as long as the target and binding site is the same as Ringtail only allows one receptor per database (checks are performed based on provided receptor name). However, if you do multiple screens with e.g., different binding pockets for the same receptor, this information will not be checked, and Ringtail will allow any data to be appended to a database as long as the receptor name is the same. One receptor JSON (or PDBQT) may also be saved to the database. Ringtail has tools for performing comparisons of ligands with different targets (:ref:`compare`).
 
 Unlike the command line interface (:ref:`cmdline`) the API does not need to be specified for a write or read mode. It works by instantiating a RingtailCore object, and performing actions on that object. The API also offers some extra flexibility compared to the command line interface, for example it is possible to produce an internally inconsistent database that includes saving docking results with different number of poses. Due to the nature of how the Ringtail API can be used, as long as a RingtailCore object has been instantiated you can keep adding results without e.g., specifying that you are appending to an existing database. 
 
@@ -61,18 +61,18 @@ As of version 3.0.0, you can add either a pdbqt file or a receptor meeko.Polymer
 
 Writing docked Mols directly to the database
 --------------------------------------------
-The latest docking engine ADNG can produce json strings representing the ligand Mol after docking. These can be written directly to a Ringtail database without touching the file system in between, using the method ``add_mol``. ``chunk_size`` is used to determine how many Mols are processed before writing to the database, higher numbers usually meands faster write times, but uses more RAM, smaller number less RAM but longer write times. 
+The latest docking engine AD6 can produce json strings representing the ligand Mol after docking. These can be written directly to a Ringtail database without touching the file system in between, using the method ``add_mol``. ``chunk_size`` is used to determine how many Mols are processed before writing to the database, higher numbers usually meands faster write times, but uses more RAM, smaller number less RAM but longer write times. 
 
 .. code-block:: python
 
     # pre process output to rdkit Mol
     def docked_mols():
-        for result in my_docking_pipeline():  # adng docking output generator
+        for result in my_docking_pipeline():  # AD6 docking output generator
             yield result.to_rdkit_mol()
 
     rtc.add_mol(
         mols=docked_mols(),
-        docking_mode="adng",
+        docking_mode="ad6",
         chunk_size=10000,
         calculate_interactions=True,
     )
@@ -81,7 +81,7 @@ If using the SQLite backend, it is necessary to call ``rtc.finalize_write()`` at
 
 Writing vina results directly to the database
 ---------------------------------------------
-Similarly to writing ADNG mols directly to a database, vina docking results can be streamed directly to a database as well using ``add_results_from_vina_string``.
+Similarly to writing AD6 mols directly to a database, vina docking results can be streamed directly to a database as well using ``add_results_from_vina_string``.
 
 .. code-block:: python
     def vina_results():
@@ -120,18 +120,18 @@ With the Ringtial API you can keep adding results using the same object without 
 
 Handling interaction parameters
 ----------------------------------
-Only AutoDock-GPU is capable of performing interaction analysis at runtime, with these results being stored in the database if present. If interaction analysis is not present in the input file (including ADNG SDFs and Vina PDBQTs), it will by default be added by Ringtail during data parsing, unless the user specifies ``calculate_interactions=False`` option. **This will signifcantly decrease the total database write time.** By default, the cutoff distance for being considered an interaction is 3.7 å for hydrogen bonds and 4.0 å for van der Waals interactions. If the user would like to calculate interactions with other distance cutoffs, the option ``interaction_cutoffs`` can be used. To be able to add interactions it is important that the receptor file is provided during database write (or that the receptor has already been saved explicitly in the database). 
+Only AutoDock-GPU is capable of performing interaction analysis at runtime, with these results being stored in the database if present. If interaction analysis is not present in the input file (including AD6 SDFs and Vina PDBQTs), it will by default be added by Ringtail during data parsing, unless the user specifies ``calculate_interactions=False`` option. **This will signifcantly decrease the total database write time.** By default, the cutoff distance for being considered an interaction is 3.7 å for hydrogen bonds and 4.0 å for van der Waals interactions. If the user would like to calculate interactions with other distance cutoffs, the option ``interaction_cutoffs`` can be used. To be able to add interactions it is important that the receptor file is provided during database write (or that the receptor has already been saved explicitly in the database). 
 
 .. code-block:: python
 
     rtc.add_results_from_files( docking_results = "ligands.sdf",
-                                docking_mode = "adng",
+                                docking_mode = "ad6",
                                 receptor_file = "receptor.json",
                                 save_receptor = True,
                                 interaction_cutoffs = [3.7, 4.0])
     # or
     rtc.add_results_from_files( docking_results = "ligands.sdf",
-                                docking_mode="adng",
+                                docking_mode="ad6",
                                 calculate_interactions = False)
 
 The ``interaction_tolerance`` option for AD-GPU, which clusters output poses based on RMSD, allows the user to give more leeway for poses to pass given interaction filters. With this option, the interactions from poses within *c* angstrom RMSD of a cluster's top pose will be appended to the interactions for that top pose. The theory behind this is that this gives some sense of the "fuzziness" of a given binding pose, allowing the user to filter for interactions that may not be present for the top pose specifically, but could be easily accessible to it. 

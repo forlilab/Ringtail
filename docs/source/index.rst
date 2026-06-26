@@ -10,7 +10,7 @@ Ringtail
 ##########
 *A tool for handling results from virtual screening of molecules*
 
-Ringtail is an open-source, lightweight, and highly customizable Python package for organizing, filtering, and exploring the results of molecular virtual screening — from a handful of ligands to **tens of millions**. It reads collections of docking results such as the latest SDFs from ADNG <link>, Docking Log Files (DLGs) from `AutoDock-GPU <https://github.com/ccsb-scripps/AutoDock-GPU>`_, and PDBQTs from `AutoDock-Vina <https://github.com/ccsb-scripps/AutoDock-Vina>`_ — into a compact database that stays fast to query as it grows, backed by either DuckDB (the default) or SQLite. Result-file parsing is parallelized across your CPUs for fast database writing.
+Ringtail is an open-source, lightweight, and highly customizable Python package for organizing, filtering, and exploring the results of molecular virtual screening — from a handful of ligands to **tens of millions**. It reads collections of docking results such as the latest SDFs from `AutoDock-6 <https://github.com/forlilab/AutoDock>`, Docking Log Files (DLGs) from `AutoDock-GPU <https://github.com/ccsb-scripps/AutoDock-GPU>`_, and PDBQTs from `AutoDock-Vina <https://github.com/ccsb-scripps/AutoDock-Vina>`_ — into a compact database that stays fast to query as it grows, backed by either DuckDB (the default) or SQLite. Result-file parsing is parallelized across your CPUs for fast database writing.
 
 Once your docking results are in a database, Ringtail gives you a wealth of ways to apply your chemical intuition to narrow down the results to likely pharmacological hits: filter by docking score, ligand efficiency, receptor interactions, or ligand chemistry; cluster for diversity; compare hits across targets; and export exactly the molecules and data you want.
 
@@ -42,7 +42,7 @@ What you can do with Ringtail
       :link: get_started
       :link-type: ref
 
-      Ingest AutoDock-GPU DLGs, AutoDock-Vina PDBQTs, and ADNG SDFs — or docking results
+      Ingest AutoDock-GPU DLGs, AutoDock-Vina PDBQTs, and AD6 SDFs — or docking results
       streamed straight from memory, no files required.
 
    .. grid-item-card:: Filter the way you think

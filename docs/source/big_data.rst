@@ -10,7 +10,7 @@ Choose the backend and write settings
 
 * **Use the DuckDB backend** (``--storage_type duckdb`` or ``RingtailCore(storage_type="duckdb")``) for large screens: filtering is substantially faster, and database-creation throughput stays roughly flat as the database grows.
 * In Ringtail v3 pose coordinates are stored in a compact native format, so databases are considerably smaller than in earlier versions for the same data.
-* When creating a database programmatically for ADNG or vina docking results, stream results with ``add_mol`` / ``add_results_from_vina_string`` and tune ``chunk_size`` to trade memory for write speed (see :ref:`api`).
+* When creating a database programmatically for AD6 or vina docking results, stream results with ``add_mol`` / ``add_results_from_vina_string`` and tune ``chunk_size`` to trade memory for write speed (see :ref:`api`).
 
 Filter, export, compress
 ========================

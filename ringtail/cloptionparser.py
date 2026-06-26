@@ -118,7 +118,7 @@ def cmdline_parser(defaults: dict = None):
         help='specify AutoDock program used to generate results. Available options are "adgpu"/"dlg" and "vina"/"pdbqt". Vina mode will automatically change --pattern to *.pdbqt',
         action="store",
         type=str,
-        metavar="'adng','adgpu' or 'vina'",
+        metavar="'ad6','adgpu' or 'vina'",
     )
     write_parser.add_argument(
         "-su",
@@ -258,7 +258,7 @@ def cmdline_parser(defaults: dict = None):
     write_parser.add_argument(
         "-ni",
         "--no_interactions",
-        help="If interactions for e.g., adng or vina results should not be calculated and stored",
+        help="If interactions for e.g., ad6 or vina results should not be calculated and stored",
         action="store_true",
     )
     write_parser.add_argument(
@@ -875,7 +875,9 @@ class CLOptionParser:
                             logger.debug(
                                 "cloptionparser: interaction filters provided as list"
                             )
-                            if res[0].count(":") != 3:  # first element of list is the interaction
+                            if (
+                                res[0].count(":") != 3
+                            ):  # first element of list is the interaction
                                 raise OptionError(
                                     (
                                         "[%s]: to specify a residue use "

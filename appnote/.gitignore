@@ -1,0 +1,24 @@
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.bbl
+*.blg
+*.bcf
+*.run.xml
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+*.lof
+*.lot
+*.nav
+*.snm
+*.vrb
+build/
+
+# Tectonic V2 build directory
+*.tdo
+
+# Rendered output — uncomment to keep the PDF out of git
+# *.pdf

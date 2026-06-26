@@ -14,10 +14,10 @@ from dataclasses import dataclass, asdict, field, fields
 docking_modes = {
     "adgpu": {"adgpu", "dlg", "gpu"},
     "vina": {"vina", "pdbqt"},
-    "adng": {"adng", "ng", "zeta"},
+    "ad6": {"ad6", "adng", "ng", "zeta"},
 }
 
-docking_mode_file_ext = {"adgpu": "dlg", "vina": "pdbqt", "adng": "sdf"}
+docking_mode_file_ext = {"adgpu": "dlg", "vina": "pdbqt", "ad6": "sdf"}
 
 docking_alias_to_mode = {
     alias: mode for mode, aliases in docking_modes.items() for alias in aliases
@@ -76,7 +76,7 @@ def validate_file_pattern(docking_mode: str, file_pattern: str = None) -> str:
 @dataclass
 class RingtailDefaults:
     # maybe reconsider
-    docking_mode: str = "adng"
+    docking_mode: str = "ad6"
     output_db: str = "output.db"
     storage_type: str = "duckdb"
     max_proc: int = None

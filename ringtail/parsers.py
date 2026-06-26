@@ -614,7 +614,11 @@ class ADGPUMoleculeSupplier:
         for line in header_str.splitlines():
             if line[0:11] == "Ligand file":
                 ligname = (
-                    line.split(":", 1)[1].strip().replace("\\", "/").split("/")[-1].split(".")[0]
+                    line.split(":", 1)[1]
+                    .strip()
+                    .replace("\\", "/")
+                    .split("/")[-1]
+                    .split(".")[0]
                 )  # remove path and file extension (separator-agnostic)
             # store receptor name and grid parameters
             elif line[:13] == "Receptor name":
@@ -791,9 +795,9 @@ class SDFMoleculeSupplier:
         self.num_poses = num_poses
 
     def __call__(self, fname: str):
-        return self.parse_adng_results(fname, **self.kwargs)
+        return self.parse_ad6_results(fname, **self.kwargs)
 
-    def parse_adng_results(
+    def parse_ad6_results(
         self,
         fname: str,
         calculate_interactions: bool = None,
@@ -1006,7 +1010,7 @@ def prepare_mol_for_database(
     properties = {"pose_coordinates": pose_coordinates}
     if store_properties:
         for db_column in store_properties:
-            prop_name = db_to_adng(db_column)
+            prop_name = db_to_ad6(db_column)
             if mol.HasProp(prop_name):
                 properties.update(
                     {db_column: type_casting[db_column](mol.GetProp(prop_name))}
@@ -1017,8 +1021,8 @@ def prepare_mol_for_database(
     return mol, properties
 
 
-def db_to_adng(db_column: str) -> str:
-    return db_alias_to_adng.get(db_column, db_column)
+def db_to_ad6(db_column: str) -> str:
+    return db_alias_to_ad6.get(db_column, db_column)
 
 
 def generate_receptor_row(receptor_data: dict) -> list:
@@ -1082,14 +1086,14 @@ def generate_interaction_tuples(interaction_dictionaries: list) -> list:
 docking_file_parsers: dict[str, callable] = {
     "adgpu": ADGPUMoleculeSupplier,
     "vina": VinaMoleculeSupplier,
-    "adng": SDFMoleculeSupplier,
+    "ad6": SDFMoleculeSupplier,
 }
 
 
-adng_aliases = {
-    "adng_free_energy": "docking_score",
+ad6_aliases = {
+    "ad6_free_energy": "docking_score",
     "pose_id": "pose_rank",
     "_Name": "ligname",
 }
 type_casting = {"docking_score": float, "pose_rank": int, "ligname": str}
-db_alias_to_adng = {v: k for k, v in adng_aliases.items()}
+db_alias_to_ad6 = {v: k for k, v in ad6_aliases.items()}
