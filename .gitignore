@@ -173,9 +173,6 @@ ringtail/scraptest.py
 .vscode/
 util_files/
 *.DS_Store
-.DS_Store
-test/test_data/.DS_Store
-test/.DS_Store
 *_ringtail-process-log.txt
 *output*.db*
 *_log.txt
