@@ -17,7 +17,7 @@
 \subtitle{Application Notes}
 \appnotes{Application Notes}
 
-\title[Ringtail 3]{Ringtail: an upgraded tool for managing molecular docking and virtual screening data at scale}
+\title[Ringtail 3]{Ringtail: an upgraded tool for handling large-scale molecular docking and virtual screening data}
 
 \author[1,$\ast$]{May-Linn Paulsen\ORCID{0000-0002-5685-764X}}
 %\author[2]{Second Author}
@@ -27,7 +27,7 @@
 
 \corresp[$\ast$]{Corresponding author. \href{mailto:mpaulsen@scripps.edu}{mpaulsen@scripps.edu}}
 
-\abstract{Virtual screening campaigns now routinely dock libraries of millions of compounds, generating pose and interaction data at a scale where downstream analysis becomes the bottleneck. Ringtail \citep{HanselHarris2023} addresses this by organizing molecular docking results into a compact, queryable database and providing fast, flexible filtering, clustering, and export through both a command-line interface and a Python API. We present Ringtail 3, a major upgrade on two fronts. First, a new DuckDB storage backend, together with a re-engineered parsing and storage pipeline, filters large databases substantially faster than the original SQLite backend while producing smaller files. Second, Ringtail now reads output from across the AutoDock suite---AutoDock-GPU, AutoDock-Vina, and the new high-throughput AutoDock-6 (AD6) engine \citep{AD6citation}---and computes receptor interactions internally. Ringtail 3 is freely available at \url{https://github.com/forlilab/Ringtail} under the [LICENSE] license and is tested on Linux, macOS, and Windows.}
+\abstract{Virtual screening campaigns now routinely dock libraries of millions of compounds, generating pose and interaction data at a scale where the downstream analysis becomes the bottleneck. Ringtail \citep{HanselHarris2023} addresses this by organizing molecular docking results into a compact, queryable database and providing fast, flexible filtering, clustering, and export options, through both a command-line interface and a Python API. Here we present Ringtail 3, a major upgrade on two fronts. First, a new DuckDB storage backend, together with a re-engineered parsing and storage pipeline, which filters large databases substantially faster than the original SQLite backend and producing comparable or smaller database sizes. Second, Ringtail now reads output from the full AutoDock suite - AutoDock-GPU, AutoDock-Vina, and the new high-throughput AutoDock-6 (AD6) engine \citep{AD6citation}. Ringtail 3 is freely available at \url{https://github.com/forlilab/Ringtail} under the L-GPL v2.1 license and is tested on Linux, macOS, and Windows.}
 
 \keywords{virtual screening, molecular docking, AutoDock, AutoDock-6, DuckDB}
 
@@ -36,35 +36,65 @@
 \maketitle
 
 \section{Introduction}
-Virtual screening (VS) is a cornerstone of computational drug discovery, and campaigns now routinely evaluate libraries of millions of molecules. A single campaign can produce tens of millions of docked poses together with their predicted receptor interactions, and identifying promising candidates within this volume---filtering by docking score, ligand efficiency, specific receptor interactions, substructure, or three-dimensional placement, then clustering and exporting the survivors---has become a major bottleneck. Ringtail was introduced to address exactly this: it deposits docking results into a unified, queryable database and exposes an extensive set of predefined filters, clustering, and export options through both a user-friendly command-line tool and a Python API \citep{HanselHarris2023}.
+Virtual screening (VS) is a cornerstone of computational drug discovery, and campaigns often evaluate libraries of millions of molecules at once. A single virtual screen campaign can produce tens of millions of docked poses, as well as tenfold of that of predicted receptor interactions. Identifying promising drug candidates from this volume of data includes filtering or screening all the poses by metrics such as docking score, ligand efficiency, specific receptor interactions, chemical substructures, as well as three-dimensional placement of certain pharmacophores. This is typically followed (or preceded) by clustering based on e.g., molecular or interaction similarities. The final step is exporting a subset of the original molecules in a format useful to share with collaborators. This larger process of virtually screening the docked molecules can be a major bottleneck, both because the data will take up a lot of harddrive space and can be difficult to organize, and the processes of filtering chemically rich data is time consuming. Ringtail was introduced to address exactly these issues: it deposits docking results into a unified, queryable database and exposes an extensive set of predefined filters, clustering, and export options through both a user-friendly command-line tool and a Python API \citep{HanselHarris2023}. Since Ringtail is open-source, it is trivial for a researcher to add support for additional docking formats and new filter criteria. 
 
-Here we present Ringtail 3, which substantially extends both the performance and the scope of the tool. Filtering at scale is accelerated by a new DuckDB storage backend and a re-engineered parsing, storage, and bookmarking pipeline; input support now spans the full AutoDock suite, including the new AutoDock-6 engine; and additional export options make it easier to share curated results with collaborators.
+Here we present Ringtail 3, which substantially extends both the performance and the scope of the original tool. Filtering at scale is accelerated by a new DuckDB storage backend and a re-engineered parsing, storage, and candidate screening pipeline. Data input support now spans the full AutoDock suite, including the new AutoDock-6 engine, and additional and more flexible and customizable export options make it easier to share curated results with collaborators.
 
 \section{Features}
-Ringtail 3 retains the full filtering, clustering, and export functionality of the original release while substantially improving performance and broadening the range of supported docking engines. The principal new capabilities are described below.
+Ringtail 3 retains the full filtering, clustering, and export functionality of the original release while substantially improving performance and broadening the range of supported docking engines. The main upgraded capabilities are described below. Ringtail 3 has also been streamlined with extensive use of default options, including but not limited to auto-detection of existing database type, and use of synonyms for defining docking engine. 
 
 \subsection{Faster analysis at scale}
-Ringtail 3 introduces DuckDB as a storage backend alongside the original SQLite. DuckDB is an embedded, serverless analytical database with columnar storage optimized for the read-heavy aggregation queries that filtering a docking database entails. It is selected at database creation with \texttt{-{}-storage\_type duckdb} and auto-detected thereafter, requiring no change to the user-facing API, and write times remain comparable to SQLite. Interaction-based filtering, however, is markedly faster and the resulting databases are smaller: for a screen of roughly two million ligands, a combined docking-score-and-interaction filter completes in about 2.6\,s with DuckDB versus about 12\,s with SQLite, in a 9\,GB versus 14\,GB database.
-% TODO: confirm/choose the headline numbers and comparison; full benchmarks (across library sizes and versions) are in docs/source/changes.rst. Consider a Table or Figure here.
-These gains are compounded by a re-engineered storage layer: docking results are now buffered and committed in large batches rather than individually, and filtered result sets are stored in dedicated \texttt{Filters} and \texttt{Filtered\_poses} tables rather than as SQL views, which markedly speeds up repeated and progressive filtering.
+Ringtail 3 introduces DuckDB as a storage backend alongside the original SQLite. DuckDB is an embedded, serverless analytical database with columnar storage optimized for the read-heavy aggregation queries that filtering a docking database entails. DuckDB and SQLite write times, as well as simple docking score cuttof filterings, are comparable. More complex filtering, including interaction-based specifications, is markedly faster in DuckDB (Table~\ref{tab:versions}), and the resulting databases are smaller (Table~\ref{tab:scaling}). For a screen of roughly two million ligands, a combined docking-score-and-interaction filter completes in about 2.6\,s with DuckDB versus about 12\,s with SQLite, in a 9\,GB versus 14\,GB database.
+\begin{table*}[t]
+\caption{Database size and wall-clock filtering time across Ringtail versions for a $\sim$2-million-ligand screen (Apple M3 Pro, 12 cores, 18\,GB RAM). Filters: a docking-score cutoff (\texttt{eworst}\,$=-6$), then that filter combined with one and with two interaction filters.}
+\label{tab:versions}
+\centering
+\begin{tabular}{@{}llrrrr@{}}
+\toprule
+Ringtail & Engine & DB size (GB) & Score (s) & Score + 1 int.\ (s) & Score + 2 int.\ (s)$^{\dagger}$ \\
+\midrule
+v3   & DuckDB & 9    & 0.3  & 2.6 & 2.2 \\
+v3   & SQLite & 14   & 4.7  & 12  & 17  \\
+v2   & SQLite & 27.7 & 3.3  & 31  & 36  \\
+v1.1 & SQLite & 25.6 & 22.7 & 137 & 200 \\
+\botrule
+\end{tabular}
+\begin{tablenotes}
+\item[$\dagger$] A second interaction filter is sometimes faster than one: the extra constraint reduces the number of matching poses that must be assembled.
+\end{tablenotes}
+\end{table*}
+
+\begin{table*}[t]
+\caption{DuckDB (Ringtail 3) filtering time and database size as a function of library size (Linux workstation: Intel i9, 18 cores, 64\,GB RAM, SSD). Filters as in Table~\ref{tab:versions}.}
+\label{tab:scaling}
+\centering
+\begin{tabular}{@{}rrrrrr@{}}
+\toprule
+Ligands & Poses & DB size (GB) & Score (s) & Score + 1 int.\ (s) & Score + 2 int.\ (s)$^{\dagger}$ \\
+\midrule
+100{,}000    & 277{,}048     & 0.20 & 1.2 & 1.4  & 1.4  \\
+2{,}000{,}000  & 5{,}448{,}313   & 3.3  & 1.4 & 5.4  & 4.0  \\
+9{,}039{,}451  & 24{,}801{,}508  & 15   & 2.0 & 16.5 & 13.8 \\
+\botrule
+\end{tabular}
+\begin{tablenotes}
+\item[$\dagger$] A second interaction filter is sometimes faster than one: the extra constraint reduces the number of matching poses that must be assembled.
+\end{tablenotes}
+\end{table*}
+
+These gains are achieved by a re-engineered storage layer: docking results are now buffered and committed in large batches by default rather than the old default of writing and committing one docked molecule at the time, and filtered result sets are stored in long-and-skinny tables rather than as SQL views (essentially a stored, formatted query), which markedly speeds up repeated and progressive filtering.
 
 \subsection{Broader docking-engine support}
-Ringtail 3 reads results from across the AutoDock suite: Docking Log Files (DLGs) from AutoDock-GPU, PDBQT output from AutoDock-Vina, and SDF output from the new high-throughput AutoDock-6 (AD6) engine \citep{AD6citation}. All engines populate the same unified schema, so users select their source with \texttt{-{}-docking\_mode} and otherwise interact with the database identically. Receptor--ligand interactions are now computed within Ringtail directly from the stored receptor, and can be (re-)calculated after the fact---useful when interactions were not stored at database creation, or when a different interaction-distance cutoff is desired.
-
-\subsection{Interactive graphical interface}
-% TODO / DECISION: only keep this subsection if the GUI is publicly released by submission.
-% A reviewer will expect any feature described here to be freely available (see Availability).
-Ringtail 3 is accompanied by an interactive graphical interface for exploring filtered results: a scatter plot of docking score versus ligand efficiency with click-to-view three-dimensional poses, and a status-triage workflow for tagging compounds as accepted, maybe, or rejected, persisted directly in the database. It replaces the previous static PyMOL/matplotlib plotting utilities.
+Ringtail 3 reads results from across the AutoDock suite: Docking Log Files (DLGs) from AutoDock-GPU, PDBQT output from Vina, and SDF output from the new high-throughput AutoDock-6 (AD6) engine \citep{AD6citation}. All engines populate at least parts of the same unified schema (some output files contain more details), so users select their source with \texttt{-{}-docking\_mode} and otherwise interact with the database identically. Receptor-ligand interactions are computed within Ringtail directly from the stored receptor for Vina and AD6 since these do not report their own interactions in the docking output. New in Ringtail 3 is also that nteractions for any docking engine can be (re-)calculated after the fact, for example if the user wishes to re-calculate interactions with stricter or more relaxed interaction cutoffs. 
 
 \subsection{Additional analysis and workflow enhancements}
-Further additions include \texttt{merge\_databases} for combining databases from screening campaigns run in parallel; clustering by Morgan or interaction fingerprint over any saved selection; new molecular-weight filters; and several CSV export modes that let users write exactly the columns they need without writing SQL.
+Further additions include \texttt{merge\_databases} for combining databases from screening campaigns run in parallel, enhanced tool for comparing docked molecules considered good (or bad) candidates between different screens and receptor proteins, and several export options including a flexible CSV writer that let users write exactly the columns they need without writing SQL.
 
 \section{Implementation}
 Ringtail is implemented in Python ($\geq$3.9) and distributed through PyPI and conda-forge. The database schema is defined in a single declarative module that emits the appropriate SQL for either backend, and result-file parsing is parallelized across available CPU cores. The same functionality is exposed through a command-line interface (\texttt{rt\_process\_vs} and companion tools) and a documented Python API, so Ringtail can be used interactively or embedded in automated screening pipelines. Core dependencies include RDKit, NumPy, SciPy, pandas, and Meeko.
 
 \section{Availability and Implementation}
-% REQUIRED by the journal — exact wording they want:
-Ringtail is freely available at \url{https://github.com/forlilab/Ringtail} under the [LICENSE] license.
+Ringtail is freely available at \url{https://github.com/forlilab/Ringtail} under the L-GPL v2.1 license.
 Requires Python $\geq$ 3.9 and is tested on Linux, macOS, and Windows.
 Installation via conda-forge (\texttt{conda install -c conda-forge ringtail}) resolves all dependencies and is recommended; a PyPI package is also available for users who prefer to manage dependencies themselves.
 
