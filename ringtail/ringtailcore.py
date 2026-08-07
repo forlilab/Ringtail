@@ -685,6 +685,7 @@ class RingtailCore:
         input_bookmark: str = None,
         return_iter: bool = False,
         ligand_name_file=None,
+        filter_expression: dict = None,
     ) -> Union[tuple[int, str], list[tuple]]:
         """Prepare list of filters, then filters and writes all passing pose_ids to a bookmark of given name. Creates an output log text file of all ligand (or all poses, if requested) docking results that passes.
         If clustering is requested, it will first perform the filtering, then cluster, and create a new bookmark of name <bookmark_<cluster_type>_cluster> for each requested cluster type.
@@ -724,6 +725,12 @@ class RingtailCore:
             output_bookmark (str): name for resulting book mark file. Default value is 'passing_results', can only contain lower case letters, numbers, and underscore (_)
             input_bookmark (str): name of bookmark to perform filtering over
             return_iter (bool): return an iterable of all of the filtering results
+            filter_expression (dict): nested boolean filter tree for tiered "OR of AND-groups"
+                filtering. A node is either ``{"op": "and"|"or", "children": [<node>, ...]}``
+                or a leaf group (a dict of Filters fields, e.g. ``{"eworst": -9,
+                "hb_interactions": [["A:ASP:189:", True]], "max_miss": 1}``). When provided it
+                defines the entire filter predicate; the flat filter args above are ignored for
+                the WHERE clause. SMARTS/substructure filters are not supported inside the tree.
 
         Returns:
             tuple[int, str]: number of ligands passing filter and final bookmark name (may change if eg filtering and clustering)
@@ -780,6 +787,14 @@ class RingtailCore:
         # check that all filter values are valid
         filters.checks()
 
+        # Nested/tiered filtering fully defines the WHERE predicate itself, so skip the
+        # interaction-combination enumeration path (that only varies flat interaction
+        # filters). NOTE: revisit enumerate_interaction_combs / max_miss once tiered
+        # filtering is proven — OR-of-AND-groups can express the same intent natively and
+        # this enumerate→union "crutch" may become redundant.
+        if filter_expression is not None:
+            enumerate_interaction_combs = False
+
         logger.info("Starting to filter results")
         # get possible permutations of interaction with max_miss excluded
         if enumerate_interaction_combs and max_miss > 0:
@@ -817,6 +832,7 @@ class RingtailCore:
                     all_filters=filter_dict,
                     output_bookmark=effective_bookmark,
                     input_bookmark=input_bookmark,
+                    filter_expression=filter_expression,
                 )
             print_string = ""
         # else produce a bookmark for each interaction combination

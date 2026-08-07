@@ -238,6 +238,97 @@ class TestFiltering:
             in result_filters
         )
 
+    def test_tiered_filter_or_of_groups(self, populated_db):
+        """Nested filter_expression: OR of two AND-groups. The passing ligand set must
+        equal the union of each tier filtered on its own (true OR-of-AND semantics)."""
+        expr = {
+            "op": "or",
+            "children": [
+                {
+                    "eworst": -6,
+                    "hb_interactions": [("A:VAL:279:", True), ("A:LYS:162:", True)],
+                    "vdw_interactions": [("A:VAL:279:", True), ("A:LYS:162:", True)],
+                    "max_miss": 1,
+                },
+                {"eworst": -7},
+            ],
+        }
+        count_or, _ = populated_db.filter(
+            filter_expression=expr, output_bookmark="tier_or"
+        )
+        # each tier on its own
+        count_a, _ = populated_db.filter(
+            eworst=-6,
+            hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
+            vdw_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
+            max_miss=1,
+            output_bookmark="tier_a",
+        )
+        count_b, _ = populated_db.filter(eworst=-7, output_bookmark="tier_b")
+        assert count_a == 33  # matches TestFiltering.test_filter
+
+        ligs_a = set(
+            populated_db.fetch_select_ligands_poses(bookmark_name="tier_a").keys()
+        )
+        ligs_b = set(
+            populated_db.fetch_select_ligands_poses(bookmark_name="tier_b").keys()
+        )
+        ligs_or = set(
+            populated_db.fetch_select_ligands_poses(bookmark_name="tier_or").keys()
+        )
+        assert ligs_or == ligs_a | ligs_b
+        assert count_or == len(ligs_a | ligs_b)
+
+    def test_tiered_query_sql_shape(self, tmp_db):
+        """Property-only tiers render one parenthesized OR-of-AND WHERE predicate."""
+        expr = {
+            "op": "or",
+            "children": [
+                {"eworst": -9, "ebest": -12},
+                {"eworst": -7},
+            ],
+        }
+        with tmp_db.storageman as sm:
+            sql = sm._generate_result_filtering_query({}, "out", None, expr)
+        assert (
+            "WHERE ((R.docking_score <= -9 AND R.docking_score >= -12) "
+            "OR (R.docking_score <= -7))" in sql
+        )
+
+    def test_tiered_query_nested_depth(self, tmp_db):
+        """The renderer is fully recursive: arbitrary AND/OR nesting depth works."""
+        expr = {
+            "op": "and",
+            "children": [
+                {"eworst": -8},
+                {
+                    "op": "or",
+                    "children": [
+                        {"ebest": -12},
+                        {"op": "and", "children": [{"eworst": -9}, {"lebest": -0.5}]},
+                    ],
+                },
+            ],
+        }
+        with tmp_db.storageman as sm:
+            sql = sm._generate_result_filtering_query({}, "out", None, expr)
+        assert (
+            "((R.docking_score <= -8) AND ((R.docking_score >= -12) "
+            "OR ((R.docking_score <= -9) AND (R.leff >= -0.5))))" in sql
+        )
+
+    def test_tiered_rejects_rdkit(self, tmp_db):
+        """SMARTS/substructure filters inside a nested expression raise (v1 limitation)."""
+        from ringtail.exceptions import OptionError
+
+        expr = {
+            "op": "or",
+            "children": [{"ligand_substruct": ["C=O"]}, {"eworst": -7}],
+        }
+        with tmp_db.storageman as sm:
+            with pytest.raises(OptionError):
+                sm._generate_result_filtering_query({}, "out", None, expr)
+
 
 class TestOutput:
     """Output operations: SDFs, CSVs, logs, bookmark exports."""

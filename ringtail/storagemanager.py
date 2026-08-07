@@ -216,6 +216,7 @@ class StorageManager(ABC):
         all_filters: Filters,
         output_bookmark: str,
         input_bookmark: str = None,
+        filter_expression: dict = None,
     ) -> int:
         """Generate and execute database queries from given filters.
 
@@ -223,6 +224,8 @@ class StorageManager(ABC):
             all_filters (dict): dict containing all filters
             output_bookmark (str): name of bookmark in which to save the data
             input_bookmark (str, optional): if filtering not across all data, but a pre-filtered bookmark
+            filter_expression (dict, optional): nested boolean filter tree (tiered filtering);
+                when given it defines the WHERE predicate and is stored as the bookmark's filters
 
         Returns:
             int: number of passing ligands
@@ -238,7 +241,7 @@ class StorageManager(ABC):
 
         # get the final filter query, has a {selection} place holder
         filter_query: str = self._generate_result_filtering_query(
-            all_filters, output_bookmark, input_bookmark
+            all_filters, output_bookmark, input_bookmark, filter_expression
         )
 
         logger.debug(f"Query for filtering results: {filter_query}")
@@ -249,10 +252,14 @@ class StorageManager(ABC):
         if input_bookmark is None:
             input_bookmark = "Results"
 
+        # persist the nested expression when present, else the flat filters
+        stored_filters = (
+            filter_expression if filter_expression is not None else all_filters
+        )
         self._populate_filter_tables(
             name=output_bookmark,
             query=filter_query,
-            filters=all_filters,
+            filters=stored_filters,
             input_bookmark=input_bookmark,
         )
         logger.debug(
@@ -2667,21 +2674,30 @@ class StorageManager(ABC):
         return processed_filters
 
     def _generate_result_filtering_query(
-        self, filters_dict: dict, bookmark_name: str, input_bookmark: str = None
+        self,
+        filters_dict: dict,
+        bookmark_name: str,
+        input_bookmark: str = None,
+        filter_expression: dict = None,
     ) -> str:
-        """Takes dict of filters, writes SQL filtering string.
+        """Takes filters, writes SQL filtering string.
 
-        Each filter type becomes an independent WHERE condition combined with AND:
-        - Numerical: direct column conditions on Results
-        - Include interactions: pose_id IN (GROUP BY/HAVING subquery)
-        - Exclude interactions: pose_id NOT IN (simple subquery)
-        - Ligand name: ligand_id IN (Ligands subquery)
-        - RDKit (substruct/position/atoms): in-memory post-filter
+        Two modes:
+        - Flat (default): ``filters_dict`` is a single AND-group. Each filter type
+          becomes an independent WHERE condition combined with AND (numerical column
+          conditions, include interactions via EXISTS, exclude interactions via
+          NOT IN, ligand name via ligand_id IN, RDKit substruct as in-memory post-filter).
+        - Nested (``filter_expression`` given): a recursive boolean tree of AND/OR
+          nodes whose leaves are Filters-shaped groups, rendered into one parenthesized
+          WHERE predicate — this expresses tiered "OR of AND-groups" filtering. RDKit
+          substructure filters are not supported inside the tree (top-level only).
 
         Args:
             filters_dict (dict): Keys and value formats must match Filters class
             bookmark_name (str): Name of bookmark to which passing poses are saved
             input_bookmark (str, optional): Filter over pre-filtered data instead of entire database
+            filter_expression (dict, optional): nested boolean filter tree; when given,
+                it fully defines the WHERE predicate and ``filters_dict`` is ignored for it
 
         Returns:
             str: SQL query returning pose_ids of passing results
@@ -2696,10 +2712,7 @@ class StorageManager(ABC):
                 raise OptionError(
                     "'input_bookmark' and 'bookmark_name' cannot be the same! Please rename 'bookmark_name'"
                 )
-            if (
-                filters_dict["score_percentile"] is not None
-                or filters_dict["le_percentile"] is not None
-            ):
+            if self._expression_uses_percentile(filters_dict, filter_expression):
                 raise OptionError(
                     "Cannot use 'score_percentile' or 'le_percentile' with 'input_bookmark'."
                 )
@@ -2708,13 +2721,64 @@ class StorageManager(ABC):
             elif self._is_statustable(input_bookmark):
                 filtering_window = f"(SELECT * FROM Results WHERE pose_id IN (SELECT pose_id FROM {input_bookmark}))"
 
-        processed_filters = self._process_filters_for_query(filters_dict)
-        if not processed_filters:
-            raise OptionError("No filters were provided, cannot filter.")
+        if filter_expression is not None:
+            boolean_predicate = self._render_filter_expression(filter_expression)
+            if not boolean_predicate:
+                raise OptionError("No filters were provided, cannot filter.")
+            where_conditions = [boolean_predicate]
+        else:
+            processed_filters = self._process_filters_for_query(filters_dict)
+            if not processed_filters:
+                raise OptionError("No filters were provided, cannot filter.")
 
+            predicate, lig_filters = self._render_filter_group(processed_filters)
+            where_conditions = [predicate] if predicate else []
+
+            # RDKit substruct/position/max-atoms filters can't be expressed in SQL —
+            # run the SQL part first, then post-filter the resulting poses in memory.
+            if lig_filters:
+                rdkit_partial = f" FROM {filtering_window} R JOIN Ligands ON Ligands.ligand_id = R.ligand_id"
+                if where_conditions:
+                    rdkit_partial += f" WHERE {' AND '.join(where_conditions)}"
+                passing_pose_ids = [
+                    pid
+                    for poseids in self._perform_rdkit_filtering(
+                        rdkit_partial, lig_filters
+                    ).values()
+                    for pid in poseids
+                ]
+                where_conditions = [
+                    f"R.pose_id IN ({','.join(map(str, passing_pose_ids))})"
+                ]
+
+        where_sql = (
+            f"WHERE {' AND '.join(where_conditions)}" if where_conditions else ""
+        )
+        select_cols = (
+            "R.pose_id, R.ligand_id"
+            if self._filtered_poses_has_ligand_id
+            else "R.pose_id"
+        )
+        return f"SELECT {select_cols} FROM {filtering_window} R {where_sql}"
+
+    def _render_filter_group(self, processed_filters: dict) -> tuple:
+        """Render one AND-group of processed filters into a single SQL predicate.
+
+        This is the per-group core shared by both the flat and nested filter paths:
+        numerical + include/exclude interaction + ligand-name conditions joined by AND.
+        RDKit ligand filters (substruct/position/max-atoms) can't be expressed in SQL,
+        so they're returned to the caller to apply as an in-memory post-filter.
+
+        Args:
+            processed_filters (dict): output of ``_process_filters_for_query`` for one group
+
+        Returns:
+            tuple[str | None, dict]: (AND-joined WHERE predicate — no surrounding
+            parentheses or WHERE keyword, or None if the group is empty; remaining
+            RDKit ligand filters)
+        """
         where_conditions = []
-        lig_filters = {}
-        rdkit_query = False
+        rdkit_lig_filters = {}
 
         if "num_filters" in processed_filters:
             where_conditions.append(
@@ -2742,7 +2806,8 @@ class StorageManager(ABC):
                 )
 
         if "lig_filters" in processed_filters:
-            lig_filters = processed_filters["lig_filters"]
+            # copy so popping ligand_name/ligand_name_file doesn't mutate the caller's dict
+            lig_filters = dict(processed_filters["lig_filters"])
             ligname_query = ""
             if "ligand_name" in lig_filters:
                 lig_names = lig_filters.pop("ligand_name")
@@ -2756,32 +2821,78 @@ class StorageManager(ABC):
             if ligname_query:
                 where_conditions.append(f"R.ligand_id IN ({ligname_query})")
             if lig_filters:
-                rdkit_query = True
+                rdkit_lig_filters = lig_filters
 
-        if rdkit_query:
-            rdkit_partial = f" FROM {filtering_window} R JOIN Ligands ON Ligands.ligand_id = R.ligand_id"
-            if where_conditions:
-                rdkit_partial += f" WHERE {' AND '.join(where_conditions)}"
-            passing_pose_ids = [
-                pid
-                for poseids in self._perform_rdkit_filtering(
-                    rdkit_partial, lig_filters
-                ).values()
-                for pid in poseids
-            ]
-            where_conditions = [
-                f"R.pose_id IN ({','.join(map(str, passing_pose_ids))})"
-            ]
+        predicate = " AND ".join(where_conditions) if where_conditions else None
+        return predicate, rdkit_lig_filters
 
-        where_sql = (
-            f"WHERE {' AND '.join(where_conditions)}" if where_conditions else ""
+    def _render_filter_expression(self, node: dict) -> str:
+        """Recursively render a nested boolean filter expression into one SQL predicate.
+
+        A node is either a boolean node ``{"op": "and"|"or", "children": [...]}`` or a
+        leaf group (a Filters-shaped dict). Boolean nodes wrap their children in
+        parentheses; leaves render via ``_render_filter_group``. Arbitrary nesting depth
+        is supported — the same recursion renders ``(a AND (b OR (c AND d)))``.
+
+        Args:
+            node (dict): a boolean node or a leaf Filters-shaped group
+
+        Returns:
+            str: parenthesized SQL predicate (empty string if the node contributes nothing)
+        """
+        if isinstance(node, dict) and "op" in node and "children" in node:
+            op = str(node["op"]).strip().upper()
+            if op not in ("AND", "OR"):
+                raise OptionError(
+                    f"Unrecognized boolean operator in filter expression: {node['op']!r}. "
+                    "Use 'and' or 'or'."
+                )
+            rendered = [
+                self._render_filter_expression(child) for child in node["children"]
+            ]
+            rendered = [r for r in rendered if r]
+            if not rendered:
+                return ""
+            if len(rendered) == 1:
+                return rendered[0]
+            return "(" + f" {op} ".join(rendered) + ")"
+
+        # leaf group: normalize through Filters so we get a full, validated dict
+        group_filters = Filters(**node)
+        group_filters.checks()
+        processed = self._process_filters_for_query(group_filters.asdict())
+        if not processed:
+            return ""
+        predicate, rdkit_lig_filters = self._render_filter_group(processed)
+        if rdkit_lig_filters:
+            raise OptionError(
+                "SMARTS/substructure (RDKit) filters are not supported inside nested "
+                "filter expressions yet; use them as top-level filters instead."
+            )
+        if not predicate:
+            return ""
+        return "(" + predicate + ")"
+
+    def _expression_uses_percentile(
+        self, filters_dict: dict, filter_expression: dict = None
+    ) -> bool:
+        """True if a score/le percentile filter appears anywhere in the flat filters or
+        the nested expression (percentile is incompatible with input_bookmark)."""
+        if filter_expression is not None:
+
+            def _walk(node):
+                if isinstance(node, dict) and "op" in node and "children" in node:
+                    return any(_walk(child) for child in node["children"])
+                return (
+                    node.get("score_percentile") is not None
+                    or node.get("le_percentile") is not None
+                )
+
+            return _walk(filter_expression)
+        return (
+            filters_dict.get("score_percentile") is not None
+            or filters_dict.get("le_percentile") is not None
         )
-        select_cols = (
-            "R.pose_id, R.ligand_id"
-            if self._filtered_poses_has_ligand_id
-            else "R.pose_id"
-        )
-        return f"SELECT {select_cols} FROM {filtering_window} R {where_sql}"
 
     def _perform_rdkit_filtering(
         self, partial_query: str, ligand_filters: dict
