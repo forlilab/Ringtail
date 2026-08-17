@@ -117,7 +117,9 @@ Changes to API and code behavior
 
 Bug fixes
 ===========
-* For vina results, special docking atoms (for macrocycles and waters) may have been contributing to calculated van der Waals interactions in the database. This is no longer the case, so if e.g., a database is recreated in v3.0.0 from the original docking .PDBQTs the new database may have fewer interactions. 
+* The ``hb_count`` filter was erroneously not inclusive in both directions, so ``hb_count=5`` returned poses with six or more hydrogen bonds instead of five or more. Filtering results involving ``hb_count`` may differ from previous versions.
+* ``hb_count`` is now given as a plain integer, e.g. ``hb_count=5``, and is no longer wrapped as a list of tuples. The wrapped tuple was a leftover from an early design decision that anticipated additional interaction count filters.
+* For vina results, special docking atoms (for macrocycles and waters) may have been contributing to calculated van der Waals interactions in the database. This is no longer the case, so if e.g., a database is recreated in v3.0.0 from the original docking .PDBQTs the new database may have fewer interactions.
 * Ligand efficiency, a calculated value, is rounded to two decimal points reflect the accuracy of the numbers used to calculate it (docking score and number of atoms)
 * Will only write a filter log file (e.g., `output_log.txt`) if specified
 * Exporting poses with flexible receptor residues will now export all poses of a given ligand, not just the best scoring one 
