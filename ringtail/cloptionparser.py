@@ -596,7 +596,7 @@ def cmdline_parser(defaults: dict = None):
     interaction_group.add_argument(
         "-hc",
         "--hb_count",
-        help="accept ligands with at least the requested number of HB interactions. If a negative number is provided, then accept ligands with no more than the requested number of interactions",
+        help="accept ligands with at least the requested number of HB interactions, e.g. 5 accepts poses with 5 or more. If a negative number is provided, then accept ligands with no more than that number, e.g. -5 accepts poses with 5 or fewer. Both bounds are inclusive; 0 means only poses with no hydrogen bonds",
         action="store",
         type=int,
         metavar="NUMBER",
@@ -893,8 +893,7 @@ class CLOptionParser:
                     filters[k] = v
 
                 # count interactions
-                c = getattr(parsed_opts, "hb_count", None)
-                filters["hb_count"] = [("hb_count", c)] if c is not None else []
+                filters["hb_count"] = getattr(parsed_opts, "hb_count", None)
 
                 # make dictionary for ligand filters
                 ligand_kw = Filters.get_filter_keys("ligand")

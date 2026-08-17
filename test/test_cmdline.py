@@ -382,9 +382,19 @@ class TestFilters:
         )
 
     def test_hbcount(self):
-        rc = self.cli.read("-s", "hb_count", "--hb_count", "5")
+        # filelist1 poses have num_hb 1,2,4 (127458), 4 (173101) and 5,6,7 (100729),
+        # so an inclusive "at least 4" admits all three ligands. Threshold 4 is chosen
+        # because it discriminates: the old exclusive "> 4" admitted only 100729.
+        rc = self.cli.read("-s", "hb_count", "--hb_count", "4")
         assert rc == 0
-        assert self.cli.passing("hb_count") == 1
+        assert self.cli.passing("hb_count") == 3
+
+    def test_hbcount_at_most(self):
+        # a negative value means "no more than", also inclusive: only 127458 has
+        # poses with 3 or fewer hydrogen bonds
+        rc = self.cli.read("-s", "hb_at_most", "--hb_count", "-3")
+        assert rc == 0
+        assert self.cli.passing("hb_at_most") == 1
 
     @pytest.mark.parametrize(
         "hb_spec",

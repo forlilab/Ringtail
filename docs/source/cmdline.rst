@@ -273,7 +273,7 @@ Keywords pertaining to filtering
     "vdw_interactions","Filter for van der Waals interaction with given receptor information. [note]_ ","|default_vdw_interactions|"
     "hb_interactions","Filter with hydrogen bonding interaction with given information. Does not distinguish between donating or accepting. [note]_ ","|default_hb_interactions|"
     "reactive_interactions","Filter for reation with residue containing specified information. [note]_ ","|default_reactive_interactions|"
-    "hb_count","Filter for poses with at least this many hydrogen bonds. Does not distinguish between donating and accepting. [note]_ ","|default_hb_count|"
+    "hb_count","Filter for poses with at least this many hydrogen bonds, inclusive (5 keeps poses with 5 or more). A negative value filters for no more than that many, also inclusive (-5 keeps poses with 5 or fewer); 0 keeps only poses with no hydrogen bonds. Does not distinguish between donating and accepting. [note]_ ","|default_hb_count|"
     "react_any","Filter for poses with reaction with any residue. [note]_ ","|default_react_any|"
     "max_miss","Will filter given interaction filters excluding up to max_miss interactions. Will log and output union of combinations unless used with `enumerate_interaction_combs`. See section for reference. [note]_", "|default_max_miss|"
 

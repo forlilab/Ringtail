@@ -201,6 +201,27 @@ class TestFiltering:
         )
         assert count_file == 16
 
+    def test_hb_count_boundary(self, populated_db):
+        """hb_count is inclusive: N admits poses with exactly N hydrogen bonds.
+        The previous exclusive comparison yielded the "at least N+1" counts here
+        (106 for hb_count=4, 81 for hb_count=5)."""
+        count_4, _ = populated_db.filter(hb_count=4, output_bookmark="hb_least_4")
+        assert count_4 == 141
+
+        count_5, _ = populated_db.filter(hb_count=5, output_bookmark="hb_least_5")
+        assert count_5 == 106
+
+    def test_hb_count_at_most(self, populated_db):
+        """A negative value means "no more than", also inclusive."""
+        count, _ = populated_db.filter(hb_count=-1, output_bookmark="hb_most_1")
+        assert count == 36
+
+    def test_hb_count_zero(self, populated_db):
+        """0 means "no more than 0": only poses with no hydrogen bonds. The sign
+        carries the direction, so there is no -0 to express this with otherwise."""
+        count, _ = populated_db.filter(hb_count=0, output_bookmark="hb_zero")
+        assert count == 7
+
     def test_all_filters(self, populated_db):
         count, _ = populated_db.filter(
             eworst=-6,

@@ -2588,19 +2588,15 @@ class StorageManager(ABC):
                         score_maxmin_to_sql[filter_key].format(value=filter_value)
                     )
 
-            # write hb count filter(s)
+            # write hb count filter
             if filter_key == "hb_count":
-                for k, v in filter_value:
-                    if k != "hb_count":
-                        logger.warning(
-                            f"An unrecognized interaction count filter was found: {k}, which will not be included in the filtering."
-                        )
-                        continue
-                    if v > 0:
-                        numerical_filters.append(f"num_hb > {v}")
-                    else:
-                        # if value is negative, it means less than specified number of hydrogen bonds
-                        numerical_filters.append(f"num_hb <= {-v}")
+                if filter_value > 0:
+                    # inclusive, per the documented option; was ">"
+                    numerical_filters.append(f"num_hb >= {filter_value}")
+                else:
+                    # negative means "no more than"; 0 lands here so that
+                    # "no hydrogen bonds" stays expressible
+                    numerical_filters.append(f"num_hb <= {-filter_value}")
             interaction_name_to_letter = {
                 "vdw_interactions": "V",
                 "hb_interactions": "H",

@@ -223,6 +223,11 @@ The ``max_miss`` keywords allows the user to filter by given interactions exclud
     rtc.filter( hb_count=10,
                 react_any = True)
 
+``hb_count`` takes a plain integer and both directions are inclusive: ``hb_count=10`` keeps
+poses with ten or more hydrogen bonds. A negative value inverts the direction, so
+``hb_count=-10`` keeps poses with ten or fewer, and ``hb_count=0`` keeps only poses with no
+hydrogen bonds at all.
+
 
 Ligand filters 
 ===============
