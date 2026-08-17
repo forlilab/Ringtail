@@ -1226,9 +1226,20 @@ class StorageManager(ABC):
 
         # Raw SQL kept for GROUP BY on computed column — avoids QueryBuilderDuck
         # wrapping bin_idx in ANY_VALUE(), which breaks the aggregation.
+        #
+        # The maximum value lands one past the last bin: (max - min) / bin_width ==
+        # num_bins exactly. Clamping it here — rather than in Python — keeps the invariant
+        # that each bin appears exactly once in the result, so the max simply merges into
+        # the last bin (closed right edge, as numpy does). Folding it afterwards instead
+        # meant two groups mapped to the last index and the second overwrote the first,
+        # under-reporting the total; that showed up on filtered bookmarks, where many poses
+        # sit exactly on the filter threshold and so share the max value.
+        # CASE, not LEAST/MIN(a, b): those differ across SQLite and DuckDB.
+        last_bin = num_bins - 1
+        raw_bin = f"CAST(({column} - {min_val}) / {bin_width} AS INTEGER)"
         bin_sql = f"""
             SELECT
-                CAST(({column} - {min_val}) / {bin_width} AS INTEGER) AS bin_idx,
+                CASE WHEN {raw_bin} > {last_bin} THEN {last_bin} ELSE {raw_bin} END AS bin_idx,
                 COUNT(*) AS cnt
             FROM ({base_sql}) sub
             GROUP BY bin_idx
@@ -1238,7 +1249,7 @@ class StorageManager(ABC):
 
         counts = [0] * num_bins
         for bin_idx, cnt in rows:
-            idx = min(int(bin_idx), num_bins - 1)
+            idx = int(bin_idx)
             if 0 <= idx < num_bins:
                 counts[idx] = cnt
         bin_edges = [min_val + i * bin_width for i in range(num_bins + 1)]
@@ -2604,7 +2615,7 @@ class StorageManager(ABC):
                         )
                         continue
                     if v > 0:
-                        numerical_filters.append(f"num_hb > {v}")
+                        numerical_filters.append(f"num_hb >= {v}")
                     else:
                         # if value is negative, it means less than specified number of hydrogen bonds
                         numerical_filters.append(f"num_hb <= {-v}")
@@ -2722,10 +2733,32 @@ class StorageManager(ABC):
                 filtering_window = f"(SELECT * FROM Results WHERE pose_id IN (SELECT pose_id FROM {input_bookmark}))"
 
         if filter_expression is not None:
-            boolean_predicate = self._render_filter_expression(filter_expression)
+            boolean_predicate = self._render_filter_expression(
+                filter_expression, filtering_window
+            )
             if not boolean_predicate:
                 raise OptionError("No filters were provided, cannot filter.")
             where_conditions = [boolean_predicate]
+            # SMARTS/substructure can't live in the SQL tree, so if the flat filters
+            # carry RDKit filters they apply globally (ANDed onto the tree result).
+            rdkit_lig = self._rdkit_filters_from_flat(filters_dict)
+            if rdkit_lig:
+                rdkit_partial = (
+                    f" FROM {filtering_window} R "
+                    f"JOIN Ligands ON Ligands.ligand_id = R.ligand_id "
+                    f"WHERE {boolean_predicate}"
+                )
+                passing_pose_ids = [
+                    pid
+                    for poseids in self._perform_rdkit_filtering(
+                        rdkit_partial, rdkit_lig
+                    ).values()
+                    for pid in poseids
+                ]
+                where_conditions = [
+                    f"{boolean_predicate} AND R.pose_id IN "
+                    f"({','.join(map(str, passing_pose_ids))})"
+                ]
         else:
             processed_filters = self._process_filters_for_query(filters_dict)
             if not processed_filters:
@@ -2826,7 +2859,39 @@ class StorageManager(ABC):
         predicate = " AND ".join(where_conditions) if where_conditions else None
         return predicate, rdkit_lig_filters
 
-    def _render_filter_expression(self, node: dict) -> str:
+    def _rdkit_filters_from_flat(self, filters_dict: dict) -> dict:
+        """Extract only the RDKit (in-memory) ligand filters from a flat filter dict —
+        substructure, substructure-position, max heavy atoms, molweight. These can't be
+        SQL predicates, so with a nested ``filter_expression`` they apply globally."""
+        if not filters_dict:
+            return {}
+        keys = (
+            "ligand_substruct",
+            "ligand_substruct_pos",
+            "ligand_max_atoms",
+            "ligand_min_molweight",
+            "ligand_max_molweight",
+        )
+        out = {}
+        for k in keys:
+            v = filters_dict.get(k)
+            if v not in (None, [], "", 0):
+                out[k] = v
+        if not out:
+            return {}
+        if filters_dict.get("ligand_operator"):
+            out["ligand_operator"] = filters_dict["ligand_operator"]
+        # mirror _process_filters_for_query's numeric casting for substruct_pos
+        if "ligand_substruct_pos" in out:
+            for f in out["ligand_substruct_pos"]:
+                f[1] = int(f[1])
+                for i in range(2, 6):
+                    f[i] = float(f[i])
+        return out
+
+    def _render_filter_expression(
+        self, node: dict, filtering_window: str = "Results"
+    ) -> str:
         """Recursively render a nested boolean filter expression into one SQL predicate.
 
         A node is either a boolean node ``{"op": "and"|"or", "children": [...]}`` or a
@@ -2834,8 +2899,15 @@ class StorageManager(ABC):
         parentheses; leaves render via ``_render_filter_group``. Arbitrary nesting depth
         is supported — the same recursion renders ``(a AND (b OR (c AND d)))``.
 
+        RDKit leaves (SMARTS/substructure, molweight, max heavy atoms) can't be SQL, so
+        each is evaluated up front to the set of pose_ids that pass it (one in-memory
+        scan over ``filtering_window``) and rendered as ``pose_id IN (...)`` — which then
+        composes into AND/OR like any other predicate. This is why an RDKit criterion is
+        cheap as SQL to combine but costs one scan per leaf.
+
         Args:
             node (dict): a boolean node or a leaf Filters-shaped group
+            filtering_window (str): FROM target for evaluating RDKit leaves
 
         Returns:
             str: parenthesized SQL predicate (empty string if the node contributes nothing)
@@ -2848,7 +2920,8 @@ class StorageManager(ABC):
                     "Use 'and' or 'or'."
                 )
             rendered = [
-                self._render_filter_expression(child) for child in node["children"]
+                self._render_filter_expression(child, filtering_window)
+                for child in node["children"]
             ]
             rendered = [r for r in rendered if r]
             if not rendered:
@@ -2865,10 +2938,23 @@ class StorageManager(ABC):
             return ""
         predicate, rdkit_lig_filters = self._render_filter_group(processed)
         if rdkit_lig_filters:
-            raise OptionError(
-                "SMARTS/substructure (RDKit) filters are not supported inside nested "
-                "filter expressions yet; use them as top-level filters instead."
+            # evaluate this leaf's RDKit criterion to a pose_id set (one scan) and
+            # compose it as pose_id IN (...), optionally pre-narrowed by any SQL part
+            rdkit_partial = (
+                f" FROM {filtering_window} R "
+                f"JOIN Ligands ON Ligands.ligand_id = R.ligand_id"
             )
+            if predicate:
+                rdkit_partial += f" WHERE {predicate}"
+            passing = [
+                pid
+                for poseids in self._perform_rdkit_filtering(
+                    rdkit_partial, rdkit_lig_filters
+                ).values()
+                for pid in poseids
+            ]
+            ids = ",".join(map(str, passing)) if passing else "NULL"
+            return f"(R.pose_id IN ({ids}))"
         if not predicate:
             return ""
         return "(" + predicate + ")"
@@ -3387,15 +3473,18 @@ class StorageManager(ABC):
             ).fetchone()[0]
 
         self._begin_transaction()
+        new_filter_id = self.conn.execute(
+            "SELECT COALESCE(MAX(filter_id), 0) + 1 FROM Filters"
+        ).fetchone()[0]
         insert_query = self.QueryBuilder()
         insert_query.INSERT_INTO(
-            "Filters", "name", "query", "filters", "filter_window"
+            "Filters", "filter_id", "name", "query", "filters", "filter_window"
         ).RETURNING("filter_id")
 
         # insert filter info, return filter_id
         filter_id = self.conn.execute(
             insert_query.build()[0],
-            (name.lower(), query, json.dumps(filters), input_bookmark),
+            (new_filter_id, name.lower(), query, json.dumps(filters), input_bookmark),
         ).fetchone()[0]
 
         # single-pass INSERT — no COUNT pre-flight. SQLite also stores ligand_id

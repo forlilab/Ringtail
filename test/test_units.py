@@ -317,17 +317,49 @@ class TestFiltering:
             "OR ((R.docking_score <= -9) AND (R.leff >= -0.5))))" in sql
         )
 
-    def test_tiered_rejects_rdkit(self, tmp_db):
-        """SMARTS/substructure filters inside a nested expression raise (v1 limitation)."""
-        from ringtail.exceptions import OptionError
-
-        expr = {
-            "op": "or",
-            "children": [{"ligand_substruct": ["C=O"]}, {"eworst": -7}],
+    def test_smarts_inside_group(self, populated_db):
+        """A SMARTS criterion works inside a filter_expression group (RDKit leaf ->
+        pose_id IN (...)), ANDing with SQL criteria in the same group."""
+        score_only = {"op": "and", "children": [{"eworst": -6}]}
+        with_smarts = {
+            "op": "and",
+            "children": [{"eworst": -6}, {"ligand_substruct": ["C=O"]}],
         }
-        with tmp_db.storageman as sm:
-            with pytest.raises(OptionError):
-                sm._generate_result_filtering_query({}, "out", None, expr)
+        c_score, _ = populated_db.filter(
+            filter_expression=score_only, output_bookmark="sig_score"
+        )
+        c_both, _ = populated_db.filter(
+            filter_expression=with_smarts, output_bookmark="sig_both"
+        )
+        assert c_both > 0
+        assert c_both <= c_score  # adding SMARTS only narrows
+
+    def test_expr_rdkit_group_count(self, tmp_db):
+        """Cross-group SMARTS detection (drives the API warning / GUI consent dialog)."""
+        one = {"op": "and", "children": [{"eworst": -6}, {"ligand_substruct": ["C=O"]}]}
+        two = {
+            "op": "or",
+            "children": [
+                {"op": "and", "children": [{"ligand_substruct": ["C=O"]}]},
+                {"op": "and", "children": [{"ligand_substruct": ["CN"]}, {"eworst": -7}]},
+            ],
+        }
+        assert tmp_db._expr_rdkit_group_count(one) == 1
+        assert tmp_db._expr_rdkit_group_count(two) == 2
+
+    def test_tiered_with_global_smarts(self, populated_db):
+        """A global SMARTS filter applies (ANDed) alongside a nested filter_expression."""
+        expr = {"op": "or", "children": [{"eworst": -6}]}
+        count_expr, _ = populated_db.filter(
+            filter_expression=expr, output_bookmark="tier_smarts_a"
+        )
+        count_both, _ = populated_db.filter(
+            filter_expression=expr,
+            ligand_substruct=["C=O"],
+            output_bookmark="tier_smarts_b",
+        )
+        assert count_both > 0
+        assert count_both <= count_expr  # SMARTS only narrows the tree result
 
 
 class TestOutput:

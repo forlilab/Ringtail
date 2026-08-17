@@ -652,6 +652,26 @@ class RingtailCore:
             }
 
     @_wrap_exceptions
+    def _expr_rdkit_group_count(self, expr) -> int:
+        """Number of top-level groups in a filter_expression that contain an RDKit
+        (SMARTS/property) criterion — used to warn about repeated molecule scans."""
+        rdkit_keys = {
+            "ligand_substruct",
+            "ligand_substruct_pos",
+            "ligand_max_atoms",
+            "ligand_min_molweight",
+            "ligand_max_molweight",
+        }
+
+        def _has_rdkit(node) -> bool:
+            if isinstance(node, dict) and "op" in node and "children" in node:
+                return any(_has_rdkit(c) for c in node["children"])
+            return bool(set(node.keys()) & rdkit_keys)
+
+        if isinstance(expr, dict) and "op" in expr and "children" in expr:
+            return sum(1 for c in expr["children"] if _has_rdkit(c))
+        return 1 if _has_rdkit(expr) else 0
+
     def filter(
         self,
         eworst=None,
@@ -794,6 +814,14 @@ class RingtailCore:
         # this enumerate→union "crutch" may become redundant.
         if filter_expression is not None:
             enumerate_interaction_combs = False
+            # Consent-style heads-up: each RDKit (SMARTS/property) criterion costs one
+            # in-memory molecule scan, so the same SMARTS spread across multiple groups
+            # runs multiple scans. (The CLI doesn't expose complex filtering at all.)
+            if self._expr_rdkit_group_count(filter_expression) > 1:
+                logger.warning(
+                    "SMARTS/RDKit criteria appear in multiple filter groups; each group "
+                    "is evaluated with a separate molecule scan, which is slower."
+                )
 
         logger.info("Starting to filter results")
         # get possible permutations of interaction with max_miss excluded
