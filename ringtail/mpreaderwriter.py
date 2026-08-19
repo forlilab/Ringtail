@@ -240,9 +240,19 @@ class Writer(mp.Process):
                         logger.info("Performing final database write")
                         self.write_to_storage()
                         logger.info("File processing completed")
-                        sys.stdout.write(
-                            f"\nWrote {self.num_files_written} docking results to the database.\n"
-                        )
+                        if self.num_files_written:
+                            sys.stdout.write(
+                                f"\nWrote {self.num_files_written} docking results to the database.\n"
+                            )
+                        else:
+                            # Parse failures are logged and skipped rather than fatal, so
+                            # when every file fails this was the only thing the user saw,
+                            # phrased as though it had succeeded.
+                            sys.stdout.write(
+                                "\nNo docking results were written to the database: none "
+                                "of the provided files could be parsed. See "
+                                "ringtail_failed_files.log and the log above for why.\n"
+                            )
                         sys.stdout.flush()
                         break
                     continue
