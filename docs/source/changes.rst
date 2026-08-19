@@ -3,6 +3,12 @@
 Changes in Ringtail
 ######################
 
+Changes in 2.3.3: hydrogen bond count filter fix
+*************************************************
+Bug fixes
+=========
+* The ``hb_count`` filter was not inclusive, so ``hb_count=5`` returned poses with six or more hydrogen bonds rather than five or more. The negative "no more than" direction was already inclusive. Filtering results involving ``hb_count`` may differ from previous versions.
+
 Changes in 2.3.0: New merge database functionality and bug fixes
 *****************************************************************
 Enhancements

@@ -2660,7 +2660,7 @@ class StorageManagerSQLite(StorageManager):
                         )
                         continue
                     if v > 0:
-                        numerical_filters.append(f"num_hb > {v}")
+                        numerical_filters.append(f"num_hb >= {v}")
                     else:
                         # if value is negative, it means less than specified number of hydrogen bonds
                         numerical_filters.append(f"num_hb <= {-v}")
