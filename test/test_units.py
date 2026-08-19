@@ -783,3 +783,17 @@ class TestMergeDB:
         assert secondary_db_pose_as_merged != secondary_db_pose_as_main
 
         os.system("rm primary.db secondary.db tertiary.db")
+
+    def test_merge_several_databases_in_one_call(self, countrows):
+        """Each secondary must be detached before the next one is attached."""
+        dbs = ["m1.db", "m2.db", "m3.db", "m4.db"]
+        for db, ligand in zip(dbs, ["1451", "1620", "1751", "10091"]):
+            RingtailCore(db).add_results_from_files(
+                f"test_data/adgpu/group1/{ligand}.dlg.gz"
+            )
+            assert countrows("SELECT COUNT(*) FROM Ligands", db) == 1
+
+        assert RingtailCore(dbs[0]).merge_databases(dbs[1:], False) == []
+        assert countrows("SELECT COUNT(*) FROM Ligands", dbs[0]) == 4
+
+        os.system("rm " + " ".join(dbs))
