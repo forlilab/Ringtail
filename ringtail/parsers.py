@@ -900,6 +900,18 @@ def process_docked_mol(
     ]
 
     results_dict.update(mol_properties)
+    if results_dict.get("docking_score") is None:
+        # A molecule with no docking score is not a docking result. Checked here rather
+        # than left to the leff division below, which surfaced it as the far less useful
+        # "unsupported operand type(s) for /: 'NoneType' and 'int'". The remaining
+        # properties are listed because the usual cause is a renamed one, and a score
+        # property that WAS understood has already been cleared by
+        # prepare_mol_for_database — so anything score-shaped still listed is the culprit.
+        raise FileParsingErrorSdf(
+            f"Molecule '{ligname}' has no '{db_to_ad6('docking_score')}' property, so it "
+            f"is not a valid docking result. "
+            f"Properties present: {sorted(mol.GetPropNames()) or 'none'}."
+        )
     results_dict.update(
         {
             "ligname": ligname,
@@ -1017,8 +1029,31 @@ def prepare_mol_for_database(
                 )
                 mol.ClearProp(prop_name)
             else:
-                properties.update({db_column: None})
+                properties.update({db_column: _read_deprecated_prop(mol, db_column)})
     return mol, properties
+
+
+def _read_deprecated_prop(mol: Chem.Mol, db_column: str):
+    """
+    Fall back to a pre-release property name for ``db_column``, warning once per process.
+
+    Returns None when no deprecated spelling is present either, which callers treat as
+    "this molecule has no such property".
+    """
+    for old_name in ad6_deprecated_aliases.get(db_column, []):
+        if not mol.HasProp(old_name):
+            continue
+        if old_name not in _warned_deprecated_props:
+            _warned_deprecated_props.add(old_name)
+            logger.warning(
+                f"SDF property '{old_name}' is a pre-release AutoDock 6 name and is "
+                f"deprecated. It was read as '{db_column}' this time, but please re-run "
+                f"or re-write these files with '{db_to_ad6(db_column)}'."
+            )
+        value = type_casting[db_column](mol.GetProp(old_name))
+        mol.ClearProp(old_name)
+        return value
+    return None
 
 
 def db_to_ad6(db_column: str) -> str:
@@ -1097,3 +1132,9 @@ ad6_aliases = {
 }
 type_casting = {"docking_score": float, "pose_rank": int, "ligname": str}
 db_alias_to_ad6 = {v: k for k, v in ad6_aliases.items()}
+
+# TODO remove once AutoDock 6 has shipped and beta-era files are out of circulation.
+ad6_deprecated_aliases = {"docking_score": ["adng_free_energy"]}
+
+# module level so the warning is once per reader process, not once per molecule
+_warned_deprecated_props = set()
