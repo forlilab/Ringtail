@@ -906,6 +906,15 @@ class CLOptionParser:
                     raise OptionError(
                         "Cannot use --ligand_name and --ligand_name_file together, please choose one."
                     )
+                # both are allowed through the API, but filtering on ligand size two
+                # different ways at once is more likely a mistake than an intent
+                if parsed_opts.ligand_max_atoms is not None and (
+                    parsed_opts.ligand_min_molweight is not None
+                    or parsed_opts.ligand_max_molweight is not None
+                ):
+                    raise OptionError(
+                        "Cannot filter based on both max heavy atoms and mol weight restrictions."
+                    )
                 # parse the ligand filters, depending on how the keywords are used they will be a list of list or list of lists
                 for _type in ligand_kw:
                     ligand_filter_value = getattr(parsed_opts, _type)
