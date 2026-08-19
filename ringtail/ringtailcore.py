@@ -1264,7 +1264,7 @@ class RingtailCore:
                 try:
                     sm.merge_database(merging_db=merging_db)
                     LOGGER.info(f"Successfully merged {merging_db}.")
-                except MergeError as e:
+                except (MergeError, StorageError) as e:
                     LOGGER.error(f"Database {merging_db} failed to merge: {e}")
                     failed.append((merging_db, str(e)))
             if finalize:

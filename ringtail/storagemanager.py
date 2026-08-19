@@ -3502,6 +3502,8 @@ class StorageManagerSQLite(StorageManager):
                 f"The database {merging_db} has been successfully merged into {self.db_file}."
             )
         finally:
+            # sqlite will not detach a database that still has live statements on it
+            self._close_open_cursors()
             self._detach_db(merging_db_alias)
             logger.info("The final database has been cleaned up, and indices rebuilt.")
 
