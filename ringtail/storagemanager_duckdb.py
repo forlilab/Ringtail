@@ -1571,11 +1571,15 @@ class StorageManagerDuckDB(StorageManager):
             new_db (str): file name for database to attach
             new_db_name (str): name of new database
 
+        Returns:
+            str: alias the database was attached as
+
         Raises:
             StorageError
         """
         attach = f"""ATTACH '{new_db}' AS {new_db_alias};"""
         self.db_query(attach)
+        return new_db_alias
 
     def _check_attached(self):
         return self.db_query("SHOW DATABASES;").fetchall()

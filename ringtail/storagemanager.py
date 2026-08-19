@@ -738,6 +738,11 @@ class StorageManager(ABC):
         """
         # attach incoming database and check compatibility
         merging_db_alias = self._attach_db(merging_db, "merging")
+        if not merging_db_alias:
+            raise StorageError(
+                f"{type(self).__name__}._attach_db did not return the alias it attached "
+                f"{merging_db} as, so the database could not be detached again."
+            )
         if not self._db_compatible_for_merge(merging_db_alias):
             raise MergeError(
                 "Trying to merge two databases of incompatible or too old versions, cannot proceed."

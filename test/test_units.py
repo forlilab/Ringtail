@@ -628,6 +628,27 @@ class TestMergeDB:
         )[0][0]
         assert secondary_pose_in_merged != secondary_pose_in_own_db
 
+    def test_merge_several_databases_in_one_call(self, tmp_path, storage_type):
+        """Each secondary must be detached before the next one is attached."""
+        dbs = []
+        for name, ligand in [
+            ("primary", "1451"),
+            ("secondary", "1620"),
+            ("tertiary", "1751"),
+            ("quaternary", "10091"),
+        ]:
+            db = str(tmp_path / f"{name}.db")
+            rtc = RingtailCore(db, storage_type=storage_type)
+            rtc.add_results_from_files(
+                str(TEST_DATA / f"adgpu/group1/{ligand}.dlg.gz"), docking_mode="adgpu"
+            )
+            assert rtc.table_length("Ligands") == 1
+            dbs.append(db)
+
+        rtc1 = RingtailCore(dbs[0])
+        assert rtc1.merge_databases(dbs[1:], False) == []
+        assert rtc1.table_length("Ligands") == 4
+
 
 class TestCrossref:
     """Cross-referencing ligands across databases by bookmark and by status table."""
