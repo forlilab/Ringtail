@@ -226,12 +226,6 @@ class Filters:
         if self.max_miss < 0:
             raise OptionError("'max_miss' must be greater than or equal to 0.")
 
-        if self.ligand_max_atoms and (
-            self.ligand_min_molweight or self.ligand_max_molweight
-        ):
-            raise OptionError(
-                "Cannot filter based on both max heavy atoms and mol weight restrictions."
-            )
 
     @classmethod
     def get_filter_keys(cls, group: str) -> list:

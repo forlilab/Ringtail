@@ -211,6 +211,23 @@ class TestFiltering:
         count_5, _ = populated_db.filter(hb_count=5, output_bookmark="hb_least_5")
         assert count_5 == 106
 
+    def test_molweight_and_max_atoms_together(self, populated_db):
+        """Both ligand size filters may be combined through the API, and intersect.
+        Contradictory bounds simply return nothing, as with crossing energy bounds.
+        The CLI still rejects the combination as a likely mistake."""
+        mw, _ = populated_db.filter(
+            ligand_min_molweight=190, output_bookmark="mw_only"
+        )
+        atoms, _ = populated_db.filter(
+            ligand_max_atoms=13, output_bookmark="atoms_only"
+        )
+        both, _ = populated_db.filter(
+            ligand_min_molweight=190,
+            ligand_max_atoms=13,
+            output_bookmark="mw_and_atoms",
+        )
+        assert (mw, atoms, both) == (74, 140, 15)
+
     def test_hb_count_at_most(self, populated_db):
         """A negative value means "no more than", also inclusive."""
         count, _ = populated_db.filter(hb_count=-1, output_bookmark="hb_most_1")

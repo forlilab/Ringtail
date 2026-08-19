@@ -389,6 +389,13 @@ class TestFilters:
         assert rc == 0
         assert self.cli.passing("hb_count") == 3
 
+    def test_ligand_size_filters_rejected_together(self):
+        """The API permits both ligand size filters; the CLI babysits and refuses."""
+        rc = self.cli.read(
+            "--ligand_max_atoms", "30", "--ligand_min_molweight", "200"
+        )
+        assert rc != 0
+
     def test_hbcount_at_most(self):
         # a negative value means "no more than", also inclusive: only 127458 has
         # poses with 3 or fewer hydrogen bonds
