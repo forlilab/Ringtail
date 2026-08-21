@@ -92,7 +92,7 @@ class StorageManager(ABC):
     Each child class will implement their own functions to write to and read from the database
 
     The current schema version lives in schema.SCHEMA_VERSION and is stamped into
-    the ringtail_schema_version table; see check_ringtaildb_version.
+    the ringtail_schema_version table, see check_ringtaildb_version.
 
     Attributes:
         active_connection (bool): if there is a current open connection to database
@@ -224,8 +224,8 @@ class StorageManager(ABC):
             all_filters (dict): dict containing all filters
             output_bookmark (str): name of bookmark in which to save the data
             input_bookmark (str, optional): if filtering not across all data, but a pre-filtered bookmark
-            filter_expression (dict, optional): nested boolean filter tree (tiered filtering);
-                when given it defines the WHERE predicate and is stored as the bookmark's filters
+            filter_expression (dict, optional): nested/tiered boolean filter tree. When given it defines
+                the WHERE clause and is used instead of 'all_filters'
 
         Returns:
             int: number of passing ligands
@@ -240,7 +240,7 @@ class StorageManager(ABC):
             )
 
         # get the final filter query, has a {selection} place holder
-        filter_query: str = self._generate_result_filtering_query(
+        filter_query: str = self._generate_filtering_query(
             all_filters, output_bookmark, input_bookmark, filter_expression
         )
 
@@ -253,6 +253,7 @@ class StorageManager(ABC):
             input_bookmark = "Results"
 
         # persist the nested expression when present, else the flat filters
+        # again the filte rdict should be the same, I think all filters should just get the same grouping
         stored_filters = (
             filter_expression if filter_expression is not None else all_filters
         )
@@ -629,7 +630,7 @@ class StorageManager(ABC):
         for the clusters
 
         Args:
-            bookmark_name (str | None): bookmark name with poses to cluster; None clusters all results
+            bookmark_name (str | None): bookmark name with poses to cluster, None clusters all results
             cluster_type (str, optional): type of clustering. Defaults to "mfpt".
             cutoff (float, optional): cutoff cluster distance. Defaults to 0.5.
 
@@ -1237,7 +1238,7 @@ class StorageManager(ABC):
         # that each bin appears exactly once in the result, so the max simply merges into
         # the last bin (closed right edge, as numpy does). Folding it afterwards instead
         # meant two groups mapped to the last index and the second overwrote the first,
-        # under-reporting the total; that showed up on filtered bookmarks, where many poses
+        # under-reporting the total, that showed up on filtered bookmarks, where many poses
         # sit exactly on the filter threshold and so share the max value.
         # CASE, not LEAST/MIN(a, b): those differ across SQLite and DuckDB.
         last_bin = num_bins - 1
@@ -1357,7 +1358,7 @@ class StorageManager(ABC):
     @staticmethod
     def _serialize_pose_coordinates(coords):
         """Serialize a list of [x, y, z] floats for storage in the pose_coordinates
-        column. Base/DuckDB store the native nested list (DuckDB FLOAT[][]); SQLite
+        column. Base/DuckDB store the native nested list (DuckDB FLOAT[][]), SQLite
         overrides this to pack a float32 BLOB. Returns the value unchanged here.
         """
         return coords
@@ -1481,7 +1482,7 @@ class StorageManager(ABC):
 
         Args:
             table (str): Results table name, bookmark name, or status table name
-            columns (list): column names to select; "status" is a special sentinel
+            columns (list): column names to select, "status" is a special sentinel
             length (int, optional): max rows to return. Defaults to None (all rows).
             starting_rowid (int, optional): R.rowid lower bound. Defaults to 0.
 
@@ -1941,7 +1942,7 @@ class StorageManager(ABC):
             db_version = self._read_schema_version()
         except DatabaseQueryError:
             logger.warning(
-                "Database has no schema version; it predates versioning and must be "
+                "Database has no schema version, it predates versioning and must be "
                 "upgraded. Ask your package administrator for the script "
                 "rt_upgrade_from_v3alpha.py."
             )
@@ -1949,7 +1950,7 @@ class StorageManager(ABC):
 
         if not db_version:
             logger.warning(
-                "Database schema version is unset; ask your package administrator "
+                "Database schema version is unset, ask your package administrator "
                 "for the script rt_upgrade_from_v3alpha.py."
             )
             return False, "unversioned"
@@ -2562,130 +2563,7 @@ class StorageManager(ABC):
         else:
             return None
 
-    def _process_filters_for_query(self, filters_dict: dict) -> dict:
-        """
-        Method that reformats the filters to the specified database columns, handles less than/more than filters, etc
-
-        Args:
-            filters_dict (dict): all Ringtail filters, okay to contain None
-
-        Returns:
-            dict: of lists of numerical, interaction, and ligand filters + maxmiss
-        """
-        score_maxmin_to_sql = {
-            "eworst": "docking_score <= {value}",
-            "ebest": "docking_score >= {value}",
-            "leworst": "leff <= {value}",
-            "lebest": "leff >= {value}",
-        }
-
-        # write energy filters and compile list of interactions to search for
-        numerical_filters = []
-        interaction_filters = []
-        ligand_filters = {}
-        max_miss = 0
-        energy_filter_col_name = {
-            "eworst": "docking_score",
-            "ebest": "docking_score",
-            "leworst": "leff",
-            "lebest": "leff",
-            "score_percentile": "docking_score",
-            "le_percentile": "leff",
-        }
-        for filter_key, filter_value in filters_dict.items():
-            # filter dict contains all possible filters, are None if not specified by user
-            if filter_value is None:
-                continue
-            # if filter has to do with docking energies
-            if filter_key in energy_filter_col_name:
-                if filter_key == "score_percentile" or filter_key == "le_percentile":
-                    # convert from percent to decimal
-                    cutoff = self._calc_percentile_cutoff(
-                        filter_value, energy_filter_col_name[filter_key]
-                    )
-                    numerical_filters.append(
-                        f"{energy_filter_col_name[filter_key]} < {cutoff}"
-                    )
-                else:
-                    numerical_filters.append(
-                        score_maxmin_to_sql[filter_key].format(value=filter_value)
-                    )
-
-            # write hb count filter
-            if filter_key == "hb_count":
-                if filter_value > 0:
-                    # inclusive, per the documented option; was ">"
-                    numerical_filters.append(f"num_hb >= {filter_value}")
-                else:
-                    # negative means "no more than"; 0 lands here so that
-                    # "no hydrogen bonds" stays expressible
-                    numerical_filters.append(f"num_hb <= {-filter_value}")
-            interaction_name_to_letter = {
-                "vdw_interactions": "V",
-                "hb_interactions": "H",
-                "reactive_interactions": "R",
-            }
-            # reformat interaction filters as list
-            if filter_key in Filters.get_filter_keys("interaction"):
-                for interact in filter_value:
-                    # interact has format ["chain:res:resno:resatom", bool(include or exclude interaction)]
-                    interaction_string = (
-                        interaction_name_to_letter[filter_key] + ":" + interact[0]
-                    )
-                    # add bool flag for included (T) or excluded (F) interaction
-                    interaction_filters.append(
-                        interaction_string.split(":") + [interact[1]]
-                    )
-            # add react_any flag as interaction filter if not None
-            if filter_key == "react_any" and filter_value:
-                interaction_filters.append(["R", "", "", "", "", True])
-
-            # if filter has to do with ligands and SMARTS
-            if filter_key in Filters.get_filter_keys("ligand"):
-                if filter_key == "ligand_substruct_pos" and filter_value:
-                    # go through each item and make sure the numbers are cast from string to numbers
-                    for filter in filter_value:
-                        # cast second item to int
-                        filter[1] = int(filter[1])
-                        # cast last four items to float
-                        for index in range(2, 6):
-                            filter[index] = float(filter[index])
-                if filter_key == "ligand_name":
-                    from .util import iterate_nested
-
-                    filter_value = [
-                        name
-                        for item in iterate_nested(filter_value)
-                        for name in item.split(",")
-                    ]
-                    if len(filter_value) > 50:
-                        raise OptionError(
-                            "The number of provided ligand names is too large, please prepare as a csv and use 'ligand_name_file' instead."
-                        )
-                ligand_filters[filter_key] = filter_value
-
-            if filter_key == "max_miss":
-                max_miss = filter_value
-            # parse ligand name file if present
-            if filter_key == "ligand_name_file":
-                if not Path(filter_value).suffix.lower() == ".csv":
-                    raise OptionError(
-                        f"The file of ligand names needs to be a csv file, cannot proceed with {Path(filter_value).suffix.lower()}."
-                    )
-                else:
-                    ligand_filters[filter_key] = filter_value
-        # put all processed filter in a dict
-        processed_filters = {}
-        if len(numerical_filters) > 0:
-            processed_filters["num_filters"] = numerical_filters
-        if len(interaction_filters) > 0:
-            processed_filters["int_filters"] = interaction_filters
-            processed_filters["max_miss"] = max_miss
-        if len(ligand_filters) > 0:
-            processed_filters["lig_filters"] = ligand_filters
-        return processed_filters
-
-    def _generate_result_filtering_query(
+    def _generate_filtering_query(
         self,
         filters_dict: dict,
         bookmark_name: str,
@@ -2695,21 +2573,22 @@ class StorageManager(ABC):
         """Takes filters, writes SQL filtering string.
 
         Two modes:
-        - Flat (default): ``filters_dict`` is a single AND-group. Each filter type
+        - Flat (default): filters_dict is a single AND-group. Each filter type
           becomes an independent WHERE condition combined with AND (numerical column
           conditions, include interactions via EXISTS, exclude interactions via
           NOT IN, ligand name via ligand_id IN, RDKit substruct as in-memory post-filter).
-        - Nested (``filter_expression`` given): a recursive boolean tree of AND/OR
+        - Nested (filter_expression given): a recursive boolean tree of AND/OR
           nodes whose leaves are Filters-shaped groups, rendered into one parenthesized
-          WHERE predicate — this expresses tiered "OR of AND-groups" filtering. RDKit
-          substructure filters are not supported inside the tree (top-level only).
+          WHERE clause — this expresses tiered "OR of AND-groups" filtering. RDKit
+          substructure filters are supported inside the tree, but each one costs its own
+          in-memory ligand scan (see _render_filter_expression).
 
         Args:
             filters_dict (dict): Keys and value formats must match Filters class
             bookmark_name (str): Name of bookmark to which passing poses are saved
             input_bookmark (str, optional): Filter over pre-filtered data instead of entire database
-            filter_expression (dict, optional): nested boolean filter tree; when given,
-                it fully defines the WHERE predicate and ``filters_dict`` is ignored for it
+            filter_expression (dict, optional): nested boolean filter tree, when given,
+                it fully defines the WHERE clause and filters_dict is ignored for it
 
         Returns:
             str: SQL query returning pose_ids of passing results
@@ -2744,45 +2623,24 @@ class StorageManager(ABC):
             # carry RDKit filters they apply globally (ANDed onto the tree result).
             rdkit_lig = self._rdkit_filters_from_flat(filters_dict)
             if rdkit_lig:
-                rdkit_partial = (
-                    f" FROM {filtering_window} R "
-                    f"JOIN Ligands ON Ligands.ligand_id = R.ligand_id "
-                    f"WHERE {boolean_predicate}"
-                )
-                passing_pose_ids = [
-                    pid
-                    for poseids in self._perform_rdkit_filtering(
-                        rdkit_partial, rdkit_lig
-                    ).values()
-                    for pid in poseids
-                ]
+                # the returned predicate already encodes the tree, so it replaces it
                 where_conditions = [
-                    f"{boolean_predicate} AND R.pose_id IN "
-                    f"({','.join(map(str, passing_pose_ids))})"
+                    self._rdkit_pose_id_predicate(
+                        boolean_predicate, rdkit_lig, filtering_window
+                    )
                 ]
         else:
-            processed_filters = self._process_filters_for_query(filters_dict)
-            if not processed_filters:
-                raise OptionError("No filters were provided, cannot filter.")
-
-            predicate, lig_filters = self._render_filter_group(processed_filters)
+            # raises if no filters were set at all
+            predicate, lig_filters = self._render_filter_group(Filters(**filters_dict))
             where_conditions = [predicate] if predicate else []
 
             # RDKit substruct/position/max-atoms filters can't be expressed in SQL —
             # run the SQL part first, then post-filter the resulting poses in memory.
             if lig_filters:
-                rdkit_partial = f" FROM {filtering_window} R JOIN Ligands ON Ligands.ligand_id = R.ligand_id"
-                if where_conditions:
-                    rdkit_partial += f" WHERE {' AND '.join(where_conditions)}"
-                passing_pose_ids = [
-                    pid
-                    for poseids in self._perform_rdkit_filtering(
-                        rdkit_partial, lig_filters
-                    ).values()
-                    for pid in poseids
-                ]
                 where_conditions = [
-                    f"R.pose_id IN ({','.join(map(str, passing_pose_ids))})"
+                    self._rdkit_pose_id_predicate(
+                        predicate, lig_filters, filtering_window
+                    )
                 ]
 
         where_sql = (
@@ -2795,7 +2653,7 @@ class StorageManager(ABC):
         )
         return f"SELECT {select_cols} FROM {filtering_window} R {where_sql}"
 
-    def _render_filter_group(self, processed_filters: dict) -> tuple:
+    def _render_filter_group(self, filters: Filters, strict: bool = True) -> tuple:
         """Render one AND-group of processed filters into a single SQL predicate.
 
         This is the per-group core shared by both the flat and nested filter paths:
@@ -2804,34 +2662,53 @@ class StorageManager(ABC):
         so they're returned to the caller to apply as an in-memory post-filter.
 
         Args:
-            processed_filters (dict): output of ``_process_filters_for_query`` for one group
+            filters (Filters): the filter group to render. Grouping and column mapping are
+                delegated to ``Filters.to_criteria``. Percentile cutoffs are resolved here,
+                since that needs to read the data.
+            strict (bool): True for flat filtering, where this group is the user's whole
+                query: a group that sets no filters at all, or names an interaction absent
+                from the database, is an error. False for a nested filter leaf, where an
+                empty group is simply a no-op node and a missing interaction only makes that
+                leaf false, so the rest of the boolean tree still evaluates.
+
+        Raises:
+            OptionError: if strict and the group sets no filters at all
 
         Returns:
             tuple[str | None, dict]: (AND-joined WHERE predicate — no surrounding
-            parentheses or WHERE keyword, or None if the group is empty; remaining
+            parentheses or WHERE keyword, or None if the group renders nothing, remaining
             RDKit ligand filters)
         """
+        criteria = filters.to_criteria(percentile_cutoff=self._calc_percentile_cutoff)
+        if not criteria:
+            if strict:
+                raise OptionError("No filters were provided, cannot filter.")
+            return None, {}
+
         where_conditions = []
         rdkit_lig_filters = {}
 
-        if "num_filters" in processed_filters:
+        if "numeric" in criteria:
             where_conditions.append(
-                " AND ".join(f"R.{f}" for f in processed_filters["num_filters"])
+                " AND ".join(
+                    f"R.{column} {operator} {value}"
+                    for column, operator, value in criteria["numeric"]
+                )
             )
 
-        if "int_filters" in processed_filters:
+        if "interactions" in criteria:
             include_interactions, exclude_interactions = (
                 self._prepare_interaction_indices_for_filtering(
-                    interaction_list=processed_filters["int_filters"]
+                    interaction_list=criteria["interactions"], strict=strict
                 )
             )
             if include_interactions:
                 # EXISTS over the (interaction_id, pose_id) covering index. SQLite does a
-                # fast per-pose point-lookup; DuckDB's optimizer de-correlates this into a
+                # fast per-pose point-lookup, DuckDB's optimizer de-correlates this into a
                 # hash semi-join, so the same form is optimal for both dialects.
                 where_conditions.append(
                     self._build_include_interaction_exists_conditions(
-                        include_interactions, processed_filters["max_miss"]
+                        include_interactions, criteria["max_miss"]
                     )
                 )
             if exclude_interactions:
@@ -2839,9 +2716,9 @@ class StorageManager(ABC):
                     f"R.pose_id NOT IN ({self._build_exclude_interaction_subquery(exclude_interactions)})"
                 )
 
-        if "lig_filters" in processed_filters:
+        if "ligand" in criteria:
             # copy so popping ligand_name/ligand_name_file doesn't mutate the caller's dict
-            lig_filters = dict(processed_filters["lig_filters"])
+            lig_filters = dict(criteria["ligand"])
             ligname_query = ""
             if "ligand_name" in lig_filters:
                 lig_names = lig_filters.pop("ligand_name")
@@ -2860,10 +2737,51 @@ class StorageManager(ABC):
         predicate = " AND ".join(where_conditions) if where_conditions else None
         return predicate, rdkit_lig_filters
 
+    def _rdkit_pose_id_predicate(
+        self, predicate: str, rdkit_filters: dict, filtering_window: str
+    ) -> str:
+        """Resolve RDKit (in-memory) ligand criteria to a ``pose_id IN (...)`` predicate.
+
+        RDKit criteria (SMARTS/substructure, molweight, max heavy atoms) can't be expressed
+        as SQL, so they're evaluated with one scan over ``filtering_window``, pre-narrowed by
+        ``predicate`` so only poses that already passed the SQL part are streamed.
+
+        The returned predicate *subsumes* ``predicate`` — the pose_id set was computed with it
+        applied — so callers must use it in place of their SQL predicate, not in addition to it.
+        Because the conjunction is baked into the id set, the result also composes correctly
+        under OR in a nested filter expression.
+
+        Args:
+            predicate (str): SQL predicate used to narrow the scan, may be empty or None
+            rdkit_filters (dict): RDKit ligand filters to apply in memory
+            filtering_window (str): FROM target for the scan
+
+        Returns:
+            str: ``R.pose_id IN (...)``, with a NULL id list when nothing passes. NULL rather
+            than an empty list because DuckDB rejects ``IN ()`` as a syntax error (SQLite
+            accepts it), both dialects evaluate ``IN (NULL)`` as false.
+        """
+        rdkit_partial = (
+            f" FROM {filtering_window} R "
+            f"JOIN Ligands ON Ligands.ligand_id = R.ligand_id"
+        )
+        if predicate:
+            rdkit_partial += f" WHERE {predicate}"
+        passing = [
+            pid
+            for poseids in self._perform_rdkit_filtering(
+                rdkit_partial, rdkit_filters
+            ).values()
+            for pid in poseids
+        ]
+        ids = ",".join(map(str, passing)) if passing else "NULL"
+        return f"R.pose_id IN ({ids})"
+
     def _rdkit_filters_from_flat(self, filters_dict: dict) -> dict:
         """Extract only the RDKit (in-memory) ligand filters from a flat filter dict —
         substructure, substructure-position, max heavy atoms, molweight. These can't be
         SQL predicates, so with a nested ``filter_expression`` they apply globally."""
+        # TODO should this be done after rest of the leaf is run to save time?
         if not filters_dict:
             return {}
         keys = (
@@ -2882,7 +2800,7 @@ class StorageManager(ABC):
             return {}
         if filters_dict.get("ligand_operator"):
             out["ligand_operator"] = filters_dict["ligand_operator"]
-        # mirror _process_filters_for_query's numeric casting for substruct_pos
+        # mirror Filters.to_criteria's numeric casting for substruct_pos
         if "ligand_substruct_pos" in out:
             for f in out["ligand_substruct_pos"]:
                 f[1] = int(f[1])
@@ -2897,7 +2815,7 @@ class StorageManager(ABC):
 
         A node is either a boolean node ``{"op": "and"|"or", "children": [...]}`` or a
         leaf group (a Filters-shaped dict). Boolean nodes wrap their children in
-        parentheses; leaves render via ``_render_filter_group``. Arbitrary nesting depth
+        parentheses, leaves render via ``_render_filter_group``. Arbitrary nesting depth
         is supported — the same recursion renders ``(a AND (b OR (c AND d)))``.
 
         RDKit leaves (SMARTS/substructure, molweight, max heavy atoms) can't be SQL, so
@@ -2913,6 +2831,8 @@ class StorageManager(ABC):
         Returns:
             str: parenthesized SQL predicate (empty string if the node contributes nothing)
         """
+        # parse each and or expression, if op and children not in node, then it's a pure
+        # filter expression, which will be handled like a normal Filters dict
         if isinstance(node, dict) and "op" in node and "children" in node:
             op = str(node["op"]).strip().upper()
             if op not in ("AND", "OR"):
@@ -2931,31 +2851,24 @@ class StorageManager(ABC):
                 return rendered[0]
             return "(" + f" {op} ".join(rendered) + ")"
 
-        # leaf group: normalize through Filters so we get a full, validated dict
-        group_filters = Filters(**node)
-        group_filters.checks()
-        processed = self._process_filters_for_query(group_filters.asdict())
-        if not processed:
-            return ""
-        predicate, rdkit_lig_filters = self._render_filter_group(processed)
+        # leaf group: normalize through Filters so we get a full, validated group, then
+        # render it with the same per-group core the flat path uses.
+        print("\n\n here is the node being processed: ", node)
+        # strict=False: an interaction missing from the database makes only this leaf false,
+        # rather than aborting the whole boolean tree
+        predicate, rdkit_lig_filters = self._render_filter_group(
+            Filters(**node), strict=False
+        )
         if rdkit_lig_filters:
-            # evaluate this leaf's RDKit criterion to a pose_id set (one scan) and
-            # compose it as pose_id IN (...), optionally pre-narrowed by any SQL part
-            rdkit_partial = (
-                f" FROM {filtering_window} R "
-                f"JOIN Ligands ON Ligands.ligand_id = R.ligand_id"
+            # evaluate this leaf's RDKit criterion to a pose_id set (one scan), pre-narrowed
+            # by this leaf's own SQL part
+            return (
+                "("
+                + self._rdkit_pose_id_predicate(
+                    predicate, rdkit_lig_filters, filtering_window
+                )
+                + ")"
             )
-            if predicate:
-                rdkit_partial += f" WHERE {predicate}"
-            passing = [
-                pid
-                for poseids in self._perform_rdkit_filtering(
-                    rdkit_partial, rdkit_lig_filters
-                ).values()
-                for pid in poseids
-            ]
-            ids = ",".join(map(str, passing)) if passing else "NULL"
-            return f"(R.pose_id IN ({ids}))"
         if not predicate:
             return ""
         return "(" + predicate + ")"
@@ -3219,7 +3132,7 @@ class StorageManager(ABC):
         if self._is_statustable(scope_name):
             # _is_statustable only returns True for the three known
             # statuses.values(), so the interpolation below is injection-safe.
-            # Status tables are created capitalized; .capitalize() maps the
+            # Status tables are created capitalized, .capitalize() maps the
             # lowercased status value back to the real table name.
             prefix = f"{alias}." if alias else ""
             return f"SELECT pose_id FROM {prefix}{scope_name.capitalize()}"
@@ -3267,13 +3180,24 @@ class StorageManager(ABC):
         # return dict of pose id as string and bitvector
         return poseid_bv
 
-    def _prepare_interaction_indices_for_filtering(self, interaction_list: list):
+    def _prepare_interaction_indices_for_filtering(
+        self, interaction_list: list, strict: bool = True
+    ):
         """
         Prepare lists of interaction indices where they are grouped by whether or not they should be evaluated as "AND" or "OR",
         and whether to be excluded or included in the passing filter poses
 
+        An *included* interaction that has no matching indices in the database is kept as an
+        empty group rather than dropped: an unsatisfiable requirement must fail every pose
+        (it renders as a false predicate), and keeping it preserves the group count that
+        ``max_miss`` is measured against. An *excluded* interaction that isn't in the
+        database is trivially satisfied, so it is dropped.
+
         Args:
             interaction_list (list): list of interactions
+            strict (bool): if True, an interaction not present in the database is an error.
+                If False (nested filter leaves), warn instead so that one unsatisfiable
+                group does not abort the whole query.
 
         Raises:
             OptionError
@@ -3298,9 +3222,14 @@ class StorageManager(ABC):
                     logger.warning(
                         "Given 'react_any' filter, no reactive interactions found. Excluded from filtering."
                     )
-                else:
-                    # create string representation of ecah interaction not found
-                    interaction_not_found.append(":".join(interaction[:4]))
+                    continue  # ends this iteration of the for loop
+                # create string representation of ecah interaction not found
+                interaction_not_found.append(":".join(interaction[:4]))
+                if interaction[-1] is True:
+                    # keep the unsatisfiable requirement as an empty group so it renders
+                    # false instead of vanishing, and still counts toward max_miss
+                    include_interactions.append([])
+                # an excluded interaction absent from the database is trivially satisfied
                 continue  # ends this iteration of the for loop
 
             # create a list of lists for interactions to either include or exclude
@@ -3312,13 +3241,18 @@ class StorageManager(ABC):
                 raise OptionError(
                     "Unrecognized flag in interaction. Please contact Forli Lab with traceback and context."
                 )
-        # if one or more interactions not found, raise error
+        # if one or more interactions not found, raise error (flat filtering) or warn and
+        # let the unsatisfiable groups render false (nested filter leaves)
         if interaction_not_found:
-            raise OptionError(
-                f"The following interactions do not exist in the database: {interaction_not_found} not found in the database. Please check for spelling errors or remove from filter."
+            if strict:
+                raise OptionError(
+                    f"The following interactions do not exist in the database: {interaction_not_found} not found in the database. Please check for spelling errors or remove from filter."
+                )
+            logger.warning(
+                f"The following interactions do not exist in the database: {interaction_not_found}. "
+                "Any filter group requiring them cannot match and is evaluated as false."
             )
-        else:
-            return include_interactions, exclude_interactions
+        return include_interactions, exclude_interactions
 
     def _build_include_interaction_exists_conditions(
         self, include_groups: list, max_miss: int
@@ -3331,7 +3265,8 @@ class StorageManager(ABC):
 
         Args:
             include_groups (list[list[int]]): each inner list is a group of interaction_ids
-                that satisfy one required interaction
+                that satisfy one required interaction. An empty group is a requirement with
+                no matching interaction in the database and renders as false.
             max_miss (int): number of groups a pose is allowed to miss
 
         Returns:
@@ -3339,6 +3274,9 @@ class StorageManager(ABC):
         """
 
         def _group_exists(ids: list) -> str:
+            if not ids:
+                # no pose can satisfy this requirement, also avoids emitting "IN ()"
+                return "0=1"
             return (
                 f"EXISTS (SELECT 1 FROM Interactions I "
                 f"WHERE I.interaction_id IN ({numlist2str(ids, ',')}) AND I.pose_id = R.pose_id)"
@@ -3353,39 +3291,6 @@ class StorageManager(ABC):
         )
         n_required = len(include_groups) - max_miss
         return f"({cases}) >= {n_required}"
-
-    def _build_include_interaction_subquery(
-        self, include_groups: list, max_miss: int
-    ) -> str:
-        """Build a subquery returning pose_ids that satisfy at least (n_groups - max_miss)
-        of the required interaction groups. Wildcards within a group are collapsed to a
-        single count via CASE group numbering.
-
-        Args:
-            include_groups (list[list[int]]): each inner list is a group of interaction_ids
-                that satisfy one required interaction (multiple IDs arise from wildcard matches)
-            max_miss (int): number of groups a pose is allowed to miss
-
-        Returns:
-            str: SQL subquery returning qualifying pose_ids
-        """
-        # Simple case: one group, no misses — SELECT DISTINCT avoids GROUP BY + COUNT(DISTINCT) temp B-trees
-        if len(include_groups) == 1 and max_miss == 0:
-            ids_str = numlist2str(include_groups[0], ",")
-            return f"SELECT DISTINCT pose_id FROM Interactions WHERE interaction_id IN ({ids_str})"
-
-        all_ids = [iid for group in include_groups for iid in group]
-        case_clauses = " ".join(
-            f"WHEN interaction_id IN ({numlist2str(group, ',')}) THEN {i + 1}"
-            for i, group in enumerate(include_groups)
-        )
-        n_required = len(include_groups) - max_miss
-        return (
-            f"SELECT pose_id FROM Interactions "
-            f"WHERE interaction_id IN ({numlist2str(all_ids, ',')}) "
-            f"GROUP BY pose_id "
-            f"HAVING COUNT(DISTINCT CASE {case_clauses} END) >= {n_required}"
-        )
 
     def _build_exclude_interaction_subquery(self, exclude_groups: list) -> str:
         """Build a subquery returning pose_ids that have any of the excluded interactions.
@@ -3513,7 +3418,7 @@ class StorageManager(ABC):
         ).fetchone()
 
         if row is None:
-            # Nothing matched — clean up the empty filter entry; old bookmark untouched
+            # Nothing matched — clean up the empty filter entry, old bookmark untouched
             self.conn.execute("DELETE FROM Filters WHERE filter_id = ?", (filter_id,))
             self.conn.commit()
             return 0

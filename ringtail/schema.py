@@ -474,6 +474,42 @@ ORDER_RESULT_SCHEMA: dict[str, Column] = {
 }
 
 # ---------------------------------------------------------------------------
+# Filter-to-column mapping
+# ---------------------------------------------------------------------------
+
+# Each numeric filter option, mapped to the Results column it constrains and the
+# comparison that turns its value into a cutoff. Filtering reads column names from here
+# rather than restating them, so renaming a column in RESULTS_SCHEMA surfaces at import
+# time instead of as broken SQL at query time.
+NUMERIC_FILTER_SCHEMA: dict[str, tuple[str, str]] = {
+    "eworst": ("docking_score", "<="),
+    "ebest": ("docking_score", ">="),
+    "leworst": ("leff", "<="),
+    "lebest": ("leff", ">="),
+    "score_percentile": ("docking_score", "<"),
+    "le_percentile": ("leff", "<"),
+}
+
+# hb_count's operator depends on the sign of the requested count ("at least" vs "no more
+# than"), so only its column is fixed here.
+HB_COUNT_COLUMN = "num_hb"
+
+# How each interaction filter option is encoded in Interaction_indices.interaction_type.
+INTERACTION_TYPE_LETTERS: dict[str, str] = {
+    "vdw_interactions": "V",
+    "hb_interactions": "H",
+    "reactive_interactions": "R",
+}
+
+_filter_columns = {col for col, _ in NUMERIC_FILTER_SCHEMA.values()} | {HB_COUNT_COLUMN}
+_unknown_filter_columns = sorted(_filter_columns - set(RESULTS_SCHEMA.columns))
+if _unknown_filter_columns:
+    raise RuntimeError(
+        "Numeric filters reference columns that are not in RESULTS_SCHEMA: "
+        f"{_unknown_filter_columns}"
+    )
+
+# ---------------------------------------------------------------------------
 # DDL builder
 # ---------------------------------------------------------------------------
 

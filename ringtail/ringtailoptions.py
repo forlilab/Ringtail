@@ -5,8 +5,15 @@
 #
 
 import os
+from pathlib import Path
+from typing import Callable
 from .exceptions import OptionError, RTCoreError
 from .logutils import get_logger
+from .schema import (
+    HB_COUNT_COLUMN,
+    INTERACTION_TYPE_LETTERS,
+    NUMERIC_FILTER_SCHEMA,
+)
 
 logger = get_logger(__name__)
 from dataclasses import dataclass, asdict, field, fields
@@ -225,6 +232,112 @@ class Filters:
 
         if self.max_miss < 0:
             raise OptionError("'max_miss' must be greater than or equal to 0.")
+
+        # normalize ligand names to one flat list so the count limit is meaningful
+        if self.ligand_name:
+            from .util import iterate_nested
+
+            self.ligand_name = [
+                name
+                for item in iterate_nested(self.ligand_name)
+                for name in item.split(",")
+            ]
+            if len(self.ligand_name) > 50:
+                raise OptionError(
+                    "The number of provided ligand names is too large, please prepare as a csv and use 'ligand_name_file' instead."
+                )
+
+        if (
+            self.ligand_name_file
+            and Path(self.ligand_name_file).suffix.lower() != ".csv"
+        ):
+            raise OptionError(
+                f"The file of ligand names needs to be a csv file, cannot proceed with {Path(self.ligand_name_file).suffix.lower()}."
+            )
+
+    def to_criteria(self, percentile_cutoff: Callable = None) -> dict:
+        """Group these filters into the structured criteria a query builder renders.
+
+        Pure option-domain work: maps each filter onto the column it constrains (per
+        ``schema.NUMERIC_FILTER_SCHEMA``), buckets criteria by kind, and normalizes values.
+        Emits no SQL — the storage manager turns the ``(column, operator, value)`` tuples
+        into dialect-specific predicates.
+
+        Percentile filters are the exception: resolving a percentile to a cutoff requires
+        reading the data, so the caller injects a resolver rather than this class holding a
+        database handle.
+
+        Args:
+            percentile_cutoff (Callable[[float, str], float], optional): resolves
+                (percentile, column) to a concrete cutoff. Required only when
+                'score_percentile' or 'le_percentile' is set.
+
+        Returns:
+            dict: any of ``numeric`` (list of ``(column, operator, value)``), ``interactions``
+            (list of ``[type_letter, chain, resname, resid, atom, wanted]``), ``max_miss``
+            (present only alongside ``interactions``), and ``ligand`` (in-memory ligand
+            filters, applied by RDKit rather than SQL). Empty buckets are omitted, so an
+            empty dict means no filters were set.
+        """
+        numeric = []
+        interactions = []
+        ligand = {}
+        max_miss = 0
+        interaction_keys = self.get_filter_keys("interaction")
+        ligand_keys = self.get_filter_keys("ligand")
+
+        for key, value in self.asdict().items():
+            if value is None:
+                continue
+
+            if key in NUMERIC_FILTER_SCHEMA:
+                column, operator = NUMERIC_FILTER_SCHEMA[key]
+                if key.endswith("_percentile"):
+                    if percentile_cutoff is None:
+                        raise OptionError(
+                            f"Filtering on '{key}' needs a percentile resolver; "
+                            "pass 'percentile_cutoff' to to_criteria()."
+                        )
+                    value = percentile_cutoff(value, column)
+                numeric.append((column, operator, value))
+
+            elif key == "hb_count":
+                # positive means "at least this many"; negative means "no more than",
+                # and 0 lands here so that "no hydrogen bonds" stays expressible
+                if value > 0:
+                    numeric.append((HB_COUNT_COLUMN, ">=", value))
+                else:
+                    numeric.append((HB_COUNT_COLUMN, "<=", -value))
+
+            elif key in interaction_keys:
+                for interact in value:
+                    # interact is ["chain:res:resno:resatom", wanted(bool)]
+                    interaction_string = INTERACTION_TYPE_LETTERS[key] + ":" + interact[0]
+                    interactions.append(interaction_string.split(":") + [interact[1]])
+
+            elif key == "react_any" and value:
+                interactions.append(["R", "", "", "", "", True])
+
+            elif key == "max_miss":
+                max_miss = value
+
+            elif key in ligand_keys or key == "ligand_name_file":
+                if key == "ligand_substruct_pos":
+                    for f in value:
+                        f[1] = int(f[1])
+                        for index in range(2, 6):
+                            f[index] = float(f[index])
+                ligand[key] = value
+
+        criteria = {}
+        if numeric:
+            criteria["numeric"] = numeric
+        if interactions:
+            criteria["interactions"] = interactions
+            criteria["max_miss"] = max_miss
+        if ligand:
+            criteria["ligand"] = ligand
+        return criteria
 
 
     @classmethod

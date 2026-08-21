@@ -748,9 +748,11 @@ class RingtailCore:
             filter_expression (dict): nested boolean filter tree for tiered "OR of AND-groups"
                 filtering. A node is either ``{"op": "and"|"or", "children": [<node>, ...]}``
                 or a leaf group (a dict of Filters fields, e.g. ``{"eworst": -9,
-                "hb_interactions": [["A:ASP:189:", True]], "max_miss": 1}``). When provided it
-                defines the entire filter predicate; the flat filter args above are ignored for
-                the WHERE clause. SMARTS/substructure filters are not supported inside the tree.
+                "hb_interactions": [["A:ASP:189:", True]], "max_miss": 1}`` joined by AND as usual).
+                When provided it defines the entire filter clause; the flat filter args above are ignored for
+                the WHERE clause. SMARTS/substructure filters are supported inside the tree, but will significantly
+                increase time to filter, as each SMARTS filter has to run one query and produce a subquery to be
+                included in the main filter tree expression
 
         Returns:
             tuple[int, str]: number of ligands passing filter and final bookmark name (may change if eg filtering and clustering)
@@ -780,15 +782,6 @@ class RingtailCore:
             ligand_max_molweight=ligand_max_molweight,
             ligand_name_file=ligand_name_file,
         )
-
-        # Compatibility check with docking mode
-        if react_any:
-            with self.storageman as sm:
-                if sm.get_previous_docking_mode() == "vina":
-                    logger.warning(
-                        "Cannot use reaction filters with Vina mode. Removing react_any filter."
-                    )
-                react_any = False
         output_bookmark = valid_bookmark_name(output_bookmark)
         if output_bookmark is None:
             raise OptionError(
@@ -804,23 +797,14 @@ class RingtailCore:
                 "Cannot return all passing poses with percentile filter. Will only log best pose."
             )
             output_all_poses = False
-        # check that all filter values are valid
-        filters.checks()
 
-        # Nested/tiered filtering fully defines the WHERE predicate itself, so skip the
-        # interaction-combination enumeration path (that only varies flat interaction
-        # filters). NOTE: revisit enumerate_interaction_combs / max_miss once tiered
-        # filtering is proven — OR-of-AND-groups can express the same intent natively and
-        # this enumerate→union "crutch" may become redundant.
+        # Nested filtering is incompatible with enumerate interaction combs/max miss
         if filter_expression is not None:
             enumerate_interaction_combs = False
-            # Consent-style heads-up: each RDKit (SMARTS/property) criterion costs one
-            # in-memory molecule scan, so the same SMARTS spread across multiple groups
-            # runs multiple scans. (The CLI doesn't expose complex filtering at all.)
             if self._expr_rdkit_group_count(filter_expression) > 1:
                 logger.warning(
                     "SMARTS/RDKit criteria appear in multiple filter groups; each group "
-                    "is evaluated with a separate molecule scan, which is slower."
+                    "is evaluated with a separate ligand scan, which is slower."
                 )
 
         logger.info("Starting to filter results")
@@ -839,6 +823,10 @@ class RingtailCore:
         else:
             filter_dict = filters.asdict()
             write_one_bookmark = True
+            # So at this point, have a filter dict and a filter expression dict,
+            # seems like i probably want to allow the filter expression to be an expression of
+            # filter dicts, and some mechanism in the filter class to support that so it's
+            # a 'known' thing
 
         # parse clustering
         clustering = {}
@@ -857,7 +845,7 @@ class RingtailCore:
         if write_one_bookmark:
             with self.storageman:
                 num_passing_ligands = self.storageman.filter_results(
-                    all_filters=filter_dict,
+                    all_filters=filter_dict,  # 'all_filters" doesnt make sense now that filter_expression is allowed
                     output_bookmark=effective_bookmark,
                     input_bookmark=input_bookmark,
                     filter_expression=filter_expression,

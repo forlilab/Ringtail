@@ -215,9 +215,7 @@ class TestFiltering:
         """Both ligand size filters may be combined through the API, and intersect.
         Contradictory bounds simply return nothing, as with crossing energy bounds.
         The CLI still rejects the combination as a likely mistake."""
-        mw, _ = populated_db.filter(
-            ligand_min_molweight=190, output_bookmark="mw_only"
-        )
+        mw, _ = populated_db.filter(ligand_min_molweight=190, output_bookmark="mw_only")
         atoms, _ = populated_db.filter(
             ligand_max_atoms=13, output_bookmark="atoms_only"
         )
@@ -327,7 +325,7 @@ class TestFiltering:
             ],
         }
         with tmp_db.storageman as sm:
-            sql = sm._generate_result_filtering_query({}, "out", None, expr)
+            sql = sm._generate_filtering_query({}, "out", None, expr)
         assert (
             "WHERE ((R.docking_score <= -9 AND R.docking_score >= -12) "
             "OR (R.docking_score <= -7))" in sql
@@ -349,7 +347,7 @@ class TestFiltering:
             ],
         }
         with tmp_db.storageman as sm:
-            sql = sm._generate_result_filtering_query({}, "out", None, expr)
+            sql = sm._generate_filtering_query({}, "out", None, expr)
         assert (
             "((R.docking_score <= -8) AND ((R.docking_score >= -12) "
             "OR ((R.docking_score <= -9) AND (R.leff >= -0.5))))" in sql
@@ -379,7 +377,10 @@ class TestFiltering:
             "op": "or",
             "children": [
                 {"op": "and", "children": [{"ligand_substruct": ["C=O"]}]},
-                {"op": "and", "children": [{"ligand_substruct": ["CN"]}, {"eworst": -7}]},
+                {
+                    "op": "and",
+                    "children": [{"ligand_substruct": ["CN"]}, {"eworst": -7}],
+                },
             ],
         }
         assert tmp_db._expr_rdkit_group_count(one) == 1
