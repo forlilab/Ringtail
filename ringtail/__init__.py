@@ -14,9 +14,9 @@ from .ringtailcore import (
 )
 from .cloptionparser import CLOptionParser
 from .logutils import LOGGER, get_logger, setup_logging
+from .filters import Filters
 from .ringtailoptions import (
     RingtailDefaults,
-    Filters,
     validate_file_pattern,
 )
 from .storagemanager import StorageManager

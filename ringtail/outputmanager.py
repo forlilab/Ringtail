@@ -6,7 +6,7 @@
 
 from collections.abc import Iterable
 from .exceptions import OutputError
-from .ringtailoptions import Filters
+from .filters import Filters
 import os
 import json
 from rdkit import Chem
@@ -168,6 +168,22 @@ class OutputManager:
         Raises:
             OutputError
         """
+        # a nested specification has no single set of values to tabulate, so write the
+        # groups out one at a time under their operator
+        if "op" in filters_dict and "children" in filters_dict:
+            op = str(filters_dict["op"]).upper()
+            self._write_log_line(additional_info)
+            self._write_log_line(f"##### FILTER GROUPS combined with {op}")
+            for i, child in enumerate(filters_dict["children"], start=1):
+                self.write_filtervalues_in_log(
+                    child,
+                    included_interactions,
+                    bookmark_name=None,
+                    additional_info=f"### GROUP {i}",
+                )
+            self.write_bookmarkname_in_log(bookmark_name)
+            return
+
         try:
             buff = [additional_info, "##### PROPERTIES"]
             filters = filters_dict.copy()
@@ -214,7 +230,10 @@ class OutputManager:
             for line in buff:
                 self._write_log_line(line)
 
-            self.write_bookmarkname_in_log(bookmark_name)
+            # None when this is one group of a nested specification; the caller writes the
+            # bookmark name once after all the groups
+            if bookmark_name is not None:
+                self.write_bookmarkname_in_log(bookmark_name)
 
         except Exception as e:
             raise OutputError("Error occurred while writing filters to log") from e

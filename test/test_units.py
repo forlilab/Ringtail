@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 from ringtail import Filters, QueryBuilder, RingtailCore
+from ringtail.exceptions import OptionError
 
 TEST_DATA = Path(__file__).parent / "test_data"
 
@@ -253,9 +254,9 @@ class TestFiltering:
             hb_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)],
             vdw_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)],
         )
-        combos = tmp_db._generate_interaction_combinations(filters.asdict(), 1)
+        combos = tmp_db._generate_interaction_combinations(filters.leaf.asdict(), 1)
         result_filters = [
-            tmp_db._prepare_interaction_combo_filters(filters.asdict(), c)
+            tmp_db._prepare_interaction_combo_filters(filters.leaf.asdict(), c)
             for c in combos
         ]
         assert len(result_filters) == 5
@@ -263,19 +264,19 @@ class TestFiltering:
             Filters(
                 hb_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)],
                 vdw_interactions=[("A:ARG:123:", True)],
-            ).asdict()
+            ).leaf.asdict()
             in result_filters
         )
         assert (
             Filters(
                 hb_interactions=[("A:ARG:123:", True)],
                 vdw_interactions=[("A:ARG:123:", True), ("A:VAL:124:", True)],
-            ).asdict()
+            ).leaf.asdict()
             in result_filters
         )
 
     def test_tiered_filter_or_of_groups(self, populated_db):
-        """Nested filter_expression: OR of two AND-groups. The passing ligand set must
+        """Nested specification: OR of two AND-groups. The passing ligand set must
         equal the union of each tier filtered on its own (true OR-of-AND semantics)."""
         expr = {
             "op": "or",
@@ -290,7 +291,7 @@ class TestFiltering:
             ],
         }
         count_or, _ = populated_db.filter(
-            filter_expression=expr, output_bookmark="tier_or"
+            filters=expr, output_bookmark="tier_or"
         )
         # each tier on its own
         count_a, _ = populated_db.filter(
@@ -325,7 +326,7 @@ class TestFiltering:
             ],
         }
         with tmp_db.storageman as sm:
-            sql = sm._generate_filtering_query({}, "out", None, expr)
+            sql = sm._generate_filtering_query(Filters.from_dict(expr), "out")
         assert (
             "WHERE ((R.docking_score <= -9 AND R.docking_score >= -12) "
             "OR (R.docking_score <= -7))" in sql
@@ -347,14 +348,14 @@ class TestFiltering:
             ],
         }
         with tmp_db.storageman as sm:
-            sql = sm._generate_filtering_query({}, "out", None, expr)
+            sql = sm._generate_filtering_query(Filters.from_dict(expr), "out")
         assert (
             "((R.docking_score <= -8) AND ((R.docking_score >= -12) "
             "OR ((R.docking_score <= -9) AND (R.leff >= -0.5))))" in sql
         )
 
     def test_smarts_inside_group(self, populated_db):
-        """A SMARTS criterion works inside a filter_expression group (RDKit leaf ->
+        """A SMARTS criterion works inside a filter group (RDKit leaf ->
         pose_id IN (...)), ANDing with SQL criteria in the same group."""
         score_only = {"op": "and", "children": [{"eworst": -6}]}
         with_smarts = {
@@ -362,15 +363,15 @@ class TestFiltering:
             "children": [{"eworst": -6}, {"ligand_substruct": ["C=O"]}],
         }
         c_score, _ = populated_db.filter(
-            filter_expression=score_only, output_bookmark="sig_score"
+            filters=score_only, output_bookmark="sig_score"
         )
         c_both, _ = populated_db.filter(
-            filter_expression=with_smarts, output_bookmark="sig_both"
+            filters=with_smarts, output_bookmark="sig_both"
         )
         assert c_both > 0
         assert c_both <= c_score  # adding SMARTS only narrows
 
-    def test_expr_rdkit_group_count(self, tmp_db):
+    def test_expr_rdkit_group_count(self):
         """Cross-group SMARTS detection (drives the API warning / GUI consent dialog)."""
         one = {"op": "and", "children": [{"eworst": -6}, {"ligand_substruct": ["C=O"]}]}
         two = {
@@ -383,22 +384,29 @@ class TestFiltering:
                 },
             ],
         }
-        assert tmp_db._expr_rdkit_group_count(one) == 1
-        assert tmp_db._expr_rdkit_group_count(two) == 2
+        assert Filters.from_dict(one).rdkit_group_count() == 1
+        assert Filters.from_dict(two).rdkit_group_count() == 2
 
     def test_tiered_with_global_smarts(self, populated_db):
-        """A global SMARTS filter applies (ANDed) alongside a nested filter_expression."""
+        """A SMARTS criterion applying to a whole expression is its own group ANDed on."""
         expr = {"op": "or", "children": [{"eworst": -6}]}
         count_expr, _ = populated_db.filter(
-            filter_expression=expr, output_bookmark="tier_smarts_a"
+            filters=expr, output_bookmark="tier_smarts_a"
         )
         count_both, _ = populated_db.filter(
-            filter_expression=expr,
-            ligand_substruct=["C=O"],
+            filters={
+                "op": "and",
+                "children": [expr, {"ligand_substruct": ["C=O"]}],
+            },
             output_bookmark="tier_smarts_b",
         )
         assert count_both > 0
         assert count_both <= count_expr  # SMARTS only narrows the tree result
+
+    def test_filters_and_flat_args_are_exclusive(self, tmp_db):
+        """Passing both a specification and flat criteria is a mistake, not a merge."""
+        with pytest.raises(OptionError):
+            tmp_db.filter(filters={"eworst": -6}, ligand_substruct=["C=O"])
 
 
 class TestOutput:
@@ -562,7 +570,7 @@ class TestStorageMan:
                 eworst=-3.0,
                 vdw_interactions=[["A:VAL:279:", True]],
                 hb_interactions=[["A:VAL:279:", True], ["A:LYS:162:", True]],
-            ).asdict()
+            ).to_dict()
         )
 
     def test_version_info(self, tmp_db):
@@ -977,7 +985,6 @@ class TestLogger:
 
 class TestOptions:
     def test_filter_option_checks(self, tmp_db, tmp_path):
-        from ringtail.ringtailoptions import Filters
 
         filelist = tmp_path / "filelist.txt"
         filelist.write_text(
@@ -989,14 +996,15 @@ class TestOptions:
         tmp_db.add_results_from_files(
             docking_results=str(filelist), docking_mode="adgpu"
         )
-        tmp_db.filters = Filters(score_percentile=20)
-        assert tmp_db.filters.eworst is None
-        assert tmp_db.filters.score_percentile == 20
+        # criteria live on the leaf; a flat specification has exactly one
+        leaf = Filters(score_percentile=20).leaf
+        assert leaf.eworst is None
+        assert leaf.score_percentile == 20
 
-        tmp_db.filters = Filters(score_percentile=20, eworst=-6)
-        tmp_db.filters.checks()
-        assert tmp_db.filters.eworst == -6
-        assert tmp_db.filters.score_percentile is None
+        # an explicit cutoff wins over the percentile, resolved at construction
+        leaf = Filters(score_percentile=20, eworst=-6).leaf
+        assert leaf.eworst == -6
+        assert leaf.score_percentile is None
 
     def test_overwrite_db(self, tmp_db, tmp_path):
         list1 = tmp_path / "list1.txt"

@@ -19,9 +19,9 @@ from .util import *
 from .logutils import get_logger
 
 logger = get_logger(__name__)
+from .filters import Filters
 from .ringtailoptions import (
     RingtailDefaults,
-    Filters,
     ResultsObject,
     statuses,
     validate_docking_mode,
@@ -651,29 +651,9 @@ class RingtailCore:
                 "percentiles": percentiles,
             }
 
-    @_wrap_exceptions
-    def _expr_rdkit_group_count(self, expr) -> int:
-        """Number of top-level groups in a filter_expression that contain an RDKit
-        (SMARTS/property) criterion — used to warn about repeated molecule scans."""
-        rdkit_keys = {
-            "ligand_substruct",
-            "ligand_substruct_pos",
-            "ligand_max_atoms",
-            "ligand_min_molweight",
-            "ligand_max_molweight",
-        }
-
-        def _has_rdkit(node) -> bool:
-            if isinstance(node, dict) and "op" in node and "children" in node:
-                return any(_has_rdkit(c) for c in node["children"])
-            return bool(set(node.keys()) & rdkit_keys)
-
-        if isinstance(expr, dict) and "op" in expr and "children" in expr:
-            return sum(1 for c in expr["children"] if _has_rdkit(c))
-        return 1 if _has_rdkit(expr) else 0
-
     def filter(
         self,
+        filters: Union[Filters, dict] = None,
         eworst=None,
         ebest=None,
         leworst=None,
@@ -705,13 +685,21 @@ class RingtailCore:
         input_bookmark: str = None,
         return_iter: bool = False,
         ligand_name_file=None,
-        filter_expression: dict = None,
     ) -> Union[tuple[int, str], list[tuple]]:
         """Prepare list of filters, then filters and writes all passing pose_ids to a bookmark of given name. Creates an output log text file of all ligand (or all poses, if requested) docking results that passes.
         If clustering is requested, it will first perform the filtering, then cluster, and create a new bookmark of name <bookmark_<cluster_type>_cluster> for each requested cluster type.
         In the case of clustering, the representative ligands will be the ones written to the output log.
 
         Args:
+            filters (Filters | dict): a complete filter specification, for nested
+                ("OR of AND-groups") filtering. Either a ``Filters`` object or the
+                equivalent nested dict, e.g. ``{"op": "or", "children": [{"eworst": -9,
+                "hb_interactions": [["A:ASP:189:", True]]}, {"eworst": -11}]}`` — a node is
+                ``{"op": "and"|"or", "children": [<node>, ...]}`` and a leaf is a dict of
+                the flat filter fields below, whose criteria combine with AND. Cannot be
+                combined with the flat arguments; pass one or the other. SMARTS filters are
+                supported inside the tree, but each group containing one costs its own
+                in-memory ligand scan.
             eworst (float): specify the worst energy value accepted
             ebest (float): specify the best energy value accepted
             leworst (float): specify the worst ligand efficiency value accepted
@@ -745,14 +733,6 @@ class RingtailCore:
             output_bookmark (str): name for resulting book mark file. Default value is 'passing_results', can only contain lower case letters, numbers, and underscore (_)
             input_bookmark (str): name of bookmark to perform filtering over
             return_iter (bool): return an iterable of all of the filtering results
-            filter_expression (dict): nested boolean filter tree for tiered "OR of AND-groups"
-                filtering. A node is either ``{"op": "and"|"or", "children": [<node>, ...]}``
-                or a leaf group (a dict of Filters fields, e.g. ``{"eworst": -9,
-                "hb_interactions": [["A:ASP:189:", True]], "max_miss": 1}`` joined by AND as usual).
-                When provided it defines the entire filter clause; the flat filter args above are ignored for
-                the WHERE clause. SMARTS/substructure filters are supported inside the tree, but will significantly
-                increase time to filter, as each SMARTS filter has to run one query and produce a subquery to be
-                included in the main filter tree expression
 
         Returns:
             tuple[int, str]: number of ligands passing filter and final bookmark name (may change if eg filtering and clustering)
@@ -760,7 +740,7 @@ class RingtailCore:
 
         """
 
-        filters = Filters(
+        flat = Filters(
             eworst=eworst,
             ebest=ebest,
             leworst=leworst,
@@ -782,6 +762,21 @@ class RingtailCore:
             ligand_max_molweight=ligand_max_molweight,
             ligand_name_file=ligand_name_file,
         )
+        # the leaf normalizes it (None -> 0), and the checks below compare it numerically
+        max_miss = flat.leaf.max_miss
+
+        # only flat -or- nested is allowed
+        if filters is not None:
+            if flat.leaf.has_criteria():
+                raise OptionError(
+                    "Pass either 'filters' or the individual filter arguments, not both. "
+                    "To apply a criterion across a whole expression, add it as its own "
+                    "group: Filters(op='and', children=[<expression>, {<criterion>}])."
+                )
+            filters = Filters.from_dict(filters)
+        else:
+            filters = flat
+
         output_bookmark = valid_bookmark_name(output_bookmark)
         if output_bookmark is None:
             raise OptionError(
@@ -799,9 +794,9 @@ class RingtailCore:
             output_all_poses = False
 
         # Nested filtering is incompatible with enumerate interaction combs/max miss
-        if filter_expression is not None:
+        if not filters.is_flat():
             enumerate_interaction_combs = False
-            if self._expr_rdkit_group_count(filter_expression) > 1:
+            if filters.rdkit_group_count() > 1:
                 logger.warning(
                     "SMARTS/RDKit criteria appear in multiple filter groups; each group "
                     "is evaluated with a separate ligand scan, which is slower."
@@ -809,24 +804,21 @@ class RingtailCore:
 
         logger.info("Starting to filter results")
         # get possible permutations of interaction with max_miss excluded
-        if enumerate_interaction_combs and max_miss > 0:
+        if filters.is_flat() and enumerate_interaction_combs and max_miss > 0:
             interaction_combs = self._generate_interaction_combinations(
-                filters.asdict(), max_miss
+                filters.leaf.asdict(), max_miss
             )
             if len(interaction_combs) > 1:
                 write_one_bookmark = False
             else:
                 write_one_bookmark = True
-                filter_dict = self._prepare_interaction_combo_filters(
-                    filters.asdict(), interaction_combs[0]
+                filters = Filters(
+                    **self._prepare_interaction_combo_filters(
+                        filters.leaf.asdict(), interaction_combs[0]
+                    )
                 )
         else:
-            filter_dict = filters.asdict()
             write_one_bookmark = True
-            # So at this point, have a filter dict and a filter expression dict,
-            # seems like i probably want to allow the filter expression to be an expression of
-            # filter dicts, and some mechanism in the filter class to support that so it's
-            # a 'known' thing
 
         # parse clustering
         clustering = {}
@@ -845,17 +837,16 @@ class RingtailCore:
         if write_one_bookmark:
             with self.storageman:
                 num_passing_ligands = self.storageman.filter_results(
-                    all_filters=filter_dict,  # 'all_filters" doesnt make sense now that filter_expression is allowed
+                    filters=filters,
                     output_bookmark=effective_bookmark,
                     input_bookmark=input_bookmark,
-                    filter_expression=filter_expression,
                 )
             print_string = ""
         # else produce a bookmark for each interaction combination
         else:
             for ic_idx, combination in enumerate(interaction_combs):
 
-                filters_copy = filters.asdict()
+                filters_copy = filters.leaf.asdict()
                 # prepare Filter object with only desired interaction combination for storageManager
                 temp_filters = self._prepare_interaction_combo_filters(
                     filters_copy, combination
@@ -864,7 +855,7 @@ class RingtailCore:
                 # process each interaction combination filter
                 with self.storageman:
                     num_passing_ligands = self.storageman.filter_results(
-                        temp_filters,
+                        Filters(**temp_filters),
                         iterated_bookmark_name,
                         input_bookmark,
                     )
@@ -898,8 +889,6 @@ class RingtailCore:
                 )
             # union result is the pre-cluster input for the max_miss path
             effective_bookmark = output_bookmark
-            # rename so can be reused in common method below
-            filter_dict = filters_copy
             print_string = " in max_miss union"
 
         if num_passing_ligands:
@@ -914,7 +903,7 @@ class RingtailCore:
             if output_log:
                 self.write_filter_output(
                     output_bookmark,
-                    filters.asdict(),
+                    filters.to_dict(),
                     num_passing_ligands,
                     output_log,
                     outfields,

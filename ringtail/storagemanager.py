@@ -20,7 +20,8 @@ from rdkit import Chem
 from typing import Any, Union, ClassVar, NamedTuple
 from importlib.metadata import version
 from packaging.version import Version
-from .ringtailoptions import Filters, statuses
+from .filters import Filter, Filters
+from .ringtailoptions import statuses
 from .exceptions import (
     StorageError,
     OptionError,
@@ -213,23 +214,22 @@ class StorageManager(ABC):
 
     def filter_results(
         self,
-        all_filters: Filters,
+        filters: Filters,
         output_bookmark: str,
         input_bookmark: str = None,
-        filter_expression: dict = None,
     ) -> int:
         """Generate and execute database queries from given filters.
 
         Args:
-            all_filters (dict): dict containing all filters
+            filters (Filters): the filter specification. Flat filtering is a one-leaf tree
+                and nested filtering a deeper one, so both render through the same path.
             output_bookmark (str): name of bookmark in which to save the data
             input_bookmark (str, optional): if filtering not across all data, but a pre-filtered bookmark
-            filter_expression (dict, optional): nested/tiered boolean filter tree. When given it defines
-                the WHERE clause and is used instead of 'all_filters'
 
         Returns:
             int: number of passing ligands
         """
+        filters = Filters.from_dict(filters)
         # before we do anything, check that the DB schema version is usable
         rt_version_same, db_rt_version = self.check_ringtaildb_version()
         if not rt_version_same:
@@ -241,7 +241,7 @@ class StorageManager(ABC):
 
         # get the final filter query, has a {selection} place holder
         filter_query: str = self._generate_filtering_query(
-            all_filters, output_bookmark, input_bookmark, filter_expression
+            filters, output_bookmark, input_bookmark
         )
 
         logger.debug(f"Query for filtering results: {filter_query}")
@@ -252,15 +252,13 @@ class StorageManager(ABC):
         if input_bookmark is None:
             input_bookmark = "Results"
 
-        # persist the nested expression when present, else the flat filters
-        # again the filte rdict should be the same, I think all filters should just get the same grouping
-        stored_filters = (
-            filter_expression if filter_expression is not None else all_filters
-        )
+        # one shape goes into the Filters table regardless of how the user filtered: a flat
+        # specification serializes to the bare leaf dict earlier versions wrote, a nested
+        # one to the tree, and Filters.from_dict reads either back
         self._populate_filter_tables(
             name=output_bookmark,
             query=filter_query,
-            filters=stored_filters,
+            filters=filters.to_dict(),
             input_bookmark=input_bookmark,
         )
         logger.debug(
@@ -2565,30 +2563,23 @@ class StorageManager(ABC):
 
     def _generate_filtering_query(
         self,
-        filters_dict: dict,
+        filters: Filters,
         bookmark_name: str,
         input_bookmark: str = None,
-        filter_expression: dict = None,
     ) -> str:
         """Takes filters, writes SQL filtering string.
 
-        Two modes:
-        - Flat (default): filters_dict is a single AND-group. Each filter type
-          becomes an independent WHERE condition combined with AND (numerical column
-          conditions, include interactions via EXISTS, exclude interactions via
-          NOT IN, ligand name via ligand_id IN, RDKit substruct as in-memory post-filter).
-        - Nested (filter_expression given): a recursive boolean tree of AND/OR
-          nodes whose leaves are Filters-shaped groups, rendered into one parenthesized
-          WHERE clause — this expresses tiered "OR of AND-groups" filtering. RDKit
-          substructure filters are supported inside the tree, but each one costs its own
-          in-memory ligand scan (see _render_filter_expression).
+        One path for both kinds of filtering, since a flat filter set is a one-leaf tree.
+        Each leaf becomes an AND-group of WHERE conditions (numerical column conditions,
+        include interactions via EXISTS, exclude interactions via NOT IN, ligand name via
+        ligand_id IN, RDKit criteria as an in-memory scan rendered to pose_id IN), and
+        leaves combine by their parent node's operator. RDKit criteria are supported
+        anywhere in the tree, but each group holding one costs its own ligand scan.
 
         Args:
-            filters_dict (dict): Keys and value formats must match Filters class
+            filters (Filters): the filter specification to render
             bookmark_name (str): Name of bookmark to which passing poses are saved
             input_bookmark (str, optional): Filter over pre-filtered data instead of entire database
-            filter_expression (dict, optional): nested boolean filter tree, when given,
-                it fully defines the WHERE clause and filters_dict is ignored for it
 
         Returns:
             str: SQL query returning pose_ids of passing results
@@ -2603,7 +2594,7 @@ class StorageManager(ABC):
                 raise OptionError(
                     "'input_bookmark' and 'bookmark_name' cannot be the same! Please rename 'bookmark_name'"
                 )
-            if self._expression_uses_percentile(filters_dict, filter_expression):
+            if filters.uses_percentile():
                 raise OptionError(
                     "Cannot use 'score_percentile' or 'le_percentile' with 'input_bookmark'."
                 )
@@ -2612,26 +2603,10 @@ class StorageManager(ABC):
             elif self._is_statustable(input_bookmark):
                 filtering_window = f"(SELECT * FROM Results WHERE pose_id IN (SELECT pose_id FROM {input_bookmark}))"
 
-        if filter_expression is not None:
-            boolean_predicate = self._render_filter_expression(
-                filter_expression, filtering_window
-            )
-            if not boolean_predicate:
-                raise OptionError("No filters were provided, cannot filter.")
-            where_conditions = [boolean_predicate]
-            # SMARTS/substructure can't live in the SQL tree, so if the flat filters
-            # carry RDKit filters they apply globally (ANDed onto the tree result).
-            rdkit_lig = self._rdkit_filters_from_flat(filters_dict)
-            if rdkit_lig:
-                # the returned predicate already encodes the tree, so it replaces it
-                where_conditions = [
-                    self._rdkit_pose_id_predicate(
-                        boolean_predicate, rdkit_lig, filtering_window
-                    )
-                ]
-        else:
-            # raises if no filters were set at all
-            predicate, lig_filters = self._render_filter_group(Filters(**filters_dict))
+        if filters.is_flat():
+            # a lone leaf is the user's whole query, so a missing interaction is an error
+            # rather than something that quietly makes one branch false
+            predicate, lig_filters = self._render_filter_group(filters.leaf)
             where_conditions = [predicate] if predicate else []
 
             # RDKit substruct/position/max-atoms filters can't be expressed in SQL —
@@ -2642,6 +2617,13 @@ class StorageManager(ABC):
                         predicate, lig_filters, filtering_window
                     )
                 ]
+        else:
+            boolean_predicate = self._render_filter_expression(
+                filters, filtering_window
+            )
+            if not boolean_predicate:
+                raise OptionError("No filters were provided, cannot filter.")
+            where_conditions = [boolean_predicate]
 
         where_sql = (
             f"WHERE {' AND '.join(where_conditions)}" if where_conditions else ""
@@ -2777,46 +2759,15 @@ class StorageManager(ABC):
         ids = ",".join(map(str, passing)) if passing else "NULL"
         return f"R.pose_id IN ({ids})"
 
-    def _rdkit_filters_from_flat(self, filters_dict: dict) -> dict:
-        """Extract only the RDKit (in-memory) ligand filters from a flat filter dict —
-        substructure, substructure-position, max heavy atoms, molweight. These can't be
-        SQL predicates, so with a nested ``filter_expression`` they apply globally."""
-        # TODO should this be done after rest of the leaf is run to save time?
-        if not filters_dict:
-            return {}
-        keys = (
-            "ligand_substruct",
-            "ligand_substruct_pos",
-            "ligand_max_atoms",
-            "ligand_min_molweight",
-            "ligand_max_molweight",
-        )
-        out = {}
-        for k in keys:
-            v = filters_dict.get(k)
-            if v not in (None, [], "", 0):
-                out[k] = v
-        if not out:
-            return {}
-        if filters_dict.get("ligand_operator"):
-            out["ligand_operator"] = filters_dict["ligand_operator"]
-        # mirror Filters.to_criteria's numeric casting for substruct_pos
-        if "ligand_substruct_pos" in out:
-            for f in out["ligand_substruct_pos"]:
-                f[1] = int(f[1])
-                for i in range(2, 6):
-                    f[i] = float(f[i])
-        return out
-
     def _render_filter_expression(
-        self, node: dict, filtering_window: str = "Results"
+        self, node, filtering_window: str = "Results", narrow_with: str = None
     ) -> str:
         """Recursively render a nested boolean filter expression into one SQL predicate.
 
-        A node is either a boolean node ``{"op": "and"|"or", "children": [...]}`` or a
-        leaf group (a Filters-shaped dict). Boolean nodes wrap their children in
-        parentheses, leaves render via ``_render_filter_group``. Arbitrary nesting depth
-        is supported — the same recursion renders ``(a AND (b OR (c AND d)))``.
+        A node is either a Filters (a boolean node) or a Filter (a leaf). Boolean nodes
+        wrap their children in parentheses, leaves render via ``_render_filter_group``.
+        Arbitrary nesting depth is supported — the same recursion renders
+        ``(a AND (b OR (c AND d)))``.
 
         RDKit leaves (SMARTS/substructure, molweight, max heavy atoms) can't be SQL, so
         each is evaluated up front to the set of pose_ids that pass it (one in-memory
@@ -2824,48 +2775,70 @@ class StorageManager(ABC):
         composes into AND/OR like any other predicate. This is why an RDKit criterion is
         cheap as SQL to combine but costs one scan per leaf.
 
+        Under an AND node the non-RDKit children are rendered first and their predicate is
+        used to narrow the RDKit children's scans, so only poses that already passed the
+        SQL siblings are streamed. Under OR no such narrowing is valid, since a sibling
+        failing doesn't disqualify a pose.
+
         Args:
-            node (dict): a boolean node or a leaf Filters-shaped group
+            node (Filters | Filter): a boolean node or a leaf
             filtering_window (str): FROM target for evaluating RDKit leaves
+            narrow_with (str, optional): predicate from AND siblings, used only to
+                pre-narrow RDKit scans
 
         Returns:
             str: parenthesized SQL predicate (empty string if the node contributes nothing)
         """
-        # parse each and or expression, if op and children not in node, then it's a pure
-        # filter expression, which will be handled like a normal Filters dict
-        if isinstance(node, dict) and "op" in node and "children" in node:
-            op = str(node["op"]).strip().upper()
-            if op not in ("AND", "OR"):
-                raise OptionError(
-                    f"Unrecognized boolean operator in filter expression: {node['op']!r}. "
-                    "Use 'and' or 'or'."
-                )
+        if isinstance(node, Filters):
+            op = node.op.upper()
+            children = list(node.children)
+            if op == "AND":
+                # split so the cheap SQL siblings can narrow the expensive scans
+                scans = [c for c in children if self._node_needs_rdkit(c)]
+                plain = [c for c in children if c not in scans]
+            else:
+                scans, plain = [], children
+
             rendered = [
-                self._render_filter_expression(child, filtering_window)
-                for child in node["children"]
+                r
+                for r in (
+                    self._render_filter_expression(child, filtering_window, narrow_with)
+                    for child in plain
+                )
+                if r
             ]
-            rendered = [r for r in rendered if r]
+            if scans:
+                sibling_narrowing = " AND ".join(
+                    p for p in ([narrow_with] if narrow_with else []) + rendered if p
+                )
+                rendered += [
+                    r
+                    for r in (
+                        self._render_filter_expression(
+                            child, filtering_window, sibling_narrowing or None
+                        )
+                        for child in scans
+                    )
+                    if r
+                ]
             if not rendered:
                 return ""
             if len(rendered) == 1:
                 return rendered[0]
             return "(" + f" {op} ".join(rendered) + ")"
 
-        # leaf group: normalize through Filters so we get a full, validated group, then
-        # render it with the same per-group core the flat path uses.
-        print("\n\n here is the node being processed: ", node)
+        # leaf: rendered by the same per-group core the flat path uses.
         # strict=False: an interaction missing from the database makes only this leaf false,
         # rather than aborting the whole boolean tree
-        predicate, rdkit_lig_filters = self._render_filter_group(
-            Filters(**node), strict=False
-        )
+        predicate, rdkit_lig_filters = self._render_filter_group(node, strict=False)
         if rdkit_lig_filters:
             # evaluate this leaf's RDKit criterion to a pose_id set (one scan), pre-narrowed
-            # by this leaf's own SQL part
+            # by this leaf's own SQL part and by any AND siblings
+            pre = " AND ".join(p for p in (predicate, narrow_with) if p)
             return (
                 "("
                 + self._rdkit_pose_id_predicate(
-                    predicate, rdkit_lig_filters, filtering_window
+                    pre, rdkit_lig_filters, filtering_window
                 )
                 + ")"
             )
@@ -2873,26 +2846,12 @@ class StorageManager(ABC):
             return ""
         return "(" + predicate + ")"
 
-    def _expression_uses_percentile(
-        self, filters_dict: dict, filter_expression: dict = None
-    ) -> bool:
-        """True if a score/le percentile filter appears anywhere in the flat filters or
-        the nested expression (percentile is incompatible with input_bookmark)."""
-        if filter_expression is not None:
-
-            def _walk(node):
-                if isinstance(node, dict) and "op" in node and "children" in node:
-                    return any(_walk(child) for child in node["children"])
-                return (
-                    node.get("score_percentile") is not None
-                    or node.get("le_percentile") is not None
-                )
-
-            return _walk(filter_expression)
-        return (
-            filters_dict.get("score_percentile") is not None
-            or filters_dict.get("le_percentile") is not None
-        )
+    @staticmethod
+    def _node_needs_rdkit(node) -> bool:
+        """True if this node, or anything under it, needs an in-memory ligand scan."""
+        if isinstance(node, Filters):
+            return any(leaf.has_rdkit_criteria() for leaf in node.leaves())
+        return node.has_rdkit_criteria()
 
     def _perform_rdkit_filtering(
         self, partial_query: str, ligand_filters: dict

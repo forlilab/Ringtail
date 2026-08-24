@@ -14,8 +14,8 @@ import __main__
 from .logutils import get_logger, setup_logging
 
 logger = get_logger(__name__)
+from .filters import Filters
 from .ringtailoptions import (
-    Filters,
     validate_docking_mode,
     ringtail_defaults,
     RingtailDefaults,
@@ -821,10 +821,13 @@ class CLOptionParser:
                 "react_any"
             )  # react_any is not part of the three formal list but works as a filter on its own
             for f in optional_filters:
-                if (
-                    getattr(parsed_opts, f) is not None
-                    and getattr(parsed_opts, f) != []
-                ):
+                value = getattr(parsed_opts, f)
+                # react_any is a flag: unset is False, not a criterion. Checked by name
+                # rather than falsiness because hb_count=0 IS a criterion ("no H bonds"),
+                # and 0 == False in Python.
+                if f == "react_any" and not value:
+                    continue
+                if value is not None and value != []:
                     if f == "ligand_operator":
                         pass
                     else:
