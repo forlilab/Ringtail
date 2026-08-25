@@ -23,6 +23,7 @@ class Column:
     foreign_key: Union[str, None] = None  # "ReferencedTable.column"
     default: Union[str, None] = None  # raw SQL default expression
     sqlite_only: bool = False  # column created only for SQLite; omitted on DuckDB
+    check: Union[str, None] = None  # raw SQL CHECK expression, emitted inline
 
 
 @dataclass
@@ -162,6 +163,9 @@ RECEPTORS_SCHEMA = TableSchema(
             primary_key=True,
             autoincrement=True,
             nullable=False,
+            # Ringtail stores one receptor per database, and the insert/update paths all
+            # assume it: they UPDATE ... WHERE receptor_id == 1
+            check="receptor_id = 1",
         ),
         "recname": Column("VARCHAR", "receptor name"),
         "box_dim": Column("VARCHAR", "docking box dimensions"),
@@ -575,6 +579,9 @@ def build_create_table(table_name: str, schema: TableSchema, dialect: str) -> li
 
         if col.default:
             parts.append(f"DEFAULT {col.default}")
+
+        if col.check and not skip_constraints:
+            parts.append(f"CHECK ({col.check})")
 
         if col.foreign_key and not skip_constraints:
             ref_table, ref_col = col.foreign_key.split(".")
