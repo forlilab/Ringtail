@@ -2586,6 +2586,12 @@ class StorageManager(ABC):
         """
         filtering_window = "Results"
 
+        # An explicit "Results" means the whole table, which is what no input_bookmark
+        # already means. Normalizing here also keeps percentiles usable in that case,
+        # since the guard below only applies to a genuine subset.
+        if input_bookmark is not None and input_bookmark.lower() == "results":
+            input_bookmark = None
+
         if input_bookmark is not None:
             if input_bookmark == bookmark_name:
                 logger.error(
@@ -2602,6 +2608,16 @@ class StorageManager(ABC):
                 filtering_window = f"(SELECT * FROM Results WHERE pose_id IN ({self.QueryBuilder.bookmark_query(input_bookmark)}))"
             elif self._is_statustable(input_bookmark):
                 filtering_window = f"(SELECT * FROM Results WHERE pose_id IN (SELECT pose_id FROM {input_bookmark}))"
+            elif self._is_candidates_table(input_bookmark):
+                filtering_window = (
+                    f"(SELECT * FROM Results WHERE pose_id IN {CANDIDATES_SUBQ})"
+                )
+            else:
+                raise OptionError(
+                    f"'input_bookmark' {input_bookmark!r} is not a bookmark, a status "
+                    f"table, or {CANDIDATES_NAME!r} in this database. Pass None or "
+                    "'Results' to filter over all results."
+                )
 
         if filters.is_flat():
             # a lone leaf is the user's whole query, so a missing interaction is an error
