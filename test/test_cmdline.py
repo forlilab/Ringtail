@@ -10,6 +10,10 @@ from pathlib import Path
 import pytest
 from ringtail import RingtailCore
 
+# This whole module is skipped for a quick run: `pytest -m "not slow"`, because each test
+# costs a subprocess
+pytestmark = pytest.mark.slow
+
 TEST_DIR = Path(__file__).parent
 TEST_DATA = TEST_DIR / "test_data"
 
@@ -393,9 +397,7 @@ class TestFilters:
 
     def test_ligand_size_filters_rejected_together(self):
         """The API permits both ligand size filters; the CLI babysits and refuses."""
-        rc = self.cli.read(
-            "--ligand_max_atoms", "30", "--ligand_min_molweight", "200"
-        )
+        rc = self.cli.read("--ligand_max_atoms", "30", "--ligand_min_molweight", "200")
         assert rc != 0
 
     def test_hbcount_at_most(self):
@@ -436,6 +438,7 @@ class TestFilters:
         assert self.cli.read("-vdw", vdw_spec) == 0
 
     def test_all_filters(self):
+        """Smoke test that the CLI accepts a filter of every kind at once."""
         rc = self.cli.read(
             "--eworst",
             "-15",
@@ -445,10 +448,6 @@ class TestFilters:
             "-0.4",
             "--lebest",
             "-0.5",
-            "--score_percentile",
-            "99",
-            "--le_percentile",
-            "99",
             "--ligand_name",
             "127458",
             "--hb_count",

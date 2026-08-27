@@ -587,6 +587,7 @@ class TestStorageMan:
         assert db_version == version("ringtail")
 
 
+@pytest.mark.slow  # clones a database and merges another into it
 class TestMergeDB:
     def test_merge_workflow(self, tmp_path, storage_type):
         db1 = str(tmp_path / "primary.db")
@@ -659,6 +660,7 @@ class TestMergeDB:
         assert rtc1.table_length("Ligands") == 4
 
 
+@pytest.mark.slow  # attaches extra databases and cross-references them
 class TestCrossref:
     """Cross-referencing ligands across databases by bookmark and by status table."""
 
@@ -749,15 +751,8 @@ class TestADGPUHandling:
 
 
 class TestVinaHandling:
-    def test_file_add(self, tmp_db):
-        vina_path = TEST_DATA / "vina"
-        tmp_db.add_results_from_files(
-            docking_results=str(vina_path),
-            receptor_file=str(vina_path / "receptor.pdbqt"),
-            save_receptor=True,
-            docking_mode="vina",
-        )
-        assert tmp_db.table_length("Results") == 6
+    def test_file_add(self, vina_db):
+        assert vina_db.table_length("Results") == 6
 
     def test_string_add(self, tmp_db):
         vina_path = TEST_DATA / "vina"
@@ -769,37 +764,13 @@ class TestVinaHandling:
         )
         assert tmp_db.table_length("Results") == 6
 
-    def test_add_interactions(self, tmp_db):
-        vina_path = TEST_DATA / "vina"
-        tmp_db.add_results_from_files(
-            docking_results=str(vina_path),
-            receptor_file=str(vina_path / "receptor.pdbqt"),
-            save_receptor=True,
-            docking_mode="vina",
-        )
-        assert tmp_db.table_length("Interaction_indices") == 32
-        assert tmp_db.table_length("Interactions") == 77
+    def test_add_interactions(self, vina_db):
+        assert vina_db.table_length("Interaction_indices") == 32
+        assert vina_db.table_length("Interactions") == 77
 
-    def test_add_interactions_from_polymer(self, tmp_path, storage_type):
-        data_path = TEST_DATA / "flexres"
-        rtc_json = RingtailCore(
-            str(tmp_path / "flexres_json.db"), storage_type=storage_type
-        )
-        rtc_json.add_results_from_files(
-            docking_results=str(data_path / "ligand.pdbqt"),
-            docking_mode="vina",
-            receptor_file=str(data_path / "receptor.json"),
-            save_receptor=True,
-        )
-        rtc_pdbqt = RingtailCore(
-            str(tmp_path / "flexres_pdbqt.db"), storage_type=storage_type
-        )
-        rtc_pdbqt.add_results_from_files(
-            docking_results=str(data_path / "ligand.pdbqt"),
-            docking_mode="vina",
-            receptor_file=str(data_path / "receptor.pdbqt"),
-            save_receptor=True,
-        )
+    def test_add_interactions_from_polymer(self, flexres_json_db, flexres_pdbqt_db):
+        """The two receptor formats must produce identical interactions."""
+        rtc_json, rtc_pdbqt = flexres_json_db, flexres_pdbqt_db
         assert (
             rtc_json.table_length("Ligands") == rtc_pdbqt.table_length("Ligands") == 1
         )
@@ -809,15 +780,8 @@ class TestVinaHandling:
             == 38
         )
 
-    def test_polymer_receptor(self, tmp_db):
-        data_path = TEST_DATA / "flexres"
-        tmp_db.add_results_from_files(
-            docking_results=str(data_path / "ligand.pdbqt"),
-            docking_mode="vina",
-            receptor_file=str(data_path / "receptor.json"),
-            save_receptor=True,
-        )
-        receptor_items = tmp_db.get_receptor_object()
+    def test_polymer_receptor(self, flexres_json_db):
+        receptor_items = flexres_json_db.get_receptor_object()
         assert receptor_items.name == "receptor"
         assert not receptor_items.blob_str
         assert receptor_items.polymer_json is not None
@@ -850,15 +814,8 @@ class TestVinaHandling:
             in content
         )
 
-    def test_various_filters(self, tmp_db):
-        vina_path = TEST_DATA / "vina"
-        tmp_db.add_results_from_files(
-            docking_results=str(vina_path),
-            receptor_file=str(vina_path / "receptor.pdbqt"),
-            save_receptor=True,
-            docking_mode="vina",
-        )
-        count, _ = tmp_db.filter(eworst=-6, ligand_substruct=["[N]"])
+    def test_various_filters(self, vina_db):
+        count, _ = vina_db.filter(eworst=-6, ligand_substruct=["[N]"])
         assert count == 1
 
     def test_db_dockingmode_warning(self, tmp_db, tmp_path):
@@ -897,50 +854,26 @@ class TestAD6Handling:
         assert tmp_db.table_length("Results") == 9
         assert tmp_db.table_length("Interactions") == 60
 
-    def test_file_add(self, tmp_db):
-        ad6_path = TEST_DATA / "ad6"
-        tmp_db.add_results_from_files(
-            docking_results=str(ad6_path),
-            receptor_file=str(ad6_path / "helix--scofu01.json"),
-            save_receptor=True,
-            docking_mode="ad6",
-        )
-        assert tmp_db.table_length("Results") == 9
-        assert tmp_db.table_length("Interactions") == 60
+    def test_file_add(self, ad6_db):
+        assert ad6_db.table_length("Results") == 9
+        assert ad6_db.table_length("Interactions") == 60
 
-    def test_file_add_no_interactions(self, tmp_db):
-        ad6_path = TEST_DATA / "ad6"
-        tmp_db.add_results_from_files(
-            docking_results=str(ad6_path),
-            calculate_interactions=False,
-            docking_mode="ad6",
-        )
-        assert tmp_db.table_length("Results") == 9
-        assert tmp_db.table_length("Interactions") == 0
+    def test_file_add_no_interactions(self, ad6_db_no_interactions):
+        assert ad6_db_no_interactions.table_length("Results") == 9
+        assert ad6_db_no_interactions.table_length("Interactions") == 0
 
-    def test_calc_interactions_deferred(self, tmp_db):
-        ad6_path = TEST_DATA / "ad6"
-        tmp_db.add_results_from_files(
-            docking_results=str(ad6_path),
-            calculate_interactions=False,
-            docking_mode="ad6",
-        )
-        assert tmp_db.table_length("Interactions") == 0
+    def test_calc_interactions_deferred(self, ad6_db_no_interactions):
+        db = ad6_db_no_interactions
+        assert db.table_length("Interactions") == 0
 
-        tmp_db.save_receptor(str(ad6_path / "helix--scofu01.json"))
-        tmp_db.add_interactions()
-        assert tmp_db.table_length("Results") == 9
-        assert tmp_db.table_length("Interactions") == 60
+        db.save_receptor(str(TEST_DATA / "ad6" / "helix--scofu01.json"))
+        db.add_interactions()
+        assert db.table_length("Results") == 9
+        assert db.table_length("Interactions") == 60
 
-    def test_add_interactions_recalc_larger_cutoffs(self, tmp_db):
-        # populate with interactions at the default cutoffs (3.7 HB, 4.0 VDW)
-        ad6_path = TEST_DATA / "ad6"
-        tmp_db.add_results_from_files(
-            docking_results=str(ad6_path),
-            receptor_file=str(ad6_path / "helix--scofu01.json"),
-            save_receptor=True,
-            docking_mode="ad6",
-        )
+    def test_add_interactions_recalc_larger_cutoffs(self, ad6_db):
+        # the fixture is populated at the default cutoffs (3.7 HB, 4.0 VDW)
+        tmp_db = ad6_db
         interactions_before = tmp_db.table_length("Interactions")
         hb_before = tmp_db.db_query("SELECT SUM(num_hb) FROM Results")[0][0]
         assert interactions_before > 0
@@ -961,15 +894,8 @@ class TestAD6Handling:
         assert interactions_after > interactions_before
         assert hb_after > hb_before
 
-    def test_filtering(self, tmp_db):
-        ad6_path = TEST_DATA / "ad6"
-        tmp_db.add_results_from_files(
-            docking_results=str(ad6_path),
-            receptor_file=str(ad6_path / "helix--scofu01.json"),
-            save_receptor=True,
-            docking_mode="ad6",
-        )
-        count, _ = tmp_db.filter(
+    def test_filtering(self, ad6_db):
+        count, _ = ad6_db.filter(
             eworst=-13, ligand_substruct=["C=O"], vdw_interactions=[(":VAL::", True)]
         )
         assert count == 1
@@ -985,26 +911,24 @@ class TestLogger:
 
 class TestOptions:
     def test_filter_option_checks(self, tmp_db, tmp_path):
+        # No results are ingested here on purpose: Filter.checks() runs at construction and
+        # touches no data, so building a database would only make this test slow.
 
-        filelist = tmp_path / "filelist.txt"
-        filelist.write_text(
-            "\n".join(
-                str(TEST_DATA / "adgpu/group1" / f)
-                for f in ["127458.dlg.gz", "173101.dlg.gz", "100729.dlg.gz"]
-            )
-        )
-        tmp_db.add_results_from_files(
-            docking_results=str(filelist), docking_mode="adgpu"
-        )
         # criteria live on the leaf; a flat specification has exactly one
         leaf = Filters(score_percentile=20).leaf
         assert leaf.eworst is None
         assert leaf.score_percentile == 20
 
-        # an explicit cutoff wins over the percentile, resolved at construction
-        leaf = Filters(score_percentile=20, eworst=-6).leaf
-        assert leaf.eworst == -6
-        assert leaf.score_percentile is None
+        # An absolute cutoff and a percentile on the same column are two different
+        # requests, so they are refused rather than one silently overriding the other.
+        with pytest.raises(OptionError):
+            Filters(score_percentile=20, eworst=-6)
+        with pytest.raises(OptionError):
+            Filters(le_percentile=20, leworst=-0.4)
+
+        # each alone is fine
+        assert Filters(eworst=-6).leaf.eworst == -6
+        assert Filters(le_percentile=20).leaf.le_percentile == 20
 
     def test_overwrite_db(self, tmp_db, tmp_path):
         list1 = tmp_path / "list1.txt"

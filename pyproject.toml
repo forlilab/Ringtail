@@ -52,3 +52,12 @@ version = { attr = "ringtail._version.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["ringtail*"]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+# --strict-markers turns a mistyped marker into an error 
+# --durations keeps the slowest tests visible
+addopts = "--strict-markers --durations=10"
+markers = [
+    "slow: spawns a subprocess or ingests docking results. Excluded by the quick run.",
+]
