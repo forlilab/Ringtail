@@ -367,11 +367,13 @@ class TestFilters:
     def test_lepercentile(self):
         assert self.cli.read("--le_percentile", "0.1") == 0
 
-    def test_epercentile_eworst(self):
-        assert self.cli.read("--score_percentile", "0.1", "--eworst", "-14") == 0
+    def test_epercentile_eworst_is_refused(self):
+        """An absolute cutoff and a percentile on the same column are two different
+        requests. This used to succeed, warn, and silently filter on eworst alone."""
+        assert self.cli.read("--score_percentile", "0.1", "--eworst", "-14") != 0
 
-    def test_lepercentile_leworst(self):
-        assert self.cli.read("--le_percentile", "0.1", "--leworst", "-0.4") == 0
+    def test_lepercentile_leworst_is_refused(self):
+        assert self.cli.read("--le_percentile", "0.1", "--leworst", "-0.4") != 0
 
     def test_name(self):
         assert self.cli.read("--ligand_name", "127458") == 0

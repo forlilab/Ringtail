@@ -74,16 +74,16 @@ class Filter:
         """Ensures all values are internally consistent and valid. Runs once after all values are
         set initially"""
         if self.eworst is not None and self.score_percentile is not None:
-            logger.warning(
-                "Cannot use 'eworst' cutoff with 'score_percentile'. Overiding 'score_percentile' with 'eworst'."
+            raise OptionError(
+                "Cannot use 'eworst' together with 'score_percentile': they are two "
+                "different cutoffs on docking score. Set one or the other."
             )
-            self.score_percentile = None
 
         if self.leworst is not None and self.le_percentile is not None:
-            logger.warning(
-                "Cannot use 'eworst' cutoff with 'le_percentile'. Overiding 'le_percentile' with 'leworst'."
+            raise OptionError(
+                "Cannot use 'leworst' together with 'le_percentile': they are two "
+                "different cutoffs on ligand efficiency. Set one or the other."
             )
-            self.le_percentile = None
 
         if self.score_percentile is not None and (
             self.score_percentile < 0 or self.score_percentile > 100
@@ -96,7 +96,7 @@ class Filter:
             self.le_percentile < 0 or self.le_percentile > 100
         ):
             raise OptionError(
-                f"Given 'score_percentile' {self.le_percentile} not allowed. Should be within percentile range of 0-100."
+                f"Given 'le_percentile' {self.le_percentile} not allowed. Should be within percentile range of 0-100."
             )
 
         if self.ligand_operator not in ["OR", "AND"] and (
@@ -187,7 +187,9 @@ class Filter:
             elif key in interaction_keys:
                 for interact in value:
                     # interact is ["chain:res:resno:resatom", wanted(bool)]
-                    interaction_string = INTERACTION_TYPE_LETTERS[key] + ":" + interact[0]
+                    interaction_string = (
+                        INTERACTION_TYPE_LETTERS[key] + ":" + interact[0]
+                    )
                     interactions.append(interaction_string.split(":") + [interact[1]])
 
             elif key == "react_any" and value:
