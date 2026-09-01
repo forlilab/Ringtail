@@ -515,49 +515,6 @@ class StorageManagerDuckDB(StorageManager):
 
         self.db_query(sql_insert, receptor_array, commit=True)
 
-    def insert_receptor_blob(self, receptor: bytes, rec_name: str):
-        """Takes object of Receptor class, updates the column in Receptor table
-
-        Args:
-            receptor (bytes): bytes receptor object to be inserted into DB
-            rec_name (string): Name of receptor. Used to insert into correct row of DB
-        """
-        # Check if there is already a row for the receptor
-        # Check if there is already a row for the receptor
-        count = self.table_length("Receptors")
-
-        if count == 0:
-            # Insert receptor statement
-            query = f"""INSERT INTO Receptors (
-                      recname,
-                      receptor_object)
-                      VALUES (?,?);"""
-
-        else:
-            query = """UPDATE Receptors SET recname = ?, receptor_object = ? WHERE receptor_id == 1"""
-        self.db_query(query, (rec_name, receptor), commit=True)
-
-    def insert_receptor_polymer(self, receptor: str, rec_name: str):
-        """Takes object of Receptor class, updates the column in Receptor table
-
-        Args:
-            receptor (str): json string representation of a receptor meeko.Polymer oobject to be inserted into DB
-            rec_name (str): Name of receptor. Used to insert into correct row of DB
-        """
-        # Check if there is already a row for the receptor
-        count = self.table_length("Receptors")
-
-        if count == 0:
-            # Insert receptor statement
-            query = f"""INSERT INTO Receptors (
-                      recname,
-                      polymer)
-                      VALUES (?,?);"""
-
-        else:
-            query = """UPDATE Receptors SET recname = ?, polymer = ? WHERE receptor_id == 1;"""
-        self.db_query(query, (rec_name, receptor), commit=True)
-
     def _insert_db_properties(self, docking_mode: str, number_of_poses: str):
         """Insert db properties into database properties table
 
@@ -1539,28 +1496,49 @@ class StorageManagerDuckDB(StorageManager):
         if attached_db_alias is not None:
             self.detach_db(attached_db_alias)
 
-    def table_length(self, table: str) -> int:
+    def table_length(self, table: str, distinct_column: str = None) -> int:
         """
         Get length of table or bookmark
 
         Args:
             table (str): name of table or bookmark
+            distinct_column (str, optional): count distinct values of this Results
+                column instead of counting rows, e.g. "ligand_id" for how many
+                ligands the poses belong to. Counted through Results, so it works
+                for bookmarks, the status tables and Candidates alike — all of
+                which store nothing but pose_id. Defaults to None.
 
         Returns:
-            int: number of poses in table/bookmark
+            int: number of poses in table/bookmark, or of distinct values
         """
         if self._is_table(table):
-            query = f"""SELECT COUNT(*) FROM {table};"""
+            pose_ids = f"SELECT pose_id FROM {table}"
+            rows = f"SELECT COUNT(*) FROM {table};"
             params = ()
         elif self.is_bookmark(table):
-            query = """SELECT COUNT(*) FROM Filtered_poses WHERE filter_id = (SELECT filter_id FROM Filters WHERE name = ?);"""
+            pose_ids = "SELECT pose_id FROM Filtered_poses WHERE filter_id = (SELECT filter_id FROM Filters WHERE name = ?)"
+            rows = f"SELECT COUNT(*) FROM ({pose_ids});"
             params = (table,)
         elif self._is_candidates_table(table):
-            query = f"SELECT COUNT(*) FROM {CANDIDATES_SUBQ} AS _c;"
+            pose_ids = f"SELECT pose_id FROM {CANDIDATES_SUBQ} AS _c"
+            rows = f"SELECT COUNT(*) FROM {CANDIDATES_SUBQ} AS _c;"
             params = ()
         else:
             logger.error(f"Table -{table}- does not exist in the database.")
             return None
+
+        if distinct_column is None:
+            query = rows
+        else:
+            # Whitelisted against the schema: the name goes into the SQL text
+            if distinct_column not in RESULTS_SCHEMA.columns:
+                raise StorageError(
+                    f"{distinct_column} is not a Results column, cannot count it."
+                )
+            query = (
+                f"SELECT COUNT(DISTINCT R.{distinct_column}) FROM Results R "
+                f"WHERE R.pose_id IN ({pose_ids});"
+            )
 
         return self.db_query(query, params).fetchone()[0]
 

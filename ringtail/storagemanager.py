@@ -7,6 +7,7 @@
 import time
 import json
 import os.path
+import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 import pandas as pd
@@ -33,6 +34,7 @@ from .clustermanager import *
 from .querybuilder import QueryBuilder
 from .schema import (
     NUMERIC_TYPES,
+    NO_FLEXRES_JSON,
     OUTFIELD_BY_TABLE,
     CANDIDATES_SUBQ,
     CANDIDATES_NAME,
@@ -1331,14 +1333,17 @@ class StorageManager(ABC):
             columns = ["recname", "receptor_object"]
         return dict(zip(columns, row)) if row else {}
 
-    def fetch_flexres_info(self, receptor: Union[str, int]):
+    def fetch_flexres_info(self, receptor: Union[str, int]) -> tuple[list, list]:
         """fetch flexible residues names and atomname lists
+
+        Always returns lists. The columns are decoded separately because databases from
+        previous versions mix the spellings of "none" across them.
 
         Args:
             receptor (Union[str, int]): receptor descriptor, either receptor_id or receptor name
 
         Returns:
-            tuple: (flexible_residues, flexres_atomnames)
+            tuple[list, list]: (flexible_residues, flexres_atomnames)
         """
         if isinstance(receptor, int):
             selection = "receptor_id = ?"
@@ -1350,8 +1355,24 @@ class StorageManager(ABC):
         )
         info = self.db_query(*query.build()).fetchone()
         if info is None:
-            info = [], []
-        return info
+            return [], []
+        residues = self._decode_flexres_column(info[0])
+        atomnames = self._decode_flexres_column(info[1])
+        if bool(residues) != bool(atomnames):
+            logger.warning(
+                f"Receptor {receptor} stores flexible residues without their atom "
+                "names, or the reverse. No flexible residue mols can be built from it."
+            )
+        return residues, atomnames
+
+    @staticmethod
+    def _decode_flexres_column(value) -> list:
+        """One stored flexres column as a list."""
+        if not value:  # SQL NULL (row written by insert_receptor_blob/_polymer), ""
+            return []
+        if isinstance(value, (str, bytes, bytearray)):
+            value = json.loads(value)  # "null" -> None, "[]" -> []
+        return list(value) if value else []
 
     @staticmethod
     def _serialize_pose_coordinates(coords):
@@ -1784,26 +1805,33 @@ class StorageManager(ABC):
         return [row[0] for row in self.db_query(sql).fetchall()]
 
     def prepare_column_export_query(
-        self, columns: dict[str, str], bookmark: str
+        self, columns: Union[dict[str, str], list[str]], bookmark: str
     ) -> str:
         """
         Writes a query based on what columns are requested. Resolves each column
         to its source table automatically.
 
         Args:
-            columns (list): list of column name strings to export
+            columns (dict | list): columns to export. A mapping of
+                ``{column: header}`` renames the column in the output; a header of
+                None, or a plain list of column names, keeps the column's own name.
             bookmark (str): bookmark or status table to filter results by
 
         Returns:
             str: SQL query string
         """
+        # Accept either form, so callers that do not rename anything can pass a list
+        headers = (
+            dict(columns) if isinstance(columns, dict) else {col: None for col in columns}
+        )
+
         # Build a flat map of column_name -> table from all queryable tables
         column_to_table = {
             col: table for table, cols in OUTFIELD_BY_TABLE.items() for col in cols
         }
 
         columns_by_table = {}
-        for col in columns:
+        for col in headers:
             table = column_to_table.get(col.lower())
             if table is None:
                 raise OptionError(f"Column '{col}' not found in any queryable table.")
@@ -1812,8 +1840,17 @@ class StorageManager(ABC):
         included_tables = [t.lower() for t in columns_by_table]
 
         query = self.QueryBuilder()
-        for col in columns:
-            query.SELECT(col)
+        for col, header in headers.items():
+            if header is None:
+                query.SELECT(col)
+                continue
+            # The header is interpolated into the SQL, so hold it to an identifier
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", str(header)):
+                raise OptionError(
+                    f"'{header}' is not usable as a column name. Use letters, "
+                    "digits and underscores, and do not start with a digit."
+                )
+            query.SELECT(f"{col} AS {header}")
         query.FROM("Results")
 
         # join to tables that are represented in the columns
@@ -1963,7 +2000,6 @@ class StorageManager(ABC):
             )
         return compatible, db_version
 
-    @abstractmethod
     def insert_receptor_blob(self, receptor: bytes, rec_name: str):
         """Takes object of Receptor class, updates the column in Receptor table
 
@@ -1971,9 +2007,8 @@ class StorageManager(ABC):
             receptor (bytes): bytes receptor object to be inserted into DB
             rec_name (string): Name of receptor. Used to insert into correct row of DB
         """
-        ...
+        self._upsert_receptor_column("receptor_object", receptor, rec_name)
 
-    @abstractmethod
     def insert_receptor_polymer(self, receptor: str, rec_name: str):
         """Takes object of Receptor class, updates the column in Receptor table
 
@@ -1981,7 +2016,31 @@ class StorageManager(ABC):
             receptor (str): json string representation of a receptor meeko.Polymer oobject to be inserted into DB
             rec_name (str): Name of receptor. Used to insert into correct row of DB
         """
-        ...
+        self._upsert_receptor_column("polymer", receptor, rec_name)
+
+    def _upsert_receptor_column(self, column: str, value, rec_name: str) -> None:
+        """Write one column of the single receptor row, creating the row if absent.
+
+        A new row gets empty flexres arrays explicitly rather than leaving them to the
+        column default, so databases created before that default also stay decodable.
+
+        Args:
+            column (str): receptor column to write, e.g. "polymer"
+            value: value for that column
+            rec_name (str): receptor name
+        """
+        if self.table_length("Receptors") == 0:
+            query = (
+                f"INSERT INTO Receptors (recname, {column}, "
+                "flexible_residues, flexres_atomnames) VALUES (?,?,?,?);"
+            )
+            params = (rec_name, value, NO_FLEXRES_JSON, NO_FLEXRES_JSON)
+        else:
+            query = (
+                f"UPDATE Receptors SET recname = ?, {column} = ? WHERE receptor_id = 1;"
+            )
+            params = (rec_name, value)
+        self.db_query(query, params, commit=True)
 
     @abstractmethod
     def clone(self, backup_name: str = None) -> str:
@@ -2052,15 +2111,18 @@ class StorageManager(ABC):
         ...
 
     @abstractmethod
-    def table_length(self, table: str) -> int:
+    def table_length(self, table: str, distinct_column: str = None) -> int:
         """
         Get length of table or bookmark
 
         Args:
             table (str): name of table or bookmark
+            distinct_column (str, optional): count distinct values of this Results
+                column instead of counting rows, e.g. "ligand_id" for how many
+                ligands the poses belong to. Defaults to None.
 
         Returns:
-            int: number of poses in table/bookmark
+            int: number of poses in table/bookmark, or of distinct values
         """
         ...
 

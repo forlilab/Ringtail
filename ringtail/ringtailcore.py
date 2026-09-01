@@ -1256,7 +1256,7 @@ class RingtailCore:
     @_wrap_exceptions
     def export_columns_as_csv(
         self,
-        columns: list[str],
+        columns: Union[dict[str, str], list[str]],
         bookmark_name: str,
         csv_name: str = "columns_output.csv",
     ):
@@ -1264,7 +1264,10 @@ class RingtailCore:
         Exports specified columns from Results or bookmark (or status table) as csv
 
         Args:
-            columns (list[str]): list of string columns to be exported
+            columns (dict | list): columns to be exported. A mapping of
+                ``{column: header}`` renames the column in the csv; a header of None,
+                or a plain list of column names, keeps the column's own name. Columns
+                are given as bare names — the source table is resolved automatically.
             bookmark_name (str): data limiting table/bookmark to export for
             csv_name (str, optional): name of csv file. Defaults to "columns_output.csv".
         """
@@ -1633,19 +1636,22 @@ class RingtailCore:
             return sm.get_query_data_as_dicts(query)
 
     @_wrap_exceptions
-    def table_length(self, table: str) -> int:
+    def table_length(self, table: str, distinct_column: str = None) -> int:
         """
         Get length of table or bookmark
 
         Args:
             table (str): name of table or bookmark
+            distinct_column (str, optional): count distinct values of this Results
+                column instead of counting rows, e.g. "ligand_id" for how many
+                ligands the poses belong to. Defaults to None.
 
         Returns:
-            int: number of poses in table/bookmark
+            int: number of poses in table/bookmark, or of distinct values
         """
 
         with self.storageman:
-            return self.storageman.table_length(table)
+            return self.storageman.table_length(table, distinct_column)
 
     @_wrap_exceptions
     def get_starting_rowid(self, table: str):
@@ -2031,12 +2037,8 @@ class RingtailCore:
         residues = []
 
         with self.storageman as sm:
+            # decoded lists, empty when the receptor has no flexible residues
             flexible_residues, flexres_atomnames = sm.fetch_flexres_info(1)
-        if flexible_residues is None:
-            flexible_residues, flexres_atomnames = [], []
-        elif flexible_residues != []:  # converts string to list
-            flexible_residues = json.loads(flexible_residues)
-            flexres_atomnames = json.loads(flexres_atomnames)
         # make flexible residue molecules
         for res, res_ats in zip(flexible_residues, flexres_atomnames):
             saved_coords.append([])

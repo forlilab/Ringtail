@@ -1060,6 +1060,11 @@ def db_to_ad6(db_column: str) -> str:
     return db_alias_to_ad6.get(db_column, db_column)
 
 
+def _flexres_json(value) -> str:
+    """One flexres column as a JSON array string; a missing value is an empty array."""
+    return json.dumps(value if value else [])
+
+
 def generate_receptor_row(receptor_data: dict) -> list:
     """Writes row to be inserted into receptor table
 
@@ -1077,8 +1082,8 @@ def generate_receptor_row(receptor_data: dict) -> list:
         grid_spacing = float(grid_spacing)
     else:
         grid_spacing = None
-    flexible_residues = json.dumps(receptor_data.get("flexible_residues", None))
-    flexres_atomnames = json.dumps(receptor_data.get("flexres_atomnames", None))
+    flexible_residues = _flexres_json(receptor_data.get("flexible_residues"))
+    flexres_atomnames = _flexres_json(receptor_data.get("flexres_atomnames"))
 
     return [
         rec_name,

@@ -154,6 +154,10 @@ RESULTS_SCHEMA = TableSchema(
     ],
 )
 
+#: Stored form of "no flexible residues". Both flexres columns are JSON arrays, so
+#: writers use this rather than NULL or JSON null.
+NO_FLEXRES_JSON = "[]"
+
 RECEPTORS_SCHEMA = TableSchema(
     name="Receptors",
     columns={
@@ -171,8 +175,16 @@ RECEPTORS_SCHEMA = TableSchema(
         "box_dim": Column("VARCHAR", "docking box dimensions"),
         "box_center": Column("VARCHAR", "docking box center"),
         "grid_spacing": Column("FLOAT", "grid spacing"),
-        "flexible_residues": Column("VARCHAR", "flexible residue names"),
-        "flexres_atomnames": Column("VARCHAR", "flexible residue atom names"),
+        # Both hold a JSON array, defaulting to an empty one so the insert paths that
+        # write only recname and a receptor blob still leave something decodable here.
+        # Deliberately still nullable: subset export copies Receptors row-for-row from
+        # the source, and databases from before this default hold NULL.
+        "flexible_residues": Column(
+            "VARCHAR", "flexible residue names", default=f"'{NO_FLEXRES_JSON}'"
+        ),
+        "flexres_atomnames": Column(
+            "VARCHAR", "flexible residue atom names", default=f"'{NO_FLEXRES_JSON}'"
+        ),
         "receptor_object": Column("BLOB", "receptor binary object"),
         "polymer": Column("JSON_OR_VARCHAR", "polymer data"),
     },
