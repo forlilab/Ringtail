@@ -487,6 +487,47 @@ class TestOutput:
         rtc_bm = RingtailCore(db_file=bookmark_db_name)
         assert rtc_bm.table_length("Results") == 8
 
+    def test_export_bookmark_db_carries_statuses_and_comments(
+        self, populated_db, tmp_path
+    ):
+        """Statuses and comments are hand curation from visual inspection, so losing
+        them on export silently throws away the most expensive data in the database.
+        Pose_comments is the sneaky half: it is created by ensure_gui_tables rather than
+        _create_tables, so the subset had no comments table at all to copy into."""
+        populated_db.filter(eworst=-7, output_bookmark="curated")
+        with populated_db.storageman as sm:
+            sm.ensure_gui_tables()
+            kept = [
+                row[0]
+                for row in sm.db_query(
+                    "SELECT pose_id FROM Filtered_poses FP "
+                    "JOIN Filters F ON F.filter_id = FP.filter_id "
+                    "WHERE F.name = 'curated' ORDER BY pose_id"
+                ).fetchall()
+            ]
+        assert len(kept) >= 3, "need a few poses to curate"
+        accepted, maybe, rejected = kept[0], kept[1], kept[2]
+
+        populated_db.update_pose_status(accepted, 1)
+        populated_db.update_pose_status(maybe, 2)
+        populated_db.update_pose_status(rejected, 3)
+        populated_db.set_pose_comment(accepted, "clear H-bond, keep")
+
+        subset_path = populated_db.export_bookmark_db(
+            "curated", str(tmp_path / "curated.db")
+        )
+        subset = RingtailCore(subset_path)
+
+        with subset.storageman as sm:
+            for table, expected in (
+                ("Accepted", accepted),
+                ("Maybe", maybe),
+                ("Rejected", rejected),
+            ):
+                rows = sm.db_query(f"SELECT pose_id FROM {table}").fetchall()
+                assert [r[0] for r in rows] == [expected], f"{table} did not transfer"
+        assert subset.get_pose_comment(accepted) == "clear H-bond, keep"
+
     def test_compress_decompress_db(self, populated_db, tmp_path):
         from ringtail.util import compress_file, decompress_file, detect_db_type
         import shutil as _sh

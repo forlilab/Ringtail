@@ -840,8 +840,14 @@ class StorageManager(ABC):
         # create the database
         new_db = self.__class__(database_name)
         # make tables
+        has_comments = self._is_table(POSE_COMMENTS_SCHEMA.name)
         with new_db:
             new_db._create_tables(commit=False)
+            if has_comments:
+                # Pose_comments is created lazily by ensure_gui_tables rather than by
+                # _create_tables, so without this the subset has nowhere to put the
+                # comments and they are silently dropped.
+                new_db.ensure_gui_tables()
         logger.debug(f"Created a new database with empty tables: {database_name}.")
         # attach the incoming database
         alias = "subset"
@@ -887,6 +893,25 @@ class StorageManager(ABC):
         WHERE main.Interactions.pose_id IN ({self.QueryBuilder.bookmark_query(bookmark_name, "main")});"""
         self.db_query(interactions)
         logger.debug("Interactions have been copied into the new subset database.")
+        # pose statuses and comments — hand curation from visual inspection, and the
+        # most expensive data in the database to recreate, so it travels with the subset
+        for status_table in ("Accepted", "Maybe", "Rejected"):
+            if not self._is_table(status_table):
+                continue  # older database predating the status tables
+            self.db_query(
+                f"""
+        INSERT INTO {alias}.{status_table}
+        SELECT * FROM main.{status_table}
+        WHERE main.{status_table}.pose_id IN ({self.QueryBuilder.bookmark_query(bookmark_name, "main")});"""
+            )
+        logger.debug("Pose statuses have been copied into the new subset database.")
+        if has_comments:
+            comments = f"""
+        INSERT INTO {alias}.{POSE_COMMENTS_SCHEMA.name}
+        SELECT * FROM main.{POSE_COMMENTS_SCHEMA.name}
+        WHERE main.{POSE_COMMENTS_SCHEMA.name}.pose_id IN ({self.QueryBuilder.bookmark_query(bookmark_name, "main")});"""
+            self.db_query(comments)
+            logger.debug("Pose comments have been copied into the new subset database.")
         # receptor
         dbprop = f"""
         INSERT INTO {alias}.db_properties
