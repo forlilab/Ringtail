@@ -294,6 +294,28 @@ class StorageManager(ABC):
 
         return bookmark_names
 
+    def get_bookmark_dependents(self, bookmark_name: str) -> list[str]:
+        """
+        Get bookmarks that were produced by filtering over the given bookmark.
+
+        The parent name is recorded in Filters.filter_window when filtering is run
+        with an input_bookmark. It is provenance only: there is no foreign key, and
+        a dependent's poses live in its own Filtered_poses rows. Deleting the parent
+        therefore leaves dependents fully queryable, it only leaves their recorded
+        lineage pointing at a bookmark that no longer exists.
+
+        Args:
+            bookmark_name (str): bookmark to find the dependents of
+
+        Returns:
+            list: of dependent bookmark names
+        """
+        cur = self.conn.execute(
+            "SELECT name FROM Filters WHERE filter_window = ?",
+            (bookmark_name.lower(),),
+        )
+        return [row[0].lower() for row in cur.fetchall()]
+
     def get_passing_poses_count(
         self, bookmark_name: str, grouped_by_ligand: bool = False
     ) -> int:

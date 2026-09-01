@@ -573,6 +573,27 @@ class TestStorageMan:
             ).to_dict()
         )
 
+    def test_bookmark_dependents(self, populated_db: RingtailCore):
+        populated_db.filter(eworst=-6, output_bookmark="parent_bm")
+        populated_db.filter(
+            eworst=-7, input_bookmark="parent_bm", output_bookmark="child_bm"
+        )
+        populated_db.filter(eworst=-7, output_bookmark="unrelated_bm")
+
+        assert populated_db.get_bookmark_dependents("parent_bm") == ["child_bm"]
+        assert populated_db.get_bookmark_dependents("child_bm") == []
+        assert populated_db.get_bookmark_dependents("unrelated_bm") == []
+
+        # a dependent's poses are its own, so deleting the parent leaves its data
+        # intact and only orphans the recorded lineage
+        child_poses = populated_db.table_length("child_bm")
+        assert child_poses > 0
+        populated_db.delete_bookmark("parent_bm")
+
+        assert "parent_bm" not in populated_db.get_bookmark_names()
+        assert "child_bm" in populated_db.get_bookmark_names()
+        assert populated_db.table_length("child_bm") == child_poses
+
     def test_version_info(self, tmp_db):
         from importlib.metadata import version
 

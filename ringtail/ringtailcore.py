@@ -1799,6 +1799,26 @@ class RingtailCore:
             return self.storageman.get_all_bookmark_names(db_name, db_path)
 
     @_wrap_exceptions
+    def get_bookmark_dependents(self, bookmark_name: str) -> list:
+        """
+        Method to retrieve the bookmarks that were made by filtering over the
+        given bookmark (i.e., that used it as their input_bookmark).
+
+        This is provenance only. A dependent's poses are stored in its own right,
+        so deleting the given bookmark does not invalidate their data, it only
+        leaves their recorded lineage pointing at a bookmark that no longer exists.
+
+        Args:
+            bookmark_name (str): name of bookmark to find the dependents of
+
+        Returns:
+            list: of bookmark names derived from the given bookmark
+        """
+        bookmark_name = bookmark_name.lower() if bookmark_name else None
+        with self.storageman as sm:
+            return sm.get_bookmark_dependents(bookmark_name)
+
+    @_wrap_exceptions
     def get_bookmark_interactions(self, bookmark_name: str):
         """
         Get all interactions represented by the poses in a bookmark
