@@ -480,7 +480,7 @@ class StorageManagerSQLite(StorageManager):
         """
         query = f"""
         INSERT INTO {tracking_table} (
-        pose_id) VALUES (?);
+        pose_id, hb_cutoff, vdw_cutoff) VALUES (?, ?, ?);
         """
         self.db_update(query, pose_ids, commit=False)
 
@@ -555,6 +555,8 @@ class StorageManagerSQLite(StorageManager):
 
         table_sql = f"""CREATE TABLE IF NOT EXISTS {table_name} (
         pose_id INTEGER,
+        hb_cutoff DOUBLE,
+        vdw_cutoff DOUBLE,
         FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
         );"""
         self.db_query(table_sql, commit=True)

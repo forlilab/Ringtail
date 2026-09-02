@@ -929,7 +929,15 @@ def process_docked_mol(
     if calculate_interactions and interaction_finder:
         poseids_coordinates = [
             (
-                {"ligname": ligname, "run_number": run_number, "pose_rank": 1},
+                {
+                    "ligname": ligname,
+                    "run_number": run_number,
+                    # The real rank, read out of the molecule's properties above. A
+                    # hardcoded 1 here resolved every pose of a ligand to that ligand's
+                    # first pose, so rank 1 collected everyone's interactions and the
+                    # rest were stored with none.
+                    "pose_rank": results_dict["pose_rank"],
+                },
                 single_pose_coordinate,
             )
         ]

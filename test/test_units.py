@@ -586,6 +586,108 @@ class TestOutput:
         assert len(ligands) == 8
 
 
+class TestInteractionAtomTyping:
+    """Ligand atom types must stay index-aligned with the stored pose coordinates.
+
+    find_pose_interactions indexes coordinates by position in the type list. A compacted
+    list (meeko's ignored non-polar hydrogens dropped) shifts every atom after the first
+    ignored one onto another atom's coordinates. Heavy atoms happen to survive because
+    they lead the stored molecule, but polar hydrogens do not — and they are the ligand's
+    only H-bond donors, so ligand-donated H-bonds were assigned at random positions.
+    """
+
+    @staticmethod
+    def _molsetup_types(mol):
+        """The type list find_interactions builds, for a molecule with explicit Hs."""
+        from meeko import MoleculePreparation
+        from rdkit import Chem, Geometry
+
+        num_atoms = mol.GetNumAtoms()
+        conf = Chem.Conformer(num_atoms)
+        for i in range(num_atoms):
+            conf.SetAtomPosition(i, Geometry.Point3D(0, 0, 0))
+        mol.AddConformer(conf, assignId=True)
+        prepared = Chem.AddHs(mol, addCoords=True)
+        molsetup = MoleculePreparation(rigid_macrocycles=True)(prepared)[0]
+        types = [None] * num_atoms
+        for i, atom in enumerate(molsetup.atoms):
+            if not atom.is_ignore and i < num_atoms:
+                types[i] = atom.atom_type
+        return types, num_atoms
+
+    @pytest.fixture
+    def protonated_amine(self):
+        """A charged N-H donor whose polar H sits well after the heavy-atom block.
+
+        AddHs reproduces how meeko's RDKitMolCreate stores poses: heavy atoms first,
+        hydrogens appended. Here the donors land at indices 9 and 17 with heavy atoms at
+        0-5, so a compacted type list would put them on nonpolar hydrogens at 6 and 7.
+        """
+        from rdkit import Chem
+
+        mol = Chem.MolFromSmiles("C[NH+](C)CCO")
+        assert mol is not None
+        return Chem.AddHs(mol)
+
+    def test_type_list_is_index_aligned_with_coordinates(self, protonated_amine):
+        types, num_atoms = self._molsetup_types(protonated_amine)
+        assert len(types) == num_atoms, (
+            "type list must be as long as the molecule, or coordinates lookups shift"
+        )
+
+    def test_polar_hydrogen_keeps_its_own_atom_index(self, protonated_amine):
+        from rdkit import Chem
+
+        mol = Chem.Mol(protonated_amine)
+        types, _ = self._molsetup_types(protonated_amine)
+
+        donors = [i for i, t in enumerate(types) if t in ("HD", "HS")]
+        assert donors, "the protonated amine should type a polar hydrogen as HD/HS"
+        for i in donors:
+            atom = mol.GetAtomWithIdx(i)
+            assert atom.GetSymbol() == "H", (
+                f"index {i} is typed as a polar hydrogen but is {atom.GetSymbol()}"
+            )
+            # a donor H hangs off N or O; landing on carbon means the indices shifted
+            neighbours = [n.GetSymbol() for n in atom.GetNeighbors()]
+            assert set(neighbours) & {"N", "O"}, (
+                f"polar hydrogen at {i} is bonded to {neighbours}, not N/O"
+            )
+
+    def test_ignored_hydrogens_are_holes_not_gaps(self, protonated_amine):
+        """Non-polar hydrogens are excluded by being None in place, not by shifting."""
+        from rdkit import Chem
+
+        mol = Chem.Mol(protonated_amine)
+        types, _ = self._molsetup_types(protonated_amine)
+
+        assert any(t is None for t in types), "non-polar hydrogens should be excluded"
+        for i, t in enumerate(types):
+            if t is None:
+                assert mol.GetAtomWithIdx(i).GetSymbol() == "H", (
+                    f"index {i} was excluded but is a heavy atom"
+                )
+
+    def test_heavy_atoms_still_resolve(self, protonated_amine):
+        """The heavy atoms were already correct; the sparse list must not move them."""
+        from rdkit import Chem
+
+        mol = Chem.Mol(protonated_amine)
+        types, _ = self._molsetup_types(protonated_amine)
+
+        for i, t in enumerate(types):
+            if t is None or mol.GetAtomWithIdx(i).GetSymbol() == "H":
+                continue
+            assert mol.GetAtomWithIdx(i).GetSymbol() != "H"
+        # the hydroxyl oxygen is an acceptor and must be typed as one
+        acceptors = [
+            i
+            for i, t in enumerate(types)
+            if t and t.endswith("A") and mol.GetAtomWithIdx(i).GetSymbol() == "O"
+        ]
+        assert acceptors, "the hydroxyl oxygen should type as an acceptor (OA)"
+
+
 class TestStorageMan:
     def test_bookmark_info(self, tmp_db: RingtailCore):
         tmp_db.add_results_from_files(
@@ -914,11 +1016,11 @@ class TestAD6Handling:
         )
         tmp_db.add_mol(suppl)
         assert tmp_db.table_length("Results") == 9
-        assert tmp_db.table_length("Interactions") == 60
+        assert tmp_db.table_length("Interactions") == 65
 
     def test_file_add(self, ad6_db):
         assert ad6_db.table_length("Results") == 9
-        assert ad6_db.table_length("Interactions") == 60
+        assert ad6_db.table_length("Interactions") == 65
 
     def test_file_add_no_interactions(self, ad6_db_no_interactions):
         assert ad6_db_no_interactions.table_length("Results") == 9
@@ -931,7 +1033,154 @@ class TestAD6Handling:
         db.save_receptor(str(TEST_DATA / "ad6" / "helix--scofu01.json"))
         db.add_interactions()
         assert db.table_length("Results") == 9
-        assert db.table_length("Interactions") == 60
+        assert db.table_length("Interactions") == 65
+
+    def test_recalc_in_batches_matches_one_pass(self, ad6_db, ad6_db_no_interactions):
+        """chunk_size smaller than the pose count must give the same answer.
+
+        The default chunk_size (500) exceeds any test dataset, so the batching path
+        used to go unexercised — and it was broken: the pending-poses query was a live
+        cursor over the tracking table that the batch commit wrote to, which on duckdb
+        replaced the rows still being read.
+        """
+        one_pass = ad6_db
+        one_pass.add_interactions(consent=True, chunk_size=500)  # no mid-run flush
+        batched = ad6_db_no_interactions
+        batched.save_receptor(str(TEST_DATA / "ad6" / "helix--scofu01.json"))
+        batched.add_interactions(consent=True, chunk_size=2)  # 9 poses -> 5 batches
+
+        assert batched.table_length("Interactions") == one_pass.table_length(
+            "Interactions"
+        )
+        query = """SELECT I.pose_id, II.interaction_type, II.rec_chain, II.rec_resid,
+                          II.rec_atom
+                   FROM Interactions I
+                   JOIN Interaction_indices II ON II.interaction_id=I.interaction_id"""
+        assert set(batched.db_query(query)) == set(one_pass.db_query(query))
+
+    def test_recalc_resumes_after_interruption(self, ad6_db_no_interactions):
+        """An interrupted run picks up from the tracking table, without duplicating."""
+        import ringtail.ringtailcore as rtc_module
+
+        db = ad6_db_no_interactions
+        db.save_receptor(str(TEST_DATA / "ad6" / "helix--scofu01.json"))
+
+        real = rtc_module.find_interactions
+        calls = {"n": 0}
+
+        def fail_partway(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] > 4:
+                raise KeyboardInterrupt("simulated interruption")
+            return real(*args, **kwargs)
+
+        rtc_module.find_interactions = fail_partway
+        try:
+            with pytest.raises(BaseException):
+                db.add_interactions(consent=True, chunk_size=2)
+        finally:
+            rtc_module.find_interactions = real
+
+        partial = db.table_length("Interactions")
+        assert partial > 0, "some work should have been committed before the failure"
+
+        db.add_interactions(consent=True, chunk_size=2)
+        assert db.table_length("Results") == 9
+        # every pose accounted for, and none of the committed work redone
+        assert (
+            db.db_query("SELECT COUNT(DISTINCT pose_id) FROM Interactions")[0][0] == 9
+        )
+        dupes = db.db_query(
+            """SELECT COUNT(*) FROM (SELECT pose_id, interaction_id, COUNT(*) c
+               FROM Interactions GROUP BY pose_id, interaction_id HAVING c > 1)"""
+        )[0][0]
+        assert dupes == 0
+
+    def test_recalc_refuses_to_resume_with_different_cutoffs(
+        self, ad6_db_no_interactions
+    ):
+        """Resuming at new cutoffs would mix two calculations with no record of which."""
+        import ringtail.ringtailcore as rtc_module
+
+        db = ad6_db_no_interactions
+        db.save_receptor(str(TEST_DATA / "ad6" / "helix--scofu01.json"))
+
+        real = rtc_module.find_interactions
+        calls = {"n": 0}
+
+        def fail_partway(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] > 4:
+                raise KeyboardInterrupt("simulated interruption")
+            return real(*args, **kwargs)
+
+        rtc_module.find_interactions = fail_partway
+        try:
+            with pytest.raises(BaseException):
+                db.add_interactions(consent=True, chunk_size=2)
+        finally:
+            rtc_module.find_interactions = real
+
+        with pytest.raises(OptionError, match="cutoffs"):
+            db.add_interactions(hb_cutoff=6.0, vdw_cutoff=7.0, consent=True)
+
+        # the original cutoffs still resume, so the guard is not a dead end
+        db.add_interactions(consent=True, chunk_size=2)
+        assert (
+            db.db_query("SELECT COUNT(DISTINCT pose_id) FROM Interactions")[0][0] == 9
+        )
+
+    def test_interaction_counts_match_stored_rows(self, ad6_db):
+        """Results.num_hb / num_interactions must equal the rows actually stored.
+
+        Several ligand atoms can sit inside one receptor atom's cutoff sphere. The
+        ligand atom is not part of what gets stored, so those collapse to one row while
+        the counts used to report each pair, inflating num_* above the interactions the
+        database holds — filtering on num_hb then disagreed with the interaction table.
+
+        Asserted on a freshly ingested database, so it covers the write path too.
+        """
+        rows = ad6_db.db_query(
+            """SELECT R.pose_id, R.num_interactions, R.num_hb,
+                      (SELECT COUNT(*) FROM Interactions I
+                       WHERE I.pose_id = R.pose_id) AS stored,
+                      (SELECT COUNT(*) FROM Interactions I
+                       JOIN Interaction_indices II
+                         ON II.interaction_id = I.interaction_id
+                       WHERE I.pose_id = R.pose_id
+                         AND II.interaction_type = 'H') AS stored_hb
+               FROM Results R"""
+        )
+        assert rows
+        for pose_id, num_int, num_hb, stored, stored_hb in rows:
+            assert num_int == stored, f"pose {pose_id}: num_interactions {num_int} != {stored}"
+            assert num_hb == stored_hb, f"pose {pose_id}: num_hb {num_hb} != {stored_hb}"
+
+    def test_interactions_land_on_their_own_pose(self, ad6_db):
+        """Each pose keeps its own interactions.
+
+        Interactions resolve to a pose through (ligname, run_number, pose_rank). The sdf
+        path reported a fixed pose_rank of 1, so every pose of a ligand resolved to that
+        ligand's first pose: rank 1 accumulated everyone's interactions, as duplicates,
+        and the other poses were stored with none.
+        """
+        rows = ad6_db.db_query(
+            """SELECT R.pose_id, R.pose_rank,
+                      (SELECT COUNT(*) FROM Interactions I
+                       WHERE I.pose_id = R.pose_id) AS n
+               FROM Results R"""
+        )
+        assert rows
+        assert all(n > 0 for _, _, n in rows), (
+            f"poses stored with no interactions: {[p for p, _, n in rows if n == 0]}"
+        )
+        assert len({rank for _, rank, _ in rows}) > 1, "need >1 rank to be meaningful"
+
+        dupes = ad6_db.db_query(
+            """SELECT COUNT(*) FROM (SELECT pose_id, interaction_id, COUNT(*) c
+               FROM Interactions GROUP BY pose_id, interaction_id HAVING c > 1)"""
+        )[0][0]
+        assert dupes == 0
 
     def test_add_interactions_recalc_larger_cutoffs(self, ad6_db):
         # the fixture is populated at the default cutoffs (3.7 HB, 4.0 VDW)
@@ -1015,3 +1264,6 @@ class TestOptions:
         count_new = tmp_db.table_length("Ligands")
         assert count_old == 3
         assert count_new == 2
+
+
+

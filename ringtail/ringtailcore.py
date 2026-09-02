@@ -19,6 +19,12 @@ from .util import *
 from .logutils import get_logger
 
 logger = get_logger(__name__)
+
+#: Decimals the interaction cutoffs are rounded to before being stamped into the
+#: interaction-recalculation tracking table, and before being compared against on
+#: resume. Rounded rather than compared with a tolerance so the number stored and the
+#: number compared are the same one.
+_CUTOFF_DECIMALS = 1
 from .filters import Filters
 from .ringtailoptions import (
     RingtailDefaults,
@@ -573,57 +579,74 @@ class RingtailCore:
         )
 
         # accounting
-        db_commit_counter = 0
-        interactions = []
-        processed_poseids = []
-        results_counts = []
+        processed = 0
 
         with self.storageman as sm:
-            # create a "temporary" table that keeps track of what pose_ids have been processed
-
+            # a "temporary" table that keeps track of what pose_ids have been processed
             sm.create_transaction_tracking_table(track_table_name)
 
-            # process in batches
-            for pose in sm.fetch_poses_pending_interactions(track_table_name):
-                pose_id, coordinates, rdbin = pose
-                mol = Chem.Mol(rdbin)
-                interaction_dicts, num_hb, num_int = find_interactions(
-                    [
-                        (
-                            {"pose_id": pose_id},
-                            sm._deserialize_pose_coordinates(coordinates),
-                        )
-                    ],
-                    mol,
-                    interaction_finder=interaction_finder,
+            # Resuming with different cutoffs would leave one database holding
+            # interactions computed two different ways, with nothing recording which
+            # pose got which.
+            tracked = sm.fetch_tracked_cutoffs(track_table_name)
+            if tracked is not None and tracked != (
+                round(hb_cutoff, _CUTOFF_DECIMALS),
+                round(vdw_cutoff, _CUTOFF_DECIMALS),
+            ):
+                raise OptionError(
+                    f"This database has a partly finished interaction calculation that "
+                    f"used cutoffs hb={tracked[0]}, vdw={tracked[1]}, but this call asks "
+                    f"for hb={hb_cutoff}, vdw={vdw_cutoff}. Finish or discard the "
+                    f"previous run before changing cutoffs; dropping the "
+                    f"'{track_table_name}' table discards it."
                 )
-                interactions.extend(generate_interaction_tuples(interaction_dicts))
-                results_counts.append(
-                    {"pose_id": pose_id, "num_hb": num_hb[0], "num_int": num_int[0]}
-                )
-                processed_poseids.append((pose_id,))
-                db_commit_counter += 1
 
-                if db_commit_counter > chunk_size - 1:
-                    sm.post_insert_interactions(
-                        interactions,
-                        results_counts,
-                        processed_poseids,
-                        track_table_name,
+            # One batch per round trip, asking the database each time what is still
+            # pending. Nothing is read across a write, and an interrupted run resumes
+            # from whatever the tracking table says was finished.
+            while True:
+                batch = sm.fetch_poses_pending_interactions(track_table_name, chunk_size)
+                if not batch:
+                    break
+
+                interactions = []
+                processed_poseids = []
+                results_counts = []
+                for pose_id, coordinates, rdbin in batch:
+                    mol = Chem.Mol(rdbin)
+                    interaction_dicts, num_hb, num_int = find_interactions(
+                        [
+                            (
+                                {"pose_id": pose_id},
+                                sm._deserialize_pose_coordinates(coordinates),
+                            )
+                        ],
+                        mol,
+                        interaction_finder=interaction_finder,
                     )
-                    interactions = []
-                    processed_poseids = []
-                    results_counts = []
-                    db_commit_counter = 0
+                    interactions.extend(generate_interaction_tuples(interaction_dicts))
+                    results_counts.append(
+                        {"pose_id": pose_id, "num_hb": num_hb[0], "num_int": num_int[0]}
+                    )
+                    processed_poseids.append(
+                        (
+                            pose_id,
+                            round(hb_cutoff, _CUTOFF_DECIMALS),
+                            round(vdw_cutoff, _CUTOFF_DECIMALS),
+                        )
+                    )
 
-            #  insert remaining data after for loop
-            if interactions:
+                # The pose ids land in the tracking table in the same transaction as
+                # their interactions, so a crash loses a whole batch or none of it.
                 sm.post_insert_interactions(
                     interactions,
                     results_counts,
                     processed_poseids,
                     track_table_name,
                 )
+                processed += len(batch)
+                logger.info(f"Interactions calculated for {processed} poses.")
+
             sm._delete_table(track_table_name)
 
     # endregion

@@ -43,6 +43,7 @@ rt_upgrade_db = "ringtail.cli.rt_upgrade_db:main"
 rt_merge = "ringtail.cli.rt_merge:main"
 rt_compress_db = "ringtail.cli.rt_compress_db:main"
 rt_decompress_db = "ringtail.cli.rt_decompress_db:main"
+rt_recalc_interactions = "ringtail.cli.rt_recalc_interactions:main"
 
 [project.urls]
 Homepage = "https://github.com/forlilab/Ringtail"

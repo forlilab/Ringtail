@@ -1515,27 +1515,56 @@ class StorageManager(ABC):
             )
         return result
 
-    def fetch_poses_pending_interactions(self, track_table_name: str):
+    def fetch_tracked_cutoffs(self, track_table_name: str):
         """
-        Stream the poses that still need interaction calculation: every pose in
-        Results whose pose_id is not yet recorded in the tracking table. Used by
-        RingtailCore.add_interactions to process poses in commit-sized batches
-        without loading them all into memory.
+        The interaction cutoffs a partially finished run was using, if any.
+
+        Every row carries the same pair, so one row answers it.
+
+        Args:
+            track_table_name (str): the transaction-tracking table.
+
+        Returns:
+            tuple[float, float] | None: (hb_cutoff, vdw_cutoff), or None if no pose
+                has been processed yet.
+        """
+        query = self.QueryBuilder()
+        query.SELECT("hb_cutoff", "vdw_cutoff").FROM(track_table_name).LIMIT(1)
+        sql, params = query.build()
+        row = self.db_query(sql, params).fetchone()
+        if row is None or row[0] is None:
+            return None
+        return (float(row[0]), float(row[1]))
+
+    def fetch_poses_pending_interactions(self, track_table_name: str, limit: int):
+        """
+        Fetch up to `limit` poses that still need interaction calculation: poses in
+        Results whose pose_id is not yet recorded in the tracking table.
+
+        Returns one batch and closes, rather than streaming. The caller writes to
+        `track_table_name` between batches, and that table is joined here — a
+        long-lived cursor over it does not survive those writes. On duckdb it does
+        not survive them at all: db_query returns the connection, which holds a
+        single pending result, so the insert replaced the rows still being read.
+        Re-querying is also what makes the loop resumable, since each batch asks the
+        database what is left rather than trusting a cursor's position.
 
         Args:
             track_table_name (str): name of the transaction-tracking table created
                 by create_transaction_tracking_table.
+            limit (int): maximum number of poses to return.
 
-        Yields:
-            tuple: (pose_id, pose_coordinates, rdmol) per pending pose.
+        Returns:
+            list[tuple]: (pose_id, pose_coordinates, rdmol) per pending pose.
         """
         query = self.QueryBuilder()
         query.SELECT("R.pose_id", "R.pose_coordinates", "L.rdmol")
         query.FROM("Results", "R").JOIN("Ligands", "L", "ligand_id")
         query.JOIN(track_table_name, "tt", "pose_id", kind="LEFT")
         query.WHERE("tt.pose_id IS NULL")
-        sql, _ = query.build()
-        yield from self._stream_query(sql)
+        query.LIMIT(limit)
+        sql, params = query.build()
+        return self.db_query(sql, params).fetchall()
 
     def fetch_columns_from_table_as_dicts(
         self, table: str, columns: list, length: int = None, starting_rowid: int = 0

@@ -249,15 +249,29 @@ class InteractionFinder:
                 append_rec_atom_info(rec_at)
                 type_list.append("V")
 
+        # Deduplicate on the receptor atom. Several ligand atoms can fall inside one
+        # receptor atom's cutoff sphere, which produced one entry each — but the
+        # ligand atom is not part of what gets stored, so those collapsed to a single
+        # Interactions row while count/hb_count still reported the pairs. Deduplicating
+        # here, where the counts are derived, is what keeps Results.num_hb and
+        # Results.num_interactions equal to the rows the database actually holds.
+        # (Remove this block to go back to counting ligand-atom/receptor-atom pairs.)
+        unique = dict.fromkeys(
+            zip(type_list, recid_list, recname_list, residue_list, resid_list, chain_list)
+        )
+        types, recids, recnames, residues, resids, chains = (
+            [list(col) for col in zip(*unique)] if unique else [[]] * 6
+        )
+
         return {
-            "type": type_list,
-            "recid": recid_list,
-            "recname": recname_list,
-            "residue": residue_list,
-            "resid": resid_list,
-            "chain": chain_list,
-            "count": len(type_list),
-            "hb_count": type_list.count("H"),
+            "type": types,
+            "recid": recids,
+            "recname": recnames,
+            "residue": residues,
+            "resid": resids,
+            "chain": chains,
+            "count": len(types),
+            "hb_count": types.count("H"),
         }
 
 
@@ -318,7 +332,22 @@ def find_interactions(
         return [empty(pm) for pm, _ in poses_coordinates], [0] * n, [0] * n
 
     molsetup = molsetup_list[0]
-    atom_types = [atom.atom_type for atom in molsetup.atoms if not atom.is_ignore]
+    # Full length, with None where meeko ignores an atom (merged non-polar hydrogens).
+    # find_pose_interactions indexes pose coordinates by position in this list, so a
+    # compacted list silently shifts every atom after the first ignored one onto another
+    # atom's coordinates. Heavy atoms survive that (they lead the stored molecule) but
+    # polar hydrogens do not, and they are the ligand's only H-bond donors.
+    atom_types = [None] * num_atoms
+    for i, atom in enumerate(molsetup.atoms):
+        if not atom.is_ignore and i < num_atoms:
+            atom_types[i] = atom.atom_type
+    if mol.GetNumAtoms() != num_atoms:
+        ligname = poses_coordinates[0][0].get("ligname", "?") if poses_coordinates else "?"
+        logger.warning(
+            f"Ligand {ligname}: AddHs added {mol.GetNumAtoms() - num_atoms} hydrogen(s), "
+            "which have no stored coordinates and are excluded from interactions. "
+            "Hydrogen bonds donated by the ligand may be incomplete."
+        )
 
     # calculate interactions for each pose
     for pose_meta, coords in poses_coordinates:
