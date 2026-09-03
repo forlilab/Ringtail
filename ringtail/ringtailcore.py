@@ -25,6 +25,11 @@ logger = get_logger(__name__)
 #: resume. Rounded rather than compared with a tolerance so the number stored and the
 #: number compared are the same one.
 _CUTOFF_DECIMALS = 1
+
+#: Name of the table that records which poses add_interactions has already recomputed.
+#: Its presence in a database means a recalculation was interrupted and can be resumed.
+#: Shared with the GUI and rt_recalc_interactions so all three agree on the name.
+RECALC_TRACKING_TABLE = "recomputed_interactions"
 from .filters import Filters
 from .ringtailoptions import (
     RingtailDefaults,
@@ -533,32 +538,63 @@ class RingtailCore:
         receptor_string: str = None,
         consent: bool = False,
         chunk_size: int = RingtailDefaults.chunk_size // 10,
+        backup: bool = False,
+        progress_callback: Callable[[int, int], None] = None,
+        should_cancel: Callable[[], bool] = None,
     ):
-        """
-        #NOTE can be slow
+        """Delete and recompute every interaction in the database.
+
+        Interactions are calculated again from the poses and receptor already stored,
+        so no docking files are needed. Work is committed one batch at a time and each
+        batch records the poses it finished, so an interrupted run resumes where it
+        stopped rather than starting over. Slow on large databases: the cost is one
+        meeko molecule preparation per ligand plus a neighbour search per pose.
 
         Args:
-            hb_cutoff (float, optional): _description_. Defaults to RingtailDefaults.interaction_cutoffs[0].
-            vdw_cutoff (float, optional): _description_. Defaults to RingtailDefaults.interaction_cutoffs[1].
-            receptor_string (str, optional): _description_. Defaults to None.
-            consent (bool): must be True to proceed when existing interactions are present (recalc deletes them). Defaults to False.
-            chunk_size (int, optional): _description_. Defaults to RingtailDefaults.chunk_size,.
+            hb_cutoff (float, optional): hydrogen bond distance cutoff in angstroms.
+                Defaults to RingtailDefaults.interaction_cutoffs[0].
+            vdw_cutoff (float, optional): van der Waals distance cutoff in angstroms.
+                Defaults to RingtailDefaults.interaction_cutoffs[1].
+            receptor_string (str, optional): receptor pdbqt or polymer json string.
+                Fetched from the database if omitted.
+            consent (bool): must be True to proceed when existing interactions are
+                present (recalc deletes them). Defaults to False.
+            chunk_size (int, optional): poses per commit. Smaller means more frequent
+                checkpoints to resume from, more frequent progress reports and a faster
+                response to should_cancel, at the cost of more commits.
+                Defaults to RingtailDefaults.chunk_size // 10.
+            backup (bool, optional): clone the database before deleting anything.
+                Defaults to False.
+            progress_callback (Callable, optional): called with (poses_done,
+                poses_total) after each committed batch. Defaults to None.
+            should_cancel (Callable, optional): checked before each batch; if it
+                returns True the run stops cleanly and stays resumable. Defaults to None.
 
         Raises:
-            RTCoreError: _description
+            RTCoreError: if the existing interaction tables could not be cleared.
+            OptionError: if a partly finished run used different cutoffs.
+
+        Returns:
+            dict: {"completed": bool, "poses_done": int, "poses_total": int}. completed
+                is False when should_cancel stopped the run, in which case the tracking
+                table is left in place for a later call to pick up.
         """
         # make sure user knows risk of calculating interaction in db with existing interactions
-        track_table_name = "recomputed_interactions"
+        track_table_name = RECALC_TRACKING_TABLE
         if self.table_length("Interactions") > 0:
             if not consent:
                 logger.critical(
                     "Consent not given for deleting and re-calculating interactions, exiting."
                 )
-                return
+                return {"completed": False, "poses_done": 0, "poses_total": 0}
             else:
                 with self.storageman as sm:
                     # Check if track table name exist, then do not clear but use
                     if track_table_name not in sm.tables_in_db():
+                        # Before clearing, not after: a backup taken afterwards would
+                        # be a copy of the damage it exists to undo.
+                        if backup:
+                            sm.clone()
                         success = sm.clear_interaction_tables()
                         if not success:
                             raise RTCoreError(
@@ -568,6 +604,9 @@ class RingtailCore:
                         logger.info(
                             "A table tracking processed pose interaction exists.\nWill continue processing poses and not recompute those that have already been processed."
                         )
+        elif backup:
+            with self.storageman as sm:
+                sm.clone()
 
         # get receptor representation
         if not receptor_string:
@@ -578,12 +617,18 @@ class RingtailCore:
             receptor_string, [hb_cutoff, vdw_cutoff]
         )
 
-        # accounting
-        processed = 0
-
         with self.storageman as sm:
             # a "temporary" table that keeps track of what pose_ids have been processed
             sm.create_transaction_tracking_table(track_table_name)
+
+            # Accounting, on sm rather than self.table_length so it reuses this
+            # connection instead of opening a nested one. Counted after the tracking
+            # table is created, since table_length only warns and returns None for a
+            # table that does not exist yet. A resumed run reports against the whole
+            # database, not just the part still pending, so a progress bar picks up
+            # where it left off instead of restarting at zero.
+            poses_total = sm.table_length("Results")
+            processed = sm.table_length(track_table_name)
 
             # Resuming with different cutoffs would leave one database holding
             # interactions computed two different ways, with nothing recording which
@@ -604,7 +649,19 @@ class RingtailCore:
             # One batch per round trip, asking the database each time what is still
             # pending. Nothing is read across a write, and an interrupted run resumes
             # from whatever the tracking table says was finished.
+            cancelled = False
             while True:
+                # Between batches, so a cancelled run stops on a committed boundary
+                # with the tracking table agreeing with the interactions written.
+                if should_cancel is not None and should_cancel():
+                    cancelled = True
+                    logger.info(
+                        f"Interaction calculation cancelled after {processed} poses. "
+                        f"The '{track_table_name}' table was kept, so calling this "
+                        "again with the same cutoffs resumes from here."
+                    )
+                    break
+
                 batch = sm.fetch_poses_pending_interactions(track_table_name, chunk_size)
                 if not batch:
                     break
@@ -612,29 +669,42 @@ class RingtailCore:
                 interactions = []
                 processed_poseids = []
                 results_counts = []
-                for pose_id, coordinates, rdbin in batch:
-                    mol = Chem.Mol(rdbin)
+                # Poses arrive grouped by ligand, and find_interactions prepares the
+                # meeko molsetup once for the whole group it is handed — the expensive
+                # part by far. One call per pose would redo that preparation for every
+                # pose of a ligand.
+                for _, ligand_poses in itertools.groupby(batch, key=lambda row: row[0]):
+                    ligand_poses = list(ligand_poses)
+                    # rdmol is the same blob on every row of the group
+                    mol = Chem.Mol(ligand_poses[0][3])
+                    poses_coordinates = [
+                        (
+                            {"pose_id": pose_id},
+                            sm._deserialize_pose_coordinates(coordinates),
+                        )
+                        for _, pose_id, coordinates, _ in ligand_poses
+                    ]
                     interaction_dicts, num_hb, num_int = find_interactions(
-                        [
-                            (
-                                {"pose_id": pose_id},
-                                sm._deserialize_pose_coordinates(coordinates),
-                            )
-                        ],
+                        poses_coordinates,
                         mol,
                         interaction_finder=interaction_finder,
                     )
                     interactions.extend(generate_interaction_tuples(interaction_dicts))
-                    results_counts.append(
-                        {"pose_id": pose_id, "num_hb": num_hb[0], "num_int": num_int[0]}
-                    )
-                    processed_poseids.append(
-                        (
-                            pose_id,
-                            round(hb_cutoff, _CUTOFF_DECIMALS),
-                            round(vdw_cutoff, _CUTOFF_DECIMALS),
+                    for i, (_, pose_id, _, _) in enumerate(ligand_poses):
+                        results_counts.append(
+                            {
+                                "pose_id": pose_id,
+                                "num_hb": num_hb[i],
+                                "num_int": num_int[i],
+                            }
                         )
-                    )
+                        processed_poseids.append(
+                            (
+                                pose_id,
+                                round(hb_cutoff, _CUTOFF_DECIMALS),
+                                round(vdw_cutoff, _CUTOFF_DECIMALS),
+                            )
+                        )
 
                 # The pose ids land in the tracking table in the same transaction as
                 # their interactions, so a crash loses a whole batch or none of it.
@@ -646,8 +716,20 @@ class RingtailCore:
                 )
                 processed += len(batch)
                 logger.info(f"Interactions calculated for {processed} poses.")
+                if progress_callback is not None:
+                    progress_callback(processed, poses_total)
 
-            sm._delete_table(track_table_name)
+            # Only once every pose is accounted for. Dropping it after a cancellation
+            # would turn a resumable run into a half-recomputed database with no record
+            # of which half.
+            if not cancelled:
+                sm._delete_table(track_table_name)
+
+        return {
+            "completed": not cancelled,
+            "poses_done": processed,
+            "poses_total": poses_total,
+        }
 
     # endregion
 
@@ -1791,6 +1873,52 @@ class RingtailCore:
         """
         with self.storageman as sm:
             return sm.tables_in_db()
+
+    @_wrap_exceptions
+    def interaction_recalc_status(self) -> dict:
+        """Whether an interaction recalculation was left unfinished in this database.
+
+        A leftover tracking table is the only record that add_interactions was
+        interrupted, so this is what a caller asks before offering to resume.
+
+        Returns:
+            dict: {"pending": bool, "poses_done": int, "poses_total": int,
+                "cutoffs": tuple[float, float] | None}. cutoffs is the (hb, vdw) pair
+                the unfinished run was using; resuming at any other pair raises
+                OptionError, so a caller offering to finish must pass these back
+                rather than its own defaults. It is None when nothing is pending, and
+                also when a run was interrupted before its first batch committed.
+        """
+        with self.storageman as sm:
+            poses_total = sm.table_length("Results")
+            if RECALC_TRACKING_TABLE not in sm.tables_in_db():
+                return {
+                    "pending": False,
+                    "poses_done": 0,
+                    "poses_total": poses_total,
+                    "cutoffs": None,
+                }
+            return {
+                "pending": True,
+                "poses_done": sm.table_length(RECALC_TRACKING_TABLE),
+                "poses_total": poses_total,
+                "cutoffs": sm.fetch_tracked_cutoffs(RECALC_TRACKING_TABLE),
+            }
+
+    @_wrap_exceptions
+    def bookmarks_with_interaction_filters(self) -> list:
+        """Bookmarks whose filters depend on interactions.
+
+        Recalculating interactions changes which poses those filters would select, so
+        these bookmarks keep their stored poses but no longer describe what their own
+        filters mean. Provenance only, like get_bookmark_dependents — nothing is
+        invalidated automatically.
+
+        Returns:
+            list: names of bookmarks filtered on any interaction criterion
+        """
+        with self.storageman as sm:
+            return sm.fetch_bookmarks_with_interaction_filters()
 
     @_wrap_exceptions
     def delete_bookmark(self, bookmark_name: str):

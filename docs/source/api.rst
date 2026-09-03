@@ -449,11 +449,38 @@ Retrieve interactions for selection
 
 Calculating interactions after building a Ringtail database
 ============================================================
-If you have created a Ringtail database with ``calculate_interactions=False``, or you would like to re-calculate pose-receptor interactions with different interaction distance limtis, this is possible using the method ``add_interactions``. Please note, though, this calculation can take a long time for large databases. If calculation fails part way through, it is possible to restart it simply by running the method again, as Ringtail keeps track of the progress with a transaction tracking table until the process finished. 
+If you have created a Ringtail database with ``calculate_interactions=False``, or you would like to re-calculate pose-receptor interactions with different interaction distance limtis, this is possible using the method ``add_interactions``. Please note, though, this calculation can take a long time for large databases. If calculation fails part way through, it is possible to restart it simply by running the method again, as Ringtail keeps track of the progress with a transaction tracking table until the process finished.
 
 .. code-block:: python
 
     rtc.add_interactions(hb_cutoff=3.9,vdw_cutoff = 4.2)
+
+Recalculating over a database that already has interactions deletes them, so it requires ``consent=True``. Pass ``backup=True`` to have Ringtail clone the database before it deletes anything; the copy is written next to the original with ``.bk`` appended. There is also a command line equivalent, ``rt_recalc_interactions``, which takes one or more databases.
+
+Because the calculation is long, it can report progress and be stopped. ``progress_callback`` is called with ``(poses_done, poses_total)`` after every committed batch, and ``should_cancel`` is checked between batches; returning ``True`` from it stops the run on a committed boundary and leaves the database resumable. The method returns a dict saying what happened.
+
+.. code-block:: python
+
+    result = rtc.add_interactions(
+        consent=True,
+        backup=True,
+        chunk_size=200,
+        progress_callback=lambda done, total: print(f"{done}/{total}"),
+        should_cancel=stop_flag.is_set,
+    )
+    if not result["completed"]:
+        print(f"stopped after {result['poses_done']} of {result['poses_total']} poses")
+
+A run that was cancelled or interrupted leaves its tracking table behind, which is the only record that the database is half recomputed — the poses that were not reached have no interactions at all until it is finished. ``interaction_recalc_status()`` reports whether that is the case, and at which cutoffs the unfinished run was working. Resuming at any other cutoffs raises ``OptionError``, since the database would otherwise hold two different calculations with no record of which pose got which.
+
+.. code-block:: python
+
+    status = rtc.interaction_recalc_status()
+    if status["pending"]:
+        hb, vdw = status["cutoffs"]
+        rtc.add_interactions(hb_cutoff=hb, vdw_cutoff=vdw, consent=True)
+
+Recalculating changes ``Results.num_hb`` and ``Results.num_interactions``, so bookmarks that were filtered on interactions no longer describe what their filters would now select. Their poses are untouched, but ``bookmarks_with_interaction_filters()`` lists the ones worth re-running afterwards.
 
 
 Flagging or commenting a poses

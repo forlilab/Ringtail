@@ -98,7 +98,10 @@ class TestInputs:
         )
         assert rc == 0
         assert cli.count("Results") == 9
-        assert cli.count("Interactions") == 60
+        # 65, not the 60 of earlier versions: the ligand-donated hydrogen bonds that
+        # the atom-typing fix recovered. Same dataset and count as
+        # test_units.py::TestAD6Handling::test_file_add.
+        assert cli.count("Interactions") == 65
 
     def test_vina_input(self, cli):
         rc = cli.write(

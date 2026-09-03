@@ -8,7 +8,12 @@ import logging
 from pathlib import Path
 
 import pytest
-from ringtail import Filters, QueryBuilder, RingtailCore
+from ringtail import (
+    Filters,
+    QueryBuilder,
+    RECALC_TRACKING_TABLE,
+    RingtailCore,
+)
 from ringtail.exceptions import OptionError
 
 TEST_DATA = Path(__file__).parent / "test_data"
@@ -1205,11 +1210,187 @@ class TestAD6Handling:
         assert interactions_after > interactions_before
         assert hb_after > hb_before
 
+    def test_recalc_reports_progress(self, ad6_db_no_interactions):
+        """Progress is reported per committed batch and ends at the pose count."""
+        db = ad6_db_no_interactions
+        db.save_receptor(str(TEST_DATA / "ad6" / "helix--scofu01.json"))
+
+        seen = []
+        result = db.add_interactions(
+            consent=True, chunk_size=2, progress_callback=lambda d, t: seen.append((d, t))
+        )
+
+        assert seen, "a batched run should report at least once"
+        assert all(total == 9 for _, total in seen)
+        assert [done for done, _ in seen] == sorted(done for done, _ in seen)
+        assert seen[-1][0] == 9
+        assert result == {"completed": True, "poses_done": 9, "poses_total": 9}
+
+    def test_recalc_progress_resumes_from_where_it_stopped(self, ad6_db_no_interactions):
+        """A resumed run counts the whole database, not just what is left.
+
+        Reporting only the remaining poses would send a progress bar back to zero on
+        every resume, which reads as the work being thrown away.
+        """
+        db = ad6_db_no_interactions
+        db.save_receptor(str(TEST_DATA / "ad6" / "helix--scofu01.json"))
+
+        stop_after = {"n": 0}
+
+        def cancel_after_two_batches():
+            stop_after["n"] += 1
+            return stop_after["n"] > 2
+
+        first = db.add_interactions(
+            consent=True, chunk_size=2, should_cancel=cancel_after_two_batches
+        )
+        assert not first["completed"]
+        assert 0 < first["poses_done"] < 9
+
+        seen = []
+        second = db.add_interactions(
+            consent=True, chunk_size=2, progress_callback=lambda d, t: seen.append(d)
+        )
+        assert second["completed"]
+        assert seen[0] > first["poses_done"], "resumed progress must not restart at zero"
+        assert seen[-1] == 9
+
+    def test_recalc_cancel_stays_resumable(self, ad6_db_no_interactions):
+        """Cancelling stops on a committed boundary and keeps the tracking table."""
+        db = ad6_db_no_interactions
+        db.save_receptor(str(TEST_DATA / "ad6" / "helix--scofu01.json"))
+
+        calls = {"n": 0}
+
+        def cancel_after_one_batch():
+            calls["n"] += 1
+            return calls["n"] > 1
+
+        cancelled = db.add_interactions(
+            consent=True, chunk_size=2, should_cancel=cancel_after_one_batch
+        )
+
+        assert cancelled["completed"] is False
+        assert cancelled["poses_done"] == 2
+        # the tracking table is what makes the run resumable, so it must survive
+        assert RECALC_TRACKING_TABLE in db.all_database_tables()
+        status = db.interaction_recalc_status()
+        assert status["pending"] is True
+        assert status["poses_done"] == 2
+        assert status["poses_total"] == 9
+        assert status["cutoffs"] == (3.7, 4.0)
+
+        # finishing gives the same answer as never having been interrupted
+        finished = db.add_interactions(consent=True, chunk_size=2)
+        assert finished["completed"] is True
+        assert db.table_length("Interactions") == 65
+        assert RECALC_TRACKING_TABLE not in db.all_database_tables()
+        assert db.interaction_recalc_status()["pending"] is False
+        dupes = db.db_query(
+            """SELECT COUNT(*) FROM (SELECT pose_id, interaction_id, COUNT(*) c
+               FROM Interactions GROUP BY pose_id, interaction_id HAVING c > 1)"""
+        )[0][0]
+        assert dupes == 0
+
+    def test_recalc_groups_poses_by_ligand(self, ad6_db, ad6_db_no_interactions):
+        """Grouping a ligand's poses into one call must not change the answer.
+
+        find_interactions is handed a whole ligand at a time so meeko prepares the
+        molsetup once instead of once per pose. That preparation produces the atom-type
+        list every pose is indexed against, so a grouping mistake reintroduces exactly
+        the index-shift bug this method exists to repair — silently, since it would
+        still produce plausible-looking interactions.
+        """
+        import ringtail.ringtailcore as rtc_module
+
+        one_pass = ad6_db
+        one_pass.add_interactions(consent=True, chunk_size=500)
+
+        grouped = ad6_db_no_interactions
+        grouped.save_receptor(str(TEST_DATA / "ad6" / "helix--scofu01.json"))
+
+        real = rtc_module.find_interactions
+        poses_per_call = []
+
+        def counting_find_interactions(poses_coordinates, *args, **kwargs):
+            poses_per_call.append(len(poses_coordinates))
+            return real(poses_coordinates, *args, **kwargs)
+
+        rtc_module.find_interactions = counting_find_interactions
+        try:
+            grouped.add_interactions(consent=True, chunk_size=500)
+        finally:
+            rtc_module.find_interactions = real
+
+        assert max(poses_per_call) > 1, (
+            "no ligand's poses were batched together, so the grouping is not in effect"
+        )
+        assert sum(poses_per_call) == 9
+
+        query = """SELECT I.pose_id, II.interaction_type, II.rec_chain, II.rec_resid,
+                          II.rec_atom
+                   FROM Interactions I
+                   JOIN Interaction_indices II ON II.interaction_id=I.interaction_id"""
+        assert set(grouped.db_query(query)) == set(one_pass.db_query(query))
+        counts = "SELECT pose_id, num_interactions, num_hb FROM Results ORDER BY pose_id"
+        assert grouped.db_query(counts) == one_pass.db_query(counts)
+
+    def test_recalc_backup_leaves_the_original_untouched(self, ad6_db):
+        """The backup is taken before anything is deleted, not after."""
+        before = ad6_db.table_length("Interactions")
+        assert before > 0
+
+        ad6_db.add_interactions(
+            hb_cutoff=6.0, vdw_cutoff=7.0, consent=True, backup=True
+        )
+
+        backup_file = Path(ad6_db.db_file + ".bk")
+        assert backup_file.is_file()
+        # a backup taken after clear_interaction_tables would be a copy of the damage
+        backup_db = RingtailCore(str(backup_file), storage_type=ad6_db.storagetype)
+        assert backup_db.table_length("Interactions") == before
+        assert ad6_db.table_length("Interactions") > before
+
     def test_filtering(self, ad6_db):
         count, _ = ad6_db.filter(
             eworst=-13, ligand_substruct=["C=O"], vdw_interactions=[(":VAL::", True)]
         )
         assert count == 1
+
+    def test_bookmarks_with_interaction_filters(self, ad6_db):
+        """Only bookmarks whose filters touch interactions are reported.
+
+        These are the ones a recalculation invalidates the meaning of, so the caller
+        can warn about them by name before deleting anything.
+        """
+        assert ad6_db.bookmarks_with_interaction_filters() == []
+
+        ad6_db.filter(eworst=-13, output_bookmark="score_only")
+        ad6_db.filter(
+            vdw_interactions=[(":VAL::", True)], output_bookmark="uses_vdw"
+        )
+        ad6_db.filter(hb_count=0, output_bookmark="uses_hb_count")
+
+        found = set(ad6_db.bookmarks_with_interaction_filters())
+        assert "uses_vdw" in found
+        # 0 is a real criterion for hb_count ("no hydrogen bonds"), so a truthiness
+        # test here would drop this bookmark
+        assert "uses_hb_count" in found
+        assert "score_only" not in found
+
+    def test_bookmarks_with_interaction_filters_sees_nested_filters(self, populated_db):
+        """A tiered filter stores its criteria nested, so the scan must recurse."""
+        populated_db.filter(
+            filters={
+                "op": "or",
+                "children": [
+                    {"eworst": -7},
+                    {"hb_interactions": [("A:VAL:279:", True)]},
+                ],
+            },
+            output_bookmark="nested_tier",
+        )
+        assert "nested_tier" in populated_db.bookmarks_with_interaction_filters()
 
 
 class TestLogger:

@@ -11,6 +11,7 @@ warnings.filterwarnings("ignore", "pkg_resources is deprecated", UserWarning, "p
 from .ringtailcore import (
     RingtailCore,
     storage_types,
+    RECALC_TRACKING_TABLE,
 )
 from .cloptionparser import CLOptionParser
 from .logutils import LOGGER, get_logger, setup_logging
@@ -39,4 +40,5 @@ __all__ = [
     "OptionError",
     "RingtailError",
     "QueryBuilder",
+    "RECALC_TRACKING_TABLE",
 ]

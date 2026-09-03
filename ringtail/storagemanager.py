@@ -316,6 +316,63 @@ class StorageManager(ABC):
         )
         return [row[0].lower() for row in cur.fetchall()]
 
+    #: Filters fields that select on interactions. hb_count is listed separately from
+    #: the interaction lists because 0 is a real criterion for it ("no hydrogen bonds"),
+    #: so it counts as set whenever it is not None rather than whenever it is truthy.
+    _INTERACTION_FILTER_LISTS = (
+        "vdw_interactions",
+        "hb_interactions",
+        "reactive_interactions",
+        "max_miss",
+    )
+
+    def fetch_bookmarks_with_interaction_filters(self) -> list[str]:
+        """
+        Bookmarks whose stored filters select on interactions.
+
+        Recalculating interactions changes what those filters would now select, so
+        these are the bookmarks worth revisiting afterwards. Provenance only, like
+        get_bookmark_dependents: their poses stay exactly where they are.
+
+        Filters.filters holds the filter set as JSON. It is searched recursively
+        rather than by key lookup because a tiered filter stores its criteria nested
+        inside a boolean tree, and a flat lookup would report those bookmarks as
+        interaction-free.
+
+        Returns:
+            list: names of bookmarks filtered on any interaction criterion
+        """
+
+        def uses_interactions(node) -> bool:
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    if key == "hb_count" and value is not None:
+                        return True
+                    if key in self._INTERACTION_FILTER_LISTS and value:
+                        return True
+                    if uses_interactions(value):
+                        return True
+            elif isinstance(node, list):
+                return any(uses_interactions(item) for item in node)
+            return False
+
+        names = []
+        for name, filters in self.conn.execute(
+            "SELECT name, filters FROM Filters"
+        ).fetchall():
+            if not filters:
+                continue
+            try:
+                decoded = json.loads(filters)
+            except (ValueError, TypeError):
+                # A filter set we cannot read is not a reason to fail the caller,
+                # which is only assembling a warning.
+                logger.debug(f"Could not parse stored filters for bookmark {name}.")
+                continue
+            if uses_interactions(decoded):
+                names.append(name.lower())
+        return names
+
     def get_passing_poses_count(
         self, bookmark_name: str, grouped_by_ligand: bool = False
     ) -> int:
@@ -1549,19 +1606,26 @@ class StorageManager(ABC):
         Re-querying is also what makes the loop resumable, since each batch asks the
         database what is left rather than trusting a cursor's position.
 
+        Ordered by ligand so a batch holds each ligand's poses together: the caller
+        prepares one meeko molsetup per ligand and reuses it across that ligand's
+        poses, which is only possible if they arrive adjacent. Without the ORDER BY
+        the row order is whatever the query planner produces, and the grouping would
+        silently degrade to one setup per pose.
+
         Args:
             track_table_name (str): name of the transaction-tracking table created
                 by create_transaction_tracking_table.
             limit (int): maximum number of poses to return.
 
         Returns:
-            list[tuple]: (pose_id, pose_coordinates, rdmol) per pending pose.
+            list[tuple]: (ligand_id, pose_id, pose_coordinates, rdmol) per pending pose.
         """
         query = self.QueryBuilder()
-        query.SELECT("R.pose_id", "R.pose_coordinates", "L.rdmol")
+        query.SELECT("L.ligand_id", "R.pose_id", "R.pose_coordinates", "L.rdmol")
         query.FROM("Results", "R").JOIN("Ligands", "L", "ligand_id")
         query.JOIN(track_table_name, "tt", "pose_id", kind="LEFT")
         query.WHERE("tt.pose_id IS NULL")
+        query.ORDER_BY("L.ligand_id, R.pose_id")
         query.LIMIT(limit)
         sql, params = query.build()
         return self.db_query(sql, params).fetchall()
