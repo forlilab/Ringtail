@@ -75,3 +75,6 @@ class OutputError(RingtailError):
 
 class InteractionError(RingtailError):
     pass
+
+class ReceptorError(RingtailError):
+    pass

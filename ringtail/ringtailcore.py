@@ -47,7 +47,7 @@ from .exceptions import (
     RingtailError,
 )
 from .mpmanager import MPManager
-from .receptormanager import ReceptorManager, ReceptorData
+from . import receptormanager as RM 
 from .outputmanager import OutputManager
 from .storagemanager import StorageManager
 from .storagemanager_duckdb import StorageManagerDuckDB, HAS_DUCK
@@ -288,7 +288,7 @@ class RingtailCore:
                     logger.debug(
                         "Building receptor string from .pdbqt file for interaction calculation"
                     )
-                    results.receptor_string = ReceptorManager.receptor_str_from_file(
+                    results.receptor_string = RM.receptor_str_from_file(
                         results.receptor_file_path
                     )
                 elif ".json" in Path(results.receptor_file_path).suffixes:
@@ -489,7 +489,7 @@ class RingtailCore:
             if ".json" in extensions:
                 receptor_name, receptor_jsons = self._process_receptor_polymer(receptor)
             elif ".pdbqt" in extensions:
-                receptor_name, receptor_blob = ReceptorManager.make_receptor_blob(
+                receptor_name, receptor_blob = RM.make_receptor_blob(
                     receptor
                 )
         else:
@@ -1551,7 +1551,7 @@ class RingtailCore:
         return db_alias_from_path(db_path)
 
     @_wrap_exceptions
-    def get_receptor_object(self) -> ReceptorData:
+    def get_receptor_object(self) -> RM.ReceptorData:
         """Gets the receptor data from the database.
 
         Returns:
@@ -1561,9 +1561,9 @@ class RingtailCore:
         """
         with self.storageman as sm:
             rec_data = sm.fetch_receptor_object()
-            return ReceptorData(
+            return RM.ReceptorData(
                 name=rec_data.get("recname"),
-                blob_str=ReceptorManager.blob2str(rec_data.get("receptor_object")),
+                blob_str=RM.blob2str(rec_data.get("receptor_object")),
                 polymer_json=rec_data.get("polymer"),
             )
 
