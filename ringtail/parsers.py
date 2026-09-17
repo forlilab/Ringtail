@@ -1125,7 +1125,7 @@ def generate_interaction_tuples(interaction_dictionaries: list) -> list:
     tuples = dict.fromkeys(
         tuple(pose["id"][k] if k in id_keys else pose[k][i] for k in all_keys)
         for pose in interaction_dictionaries
-        for i in range(pose["count"])
+        for i in range(len(pose["type"]))
     )
 
     return [dict(zip(all_keys, t)) for t in tuples]
