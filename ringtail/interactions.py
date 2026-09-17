@@ -4,6 +4,8 @@
 # Ringtail interaction finder
 #
 
+import json
+
 import numpy as np
 from typing import Union
 from meeko import MoleculePreparation, Polymer
@@ -11,15 +13,42 @@ from .receptormanager import (
     receptor_atoms_from_pdbqt_string,
     receptor_atoms_from_polymer
 )
-from rdkit import Chem, Geometry
+from rdkit import Chem
 from .logutils import get_logger
 
 logger = get_logger(__name__)
 
 
 
-def _looks_like_polymer_json(rec_string: str) -> bool:
-    return isinstance(rec_string, str) and rec_string.lstrip().startswith("{")
+# Ligand H-bond donor/acceptor SMARTS, from meeko's vina_params.json.
+# Ordered cascade, last match wins, so file order must be preserved.
+# Flags land on match[0] -- for the donor rules ("[#8][#1]") that is the heavy atom.
+_MEEKO_TYPING_FILE = "vina_params"
+_MEEKO_TYPING_GROUP = "vina_typing"
+_ROLE_FLAGS = {"vina_donor": "donor", "vina_acceptor": "acceptor"}
+
+
+def _load_interaction_roles() -> list[tuple[str, dict]]:
+    """[(smarts, {"donor": bool, "acceptor": bool})] from meeko's parameter file."""
+    path = MoleculePreparation.packaged_params[_MEEKO_TYPING_FILE]
+    with open(path) as handle:
+        rules = json.load(handle)[_MEEKO_TYPING_GROUP]
+
+    roles = []
+    for rule in rules:
+        flags = {
+            role: rule[key] for key, role in _ROLE_FLAGS.items() if key in rule
+        }
+        if flags:
+            roles.append((rule["smarts"], flags))
+    if not roles:
+        raise RuntimeError(
+            f"no donor/acceptor rules found in meeko's {_MEEKO_TYPING_FILE}.json"
+        )
+    return roles
+
+
+_INTERACTION_ROLES = _load_interaction_roles()
 
 
 class InteractionFinder:
@@ -41,18 +70,22 @@ class InteractionFinder:
         self.hb_cutoff = hb_cutoff
         self.vdw_cutoff = vdw_cutoff
         self.pdbqt_rec = None
+        self._compiled_roles = [
+            (Chem.MolFromSmarts(s), flags) for s, flags in _INTERACTION_ROLES
+        ]
         if isinstance(receptor, Polymer):
             self._atoms_arr, self._annotations, self._kdtree = receptor_atoms_from_polymer(receptor)
-        elif _looks_like_polymer_json(receptor):
+        elif self._looks_like_polymer_json(receptor):
             self._atoms_arr, self._annotations, self._kdtree = receptor_atoms_from_polymer(
                 Polymer.from_json(receptor)
             )
         else:
             self._atoms_arr, self._annotations, self._kdtree = receptor_atoms_from_pdbqt_string(receptor)
 
-    def __call__(self, lig_atomtype_list: list, lig_coordinates: list) -> dict:
-        """Identify interactions for a pose; delegates to find_pose_interactions."""
-        return self.find_pose_interactions(lig_atomtype_list, lig_coordinates)
+    @staticmethod
+    def _looks_like_polymer_json(rec_string: str) -> bool:
+        return isinstance(rec_string, str) and rec_string.lstrip().startswith("{")
+
 
     @staticmethod
     def _empty_result() -> dict:
@@ -79,13 +112,44 @@ class InteractionFinder:
             return []
         return self._atoms_arr[list(selected)].copy()
 
+    def ligand_interaction_atoms(self, mol: Chem.Mol) -> tuple[set[int],set[int],set[int]]:
+        """
+        Identify H bond donors, acceptors, and vdw atoms in ligand
+
+        Heavy atoms only, indexed to match the pose coordinates. Topology only, so one
+        call serves every pose. vdw is the complement: heavy, not H-bond capable.
+
+        Args:
+            mol (Chem.Mol)
+
+        Returns:
+            tuple[set[int],set[int],set[int]]: donor, acceptor and vdw atom indices
+        """
+        n = mol.GetNumAtoms()
+        donor = [False]*n
+        acceptor = [False]*n
+        for smarts, flags in self._compiled_roles:
+            for match in mol.GetSubstructMatches(smarts):
+                if "donor" in flags:
+                    donor[match[0]] = flags["donor"]
+                if "acceptor" in flags:
+                    acceptor[match[0]] = flags["acceptor"]
+        donors = {i for i, v in enumerate(donor) if v}
+        acceptors = {i for i, v in enumerate(acceptor) if v}
+        heavy = {a.GetIdx() for a in mol.GetAtoms() if a.GetAtomicNum() > 1}
+
+        return donors, acceptors, heavy - acceptors - donors
+
+
     def find_pose_interactions(
-        self, lig_atomtype_list: list, lig_coordinates: list
+        self, donor_idxs: set[int], acceptor_idxs: set[int], vdw_idxs: set[int], lig_coordinates: list
     ) -> dict:
         """Identify interactions for a pose within the cutoff distances.
 
         Args:
-            lig_atomtype_list (list): list of atom types in the ligand
+            donor_idxs (set[int]): ligand atom indices for hydrogen donors
+            acceptor_idxs (set[int]): ligand atom indices for hydrogen acceptors
+            vdw_idxs (set[int]): ligand atom indices for atoms that may participate in vdw interactions
             lig_coordinates (list): coordinates for the atoms in the ligand
 
         Returns:
@@ -105,47 +169,44 @@ class InteractionFinder:
             resid_list.append(str(rec_at["resid"]))
             chain_list.append(rec_at["chain"])
 
-        # The original code ran the hb_don/hb_acc queries for every atom but
-        # discarded every result unless the ligand atom was an acceptor ("A") /
-        # donor ("D"). Checking the type before querying is equivalent and skips
-        # the KDTree query entirely for non-acceptor/non-donor atoms.
-        valid = [i for i, at in enumerate(lig_atomtype_list) if at is not None]
-        if not valid:
-            return self._empty_result()
+        hb_idxs = sorted(donor_idxs | acceptor_idxs)
+        h_coord_arr = np.array(
+            [[float(c) for c in lig_coordinates[i]] for i in hb_idxs]
+        ).reshape(-1, 3)
+        vdw_coord_arr = np.array(
+                    [[float(c) for c in lig_coordinates[i]] for i in sorted(vdw_idxs)]
+                ).reshape(-1, 3)
 
-        # One KDTree query per radius for the whole pose, then per-point
-        # post-processing (set ∩ annotation -> atom records) in
-        # _atoms_for_neighbors. Equivalent to per-atom queries; only vectorized.
-        coords_arr = np.asarray(
-            [[float(c) for c in lig_coordinates[i]] for i in valid], dtype=float
-        )
+        # one query per radius, over only the atoms eligible for it
+        # _atoms_for_neighbors in the for loop keeps the receptor atoms of the right kind
         hb_neighbors = self._kdtree.query_ball_point(
-            coords_arr, self.hb_cutoff, p=2, return_sorted=True
+            h_coord_arr, self.hb_cutoff, p=2, return_sorted=True
         )
         vdw_neighbors = self._kdtree.query_ball_point(
-            coords_arr, self.vdw_cutoff, p=2, return_sorted=True
+            vdw_coord_arr, self.vdw_cutoff, p=2, return_sorted=True
         )
-        for k, idx in enumerate(valid):
-            atomtype = lig_atomtype_list[idx]
-            if atomtype.endswith("A"):
+        # enumerate possible hydrogen bonders
+        for k, idx in enumerate(hb_idxs):
+            if idx in acceptor_idxs:
                 for rec_at in self._atoms_for_neighbors(hb_neighbors[k], "hb_don"):
                     append_rec_atom_info(rec_at)
                     type_list.append("H")
-            if atomtype.endswith("D"):
+            if idx in donor_idxs:
                 for rec_at in self._atoms_for_neighbors(hb_neighbors[k], "hb_acc"):
                     append_rec_atom_info(rec_at)
                     type_list.append("H")
-            for rec_at in self._atoms_for_neighbors(vdw_neighbors[k], "vdw"):
+        # enumerate across possible van der Waal bonders
+        for neighbors in vdw_neighbors:
+            for rec_at in self._atoms_for_neighbors(neighbors, "vdw"):
                 append_rec_atom_info(rec_at)
                 type_list.append("V")
 
-        # Deduplicate on the receptor atom. Several ligand atoms can fall inside one
-        # receptor atom's cutoff sphere, which produced one entry each — but the
-        # ligand atom is not part of what gets stored, so those collapsed to a single
-        # Interactions row while count/hb_count still reported the pairs. Deduplicating
-        # here, where the counts are derived, is what keeps Results.num_hb and
-        # Results.num_interactions equal to the rows the database actually holds.
-        # (Remove this block to go back to counting ligand-atom/receptor-atom pairs.)
+        # get full interaction counts (count here will not match rows in interaction table
+        # because ligand atoms are not counted, and results deduplicated on receptor atom)
+        # (move the counts after unique/dedup to have counts match)
+        int_count = len(type_list)
+        h_count = type_list.count("H")
+
         unique = dict.fromkeys(
             zip(
                 type_list,
@@ -167,8 +228,8 @@ class InteractionFinder:
             "residue": residues,
             "resid": resids,
             "chain": chains,
-            "count": len(types),
-            "hb_count": types.count("H"),
+            "count": int_count,
+            "hb_count": h_count,
         }
 
 
@@ -204,59 +265,12 @@ def find_interactions(
     num_hb = []
     num_interactions = []
 
-    num_atoms = mol.GetNumAtoms()
-    conf = Chem.Conformer(num_atoms)
-    # add some conformer so meeko is happy
-    for i in range(num_atoms):
-        conf.SetAtomPosition(i, Geometry.Point3D(0, 0, 0))
-    # Add conformer to molecule
-    mol.AddConformer(conf, assignId=True)
-    mol = Chem.AddHs(mol, addCoords=True)
-
-    # The molsetup (and thus atom_types) depends only on mol's topology, which is
-    # identical for every pose here — pose coordinates are applied separately in
-    # find_pose_interactions, never to `mol`. So prepare once instead of per pose
-    # (MoleculePreparation was ~3/4 of this function's runtime when looped).
-    mk_prep = MoleculePreparation(rigid_macrocycles=True)
-    molsetup_list = mk_prep(mol)
-    if not molsetup_list:
-        ligname = (
-            poses_coordinates[0][0].get("ligname", "?") if poses_coordinates else "?"
-        )
-        logger.warning(
-            f"MoleculePreparation returned no setups for ligand {ligname} — skipping interaction calculation for all of its poses"
-        )
-
-        def empty(pose_meta):
-            return {**InteractionFinder._empty_result(), "id": pose_meta}
-
-        n = len(poses_coordinates)
-        return [empty(pm) for pm, _ in poses_coordinates], [0] * n, [0] * n
-
-    molsetup = molsetup_list[0]
-    # Full length, with None where meeko ignores an atom (merged non-polar hydrogens).
-    # find_pose_interactions indexes pose coordinates by position in this list, so a
-    # compacted list silently shifts every atom after the first ignored one onto another
-    # atom's coordinates. Heavy atoms survive that (they lead the stored molecule) but
-    # polar hydrogens do not, and they are the ligand's only H-bond donors.
-    atom_types = [None] * num_atoms
-    for i, atom in enumerate(molsetup.atoms):
-        if not atom.is_ignore and i < num_atoms:
-            atom_types[i] = atom.atom_type
-    if mol.GetNumAtoms() != num_atoms:
-        ligname = (
-            poses_coordinates[0][0].get("ligname", "?") if poses_coordinates else "?"
-        )
-        logger.warning(
-            f"Ligand {ligname}: AddHs added {mol.GetNumAtoms() - num_atoms} hydrogen(s), "
-            "which have no stored coordinates and are excluded from interactions. "
-            "Hydrogen bonds donated by the ligand may be incomplete."
-        )
-
     # calculate interactions for each pose
+    h_don_idx,h_acc_idx,vdw_idx = interaction_finder.ligand_interaction_atoms(mol)
+
     for pose_meta, coords in poses_coordinates:
         pose_interactions = interaction_finder.find_pose_interactions(
-            atom_types, coords
+             h_don_idx,h_acc_idx,vdw_idx, coords
         )
         logger.debug(
             f"Ligand {pose_meta.get('ligname', '?')} pose {pose_meta.get('pose_rank', '?')}: {pose_interactions.get('count', 0)} interactions found"
