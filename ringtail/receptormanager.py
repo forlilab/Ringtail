@@ -195,6 +195,20 @@ _RECEPTOR_DTYPE = [
     ("atom_type", "U2"),
 ]
 
+def _annotate_receptor_atoms(atoms: np.ndarray) -> dict[str, set[int]]:
+    """Bucket receptor atoms by AD4 type, keyed by row position in `atoms`.
+
+    One bucket per atom type, straight out of _ATOM_PROPERTY_DEFINITIONS, so the sets
+    are disjoint -> an HD is a donor and nothing else, an OA an acceptor and nothing else.
+    From meeko's classification 
+
+    Unknown atom types land in vdw 
+    """
+    annotations = {"hb_acc": set(), "hb_don": set(), "vdw": set(), "metal": set()}
+    for row, atom_type in enumerate(atoms["atom_type"]):
+        annotations[_ATOM_PROPERTY_DEFINITIONS.get(str(atom_type), "vdw")].add(row)
+    return annotations
+
 
 def receptor_atoms_from_pdbqt_string(
     pdbqt_string: str,
@@ -233,15 +247,7 @@ def receptor_atoms_from_pdbqt_string(
             atom_type = line[77:79].strip()
 
             if not atom_type in pseudo_atom_types:
-                # Key the annotations by ROW POSITION in `atoms`, not by `idx`.
-                # `idx` counts ATOM lines and keeps incrementing for skipped
-                # pseudo-atoms, so it drifts ahead of the row once a TZ is seen.
-                # _KDTree is built over the rows, and query_ball_point returns
-                # rows, so annotations have to be in row space for the two to
-                # intersect correctly. The `idx` field on the row still records
-                # the line position.
-                row = len(atoms)
-                atom_annotations[_ATOM_PROPERTY_DEFINITIONS[atom_type]].add(row)
+                # key annotations by ROW POSITION in `atoms`, not by `idx`
                 atoms.append(
                     (
                         idx,
@@ -256,15 +262,13 @@ def receptor_atoms_from_pdbqt_string(
                 )
 
             idx += 1
-    # Guard on rows kept, not on `idx`: a file of nothing but TZ pseudo-atoms
-    # advances idx while appending nothing, and would reach cKDTree empty.
     if not atoms:
         raise ReceptorError("no receptor atoms found in pdbqt string")
     atoms = np.array(atoms, dtype=_RECEPTOR_DTYPE)
 
     KDTree = spatial.cKDTree(atoms["xyz"])
 
-    return atoms, atom_annotations, KDTree
+    return atoms, _annotate_receptor_atoms(atoms), KDTree
 
 
 def receptor_atoms_from_polymer(
@@ -286,10 +290,6 @@ def receptor_atoms_from_polymer(
     records = []
     serial = 0
     for res_id, monomer in polymer.get_valid_monomers().items():
-        # Mirror write_from_polymer exactly: every valid monomer contributes its
-        # non-ignored, non-flexres atoms to the rigid receptor — including the
-        # backbone of flexible residues. Only per-atom is_flexres_atom is skipped,
-        # NOT the whole movable monomer.
         chain, resnum = res_id.split(":")
         if resnum and resnum[-1].isalpha():
             resnum = resnum[:-1]
@@ -320,9 +320,6 @@ def receptor_atoms_from_polymer(
         raise ReceptorError("No rigid receptor atoms found in polymer")
     atoms = np.array(records, dtype=_RECEPTOR_DTYPE)
     kdtree = spatial.cKDTree(atoms["xyz"])
-    annotations = {"hb_acc": set(), "hb_don": set(), "vdw": set(), "metal": set()}
-    for i, atom_type in enumerate(atoms["atom_type"]):
-        annotations[_ATOM_PROPERTY_DEFINITIONS[str(atom_type)]].add(i)
 
-    return atoms, annotations, kdtree
+    return atoms, _annotate_receptor_atoms(atoms), kdtree
 
