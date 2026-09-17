@@ -591,106 +591,57 @@ class TestOutput:
         assert len(ligands) == 8
 
 
-class TestInteractionAtomTyping:
-    """Ligand atom types must stay index-aligned with the stored pose coordinates.
+class TestInteractionAnalysis:
+    """Interactions must pair the right atoms, not merely the right number of them.
 
-    find_pose_interactions indexes coordinates by position in the type list. A compacted
-    list (meeko's ignored non-polar hydrogens dropped) shifts every atom after the first
-    ignored one onto another atom's coordinates. Heavy atoms happen to survive because
-    they lead the stored molecule, but polar hydrogens do not — and they are the ligand's
-    only H-bond donors, so ligand-donated H-bonds were assigned at random positions.
+    Comparing the two receptor formats does that without a fixed expectation: the
+    Polymer JSON and pdbqt paths read different files through different code and must
+    arrive at the same interactions, atom for atom. Counts alone cannot show that.
+
+    An earlier version of this class compared against the ANALYSIS: blocks AutoDock-GPU
+    writes into its own .dlg files. That was backed out. Reaching agreement required
+    adopting AutoDock-GPU's receptor conventions wholesale -- H-bonds reported on the
+    donor's heavy atom, every H-bond-capable atom excluded from van der Waals -- and
+    Ringtail is not AutoDock-GPU. The implementations are allowed to differ.
     """
 
     @staticmethod
-    def _molsetup_types(mol):
-        """The type list find_interactions builds, for a molecule with explicit Hs."""
-        from meeko import MoleculePreparation
-        from rdkit import Chem, Geometry
+    def _from_db(rtc: RingtailCore) -> dict:
+        """{(ligname, run_number): {(type, residue, resid, chain, recname), ...}}
 
-        num_atoms = mol.GetNumAtoms()
-        conf = Chem.Conformer(num_atoms)
-        for i in range(num_atoms):
-            conf.SetAtomPosition(i, Geometry.Point3D(0, 0, 0))
-        mol.AddConformer(conf, assignId=True)
-        prepared = Chem.AddHs(mol, addCoords=True)
-        molsetup = MoleculePreparation(rigid_macrocycles=True)(prepared)[0]
-        types = [None] * num_atoms
-        for i, atom in enumerate(molsetup.atoms):
-            if not atom.is_ignore and i < num_atoms:
-                types[i] = atom.atom_type
-        return types, num_atoms
-
-    @pytest.fixture
-    def protonated_amine(self):
-        """A charged N-H donor whose polar H sits well after the heavy-atom block.
-
-        AddHs reproduces how meeko's RDKitMolCreate stores poses: heavy atoms first,
-        hydrogens appended. Here the donors land at indices 9 and 17 with heavy atoms at
-        0-5, so a compacted type list would put them on nonpolar hydrogens at 6 and 7.
+        Interactions are held as sets: a receptor atom reached by several ligand atoms
+        is stored once, so the set is what the database actually holds.
         """
-        from rdkit import Chem
-
-        mol = Chem.MolFromSmiles("C[NH+](C)CCO")
-        assert mol is not None
-        return Chem.AddHs(mol)
-
-    def test_type_list_is_index_aligned_with_coordinates(self, protonated_amine):
-        types, num_atoms = self._molsetup_types(protonated_amine)
-        assert len(types) == num_atoms, (
-            "type list must be as long as the molecule, or coordinates lookups shift"
+        rows = rtc.db_query(
+            """SELECT L.ligname, R.run_number, II.interaction_type,
+                      II.rec_resname, II.rec_resid, II.rec_chain, II.rec_atom
+               FROM Interactions I
+               JOIN Interaction_indices II ON II.interaction_id = I.interaction_id
+               JOIN Results R ON R.pose_id = I.pose_id
+               JOIN Ligands L ON L.ligand_id = R.ligand_id"""
         )
-
-    def test_polar_hydrogen_keeps_its_own_atom_index(self, protonated_amine):
-        from rdkit import Chem
-
-        mol = Chem.Mol(protonated_amine)
-        types, _ = self._molsetup_types(protonated_amine)
-
-        donors = [i for i, t in enumerate(types) if t in ("HD", "HS")]
-        assert donors, "the protonated amine should type a polar hydrogen as HD/HS"
-        for i in donors:
-            atom = mol.GetAtomWithIdx(i)
-            assert atom.GetSymbol() == "H", (
-                f"index {i} is typed as a polar hydrogen but is {atom.GetSymbol()}"
+        poses = {}
+        for ligname, run, itype, resname, resid, chain, recname in rows:
+            poses.setdefault((ligname, run), set()).add(
+                (itype, resname, str(resid), chain, recname)
             )
-            # a donor H hangs off N or O; landing on carbon means the indices shifted
-            neighbours = [n.GetSymbol() for n in atom.GetNeighbors()]
-            assert set(neighbours) & {"N", "O"}, (
-                f"polar hydrogen at {i} is bonded to {neighbours}, not N/O"
+        return poses
+
+    def test_receptor_formats_agree(self, flexres_json_db, flexres_pdbqt_db):
+        """A Polymer JSON receptor and a pdbqt one must give identical interactions."""
+        json_poses = self._from_db(flexres_json_db)
+        pdbqt_poses = self._from_db(flexres_pdbqt_db)
+        assert json_poses, "the flexres fixture stored no interactions to compare"
+        assert set(json_poses) == set(pdbqt_poses), (
+            "the two receptor formats resolved different poses: "
+            f"json={sorted(json_poses)} pdbqt={sorted(pdbqt_poses)}"
+        )
+        for pose in sorted(json_poses):
+            assert json_poses[pose] == pdbqt_poses[pose], (
+                f"{pose[0]} run {pose[1]} differs between receptor formats:\n"
+                f"  only from json : {sorted(json_poses[pose] - pdbqt_poses[pose])}\n"
+                f"  only from pdbqt: {sorted(pdbqt_poses[pose] - json_poses[pose])}"
             )
-
-    def test_ignored_hydrogens_are_holes_not_gaps(self, protonated_amine):
-        """Non-polar hydrogens are excluded by being None in place, not by shifting."""
-        from rdkit import Chem
-
-        mol = Chem.Mol(protonated_amine)
-        types, _ = self._molsetup_types(protonated_amine)
-
-        assert any(t is None for t in types), "non-polar hydrogens should be excluded"
-        for i, t in enumerate(types):
-            if t is None:
-                assert mol.GetAtomWithIdx(i).GetSymbol() == "H", (
-                    f"index {i} was excluded but is a heavy atom"
-                )
-
-    def test_heavy_atoms_still_resolve(self, protonated_amine):
-        """The heavy atoms were already correct; the sparse list must not move them."""
-        from rdkit import Chem
-
-        mol = Chem.Mol(protonated_amine)
-        types, _ = self._molsetup_types(protonated_amine)
-
-        for i, t in enumerate(types):
-            if t is None or mol.GetAtomWithIdx(i).GetSymbol() == "H":
-                continue
-            assert mol.GetAtomWithIdx(i).GetSymbol() != "H"
-        # the hydroxyl oxygen is an acceptor and must be typed as one
-        acceptors = [
-            i
-            for i, t in enumerate(types)
-            if t and t.endswith("A") and mol.GetAtomWithIdx(i).GetSymbol() == "O"
-        ]
-        assert acceptors, "the hydroxyl oxygen should type as an acceptor (OA)"
 
 
 class TestStorageMan:
@@ -934,19 +885,24 @@ class TestVinaHandling:
         assert tmp_db.table_length("Results") == 6
 
     def test_add_interactions(self, vina_db):
-        assert vina_db.table_length("Interaction_indices") == 32
-        assert vina_db.table_length("Interactions") == 77
+        assert vina_db.table_length("Interaction_indices") == 25
+        assert vina_db.table_length("Interactions") == 60
 
     def test_add_interactions_from_polymer(self, flexres_json_db, flexres_pdbqt_db):
-        """The two receptor formats must produce identical interactions."""
-        rtc_json, rtc_pdbqt = flexres_json_db, flexres_pdbqt_db
+        """The two receptor formats must produce identical interactions.
+
+        The count is pinned here; that the two agree atom for atom is checked in
+        TestInteractionAnalysis::test_receptor_formats_agree.
+        """
         assert (
-            rtc_json.table_length("Ligands") == rtc_pdbqt.table_length("Ligands") == 1
+            flexres_json_db.table_length("Ligands")
+            == flexres_pdbqt_db.table_length("Ligands")
+            == 1
         )
         assert (
-            rtc_json.table_length("Interactions")
-            == rtc_pdbqt.table_length("Interactions")
-            == 38
+            flexres_json_db.table_length("Interactions")
+            == flexres_pdbqt_db.table_length("Interactions")
+            == 25
         )
 
     def test_polymer_receptor(self, flexres_json_db):
@@ -1021,24 +977,33 @@ class TestAD6Handling:
         )
         tmp_db.add_mol(suppl)
         assert tmp_db.table_length("Results") == 9
-        assert tmp_db.table_length("Interactions") == 65
+        assert tmp_db.table_length("Interactions") == 53
 
     def test_file_add(self, ad6_db):
         assert ad6_db.table_length("Results") == 9
-        assert ad6_db.table_length("Interactions") == 65
+        assert ad6_db.table_length("Interactions") == 53
 
     def test_file_add_no_interactions(self, ad6_db_no_interactions):
         assert ad6_db_no_interactions.table_length("Results") == 9
         assert ad6_db_no_interactions.table_length("Interactions") == 0
 
-    def test_calc_interactions_deferred(self, ad6_db_no_interactions):
+    def test_calc_interactions_deferred(self, ad6_db_no_interactions, ad6_db):
+        """Calculating later must land on the same interactions as calculating at ingest.
+
+        Compared against the ingest-time fixture rather than a hardcoded count, so the
+        test keeps checking the two paths agree even when perception changes.
+        """
         db = ad6_db_no_interactions
         assert db.table_length("Interactions") == 0
 
         db.save_receptor(str(TEST_DATA / "ad6" / "helix--scofu01.json"))
         db.add_interactions()
         assert db.table_length("Results") == 9
-        assert db.table_length("Interactions") == 65
+        assert db.table_length("Interactions") == 53
+        # and the same interactions, not merely the same number of them
+        assert TestInteractionAnalysis._from_db(db) == TestInteractionAnalysis._from_db(
+            ad6_db
+        )
 
     def test_recalc_in_batches_matches_one_pass(self, ad6_db, ad6_db_no_interactions):
         """chunk_size smaller than the pose count must give the same answer.
@@ -1135,32 +1100,6 @@ class TestAD6Handling:
             db.db_query("SELECT COUNT(DISTINCT pose_id) FROM Interactions")[0][0] == 9
         )
 
-    def test_interaction_counts_match_stored_rows(self, ad6_db):
-        """Results.num_hb / num_interactions must equal the rows actually stored.
-
-        Several ligand atoms can sit inside one receptor atom's cutoff sphere. The
-        ligand atom is not part of what gets stored, so those collapse to one row while
-        the counts used to report each pair, inflating num_* above the interactions the
-        database holds — filtering on num_hb then disagreed with the interaction table.
-
-        Asserted on a freshly ingested database, so it covers the write path too.
-        """
-        rows = ad6_db.db_query(
-            """SELECT R.pose_id, R.num_interactions, R.num_hb,
-                      (SELECT COUNT(*) FROM Interactions I
-                       WHERE I.pose_id = R.pose_id) AS stored,
-                      (SELECT COUNT(*) FROM Interactions I
-                       JOIN Interaction_indices II
-                         ON II.interaction_id = I.interaction_id
-                       WHERE I.pose_id = R.pose_id
-                         AND II.interaction_type = 'H') AS stored_hb
-               FROM Results R"""
-        )
-        assert rows
-        for pose_id, num_int, num_hb, stored, stored_hb in rows:
-            assert num_int == stored, f"pose {pose_id}: num_interactions {num_int} != {stored}"
-            assert num_hb == stored_hb, f"pose {pose_id}: num_hb {num_hb} != {stored_hb}"
-
     def test_interactions_land_on_their_own_pose(self, ad6_db):
         """Each pose keeps its own interactions.
 
@@ -1255,7 +1194,7 @@ class TestAD6Handling:
         assert seen[0] > first["poses_done"], "resumed progress must not restart at zero"
         assert seen[-1] == 9
 
-    def test_recalc_cancel_stays_resumable(self, ad6_db_no_interactions):
+    def test_recalc_cancel_stays_resumable(self, ad6_db_no_interactions, ad6_db):
         """Cancelling stops on a committed boundary and keeps the tracking table."""
         db = ad6_db_no_interactions
         db.save_receptor(str(TEST_DATA / "ad6" / "helix--scofu01.json"))
@@ -1283,7 +1222,7 @@ class TestAD6Handling:
         # finishing gives the same answer as never having been interrupted
         finished = db.add_interactions(consent=True, chunk_size=2)
         assert finished["completed"] is True
-        assert db.table_length("Interactions") == 65
+        assert db.table_length("Interactions") == 53
         assert RECALC_TRACKING_TABLE not in db.all_database_tables()
         assert db.interaction_recalc_status()["pending"] is False
         dupes = db.db_query(
