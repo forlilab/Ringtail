@@ -558,7 +558,8 @@ class RingtailCore:
             receptor_string (str, optional): receptor pdbqt or polymer json string.
                 Fetched from the database if omitted.
             consent (bool): must be True to proceed when existing interactions are
-                present (recalc deletes them). Defaults to False.
+                present, since recalculating deletes them. Not needed to finish an
+                interrupted run, which deletes nothing. Defaults to False.
             chunk_size (int, optional): poses per commit. Smaller means more frequent
                 checkpoints to resume from, more frequent progress reports and a faster
                 response to should_cancel, at the cost of more commits.
@@ -571,7 +572,9 @@ class RingtailCore:
                 returns True the run stops cleanly and stays resumable. Defaults to None.
 
         Raises:
-            RTCoreError: if the existing interaction tables could not be cleared.
+            RTCoreError: if no readable receptor is stored, or if the existing
+                interaction tables could not be cleared. Both are raised before
+                anything is deleted, so the database is left as it was.
             OptionError: if a partly finished run used different cutoffs.
 
         Returns:
@@ -579,43 +582,63 @@ class RingtailCore:
                 is False when should_cancel stopped the run, in which case the tracking
                 table is left in place for a later call to pick up.
         """
-        # make sure user knows risk of calculating interaction in db with existing interactions
         track_table_name = RECALC_TRACKING_TABLE
-        if self.table_length("Interactions") > 0:
-            if not consent:
-                logger.critical(
-                    "Consent not given for deleting and re-calculating interactions, exiting."
-                )
-                return {"completed": False, "poses_done": 0, "poses_total": 0}
-            else:
-                with self.storageman as sm:
-                    # Check if track table name exist, then do not clear but use
-                    if track_table_name not in sm.tables_in_db():
-                        # Before clearing, not after: a backup taken afterwards would
-                        # be a copy of the damage it exists to undo.
-                        if backup:
-                            sm.clone()
-                        success = sm.clear_interaction_tables()
-                        if not success:
-                            raise RTCoreError(
-                                "Trouble while clearing existing interaction tables."
-                            )
-                    else:
-                        logger.info(
-                            "A table tracking processed pose interaction exists.\nWill continue processing poses and not recompute those that have already been processed."
-                        )
-        elif backup:
-            with self.storageman as sm:
-                sm.clone()
 
-        # get receptor representation
+        # The receptor is resolved and the finder built before anything is deleted.
+        # make_interaction_finder reports failure by returning None rather than
+        # raising, and find_interactions then reports zero interactions for every
+        # pose — which, once the clear below has run, is indistinguishable from a
+        # database whose ligands genuinely touch nothing. Left later, an unreadable
+        # receptor deleted every interaction, zeroed num_hb/num_interactions and
+        # still reported completed: True. So it has to stop the run here, while the
+        # database is still intact.
         if not receptor_string:
             receptor_string = self.get_receptor_object().receptor_string()
-
-        # Build the interaction finder once
+        if not receptor_string:
+            raise RTCoreError(
+                "This database has no receptor stored, so interactions cannot be "
+                "calculated. Add one with save_receptor() (or pass receptor_string) "
+                "and try again. Nothing was changed."
+            )
         interaction_finder = make_interaction_finder(
             receptor_string, [hb_cutoff, vdw_cutoff]
         )
+        if interaction_finder is None:
+            raise RTCoreError(
+                "The receptor stored in this database could not be read, so "
+                "interactions cannot be calculated; the logged warning above gives "
+                "the underlying error. Nothing was changed."
+            )
+
+        with self.storageman as sm:
+            # A previous run left its tracking table behind, so this call finishes it.
+            # Resuming only computes poses that were never reached, so it deletes
+            # nothing: it needs neither consent nor a backup, and re-cloning here
+            # would overwrite the backup the first attempt took with a copy of the
+            # half-recomputed database.
+            resuming = track_table_name in sm.tables_in_db()
+            if resuming:
+                logger.info(
+                    "A table tracking processed pose interactions exists.\nWill continue processing poses and not recompute those that have already been processed."
+                )
+            elif (sm.table_length("Interactions") or 0) > 0:
+                # make sure user knows risk of recalculating over existing interactions
+                if not consent:
+                    logger.critical(
+                        "Consent not given for deleting and re-calculating interactions, exiting."
+                    )
+                    return {"completed": False, "poses_done": 0, "poses_total": 0}
+                # Before clearing, not after: a backup taken afterwards would
+                # be a copy of the damage it exists to undo.
+                if backup:
+                    sm.clone()
+                success = sm.clear_interaction_tables()
+                if not success:
+                    raise RTCoreError(
+                        "Trouble while clearing existing interaction tables."
+                    )
+            elif backup:
+                sm.clone()
 
         with self.storageman as sm:
             # a "temporary" table that keeps track of what pose_ids have been processed

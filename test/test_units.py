@@ -14,7 +14,7 @@ from ringtail import (
     RECALC_TRACKING_TABLE,
     RingtailCore,
 )
-from ringtail.exceptions import OptionError
+from ringtail.exceptions import OptionError, RTCoreError
 
 TEST_DATA = Path(__file__).parent / "test_data"
 
@@ -1230,6 +1230,84 @@ class TestAD6Handling:
                FROM Interactions GROUP BY pose_id, interaction_id HAVING c > 1)"""
         )[0][0]
         assert dupes == 0
+
+    def test_recalc_resumes_without_consent(self, ad6_db_no_interactions):
+        """Finishing an interrupted run needs no consent, because it deletes nothing.
+
+        Consent exists to guard the delete-and-recompute. A resume only computes the
+        poses that were never reached, so requiring it there made the plain
+        ``add_interactions()`` call the docs show return a silent no-op -- reporting
+        poses_done: 0 and logging "Consent not given for deleting and re-calculating
+        interactions" about a call that would not have deleted anything.
+        """
+        db = ad6_db_no_interactions
+        db.save_receptor(str(TEST_DATA / "ad6" / "helix--scofu01.json"))
+
+        calls = {"n": 0}
+
+        def cancel_after_one_batch():
+            calls["n"] += 1
+            return calls["n"] > 1
+
+        first = db.add_interactions(chunk_size=2, should_cancel=cancel_after_one_batch)
+        assert first["completed"] is False
+        assert db.table_length("Interactions") > 0, "partial work must be present"
+
+        second = db.add_interactions(chunk_size=2)
+        assert second == {"completed": True, "poses_done": 9, "poses_total": 9}
+        assert db.table_length("Interactions") == 53
+
+        # with the tracking table gone, consent is required again
+        assert db.add_interactions() == {
+            "completed": False,
+            "poses_done": 0,
+            "poses_total": 0,
+        }
+        assert db.table_length("Interactions") == 53
+
+    def test_recalc_without_a_receptor_raises_before_deleting(self, ad6_db):
+        """No receptor must stop the run, not silently empty the database.
+
+        make_interaction_finder reports failure by returning None, and find_interactions
+        then reports zero interactions for every pose. Checked after the tables were
+        cleared, that deleted every interaction, zeroed num_hb/num_interactions and
+        reported completed: True, with only a logged warning to say otherwise.
+        """
+        before = TestInteractionAnalysis._from_db(ad6_db)
+        counts_before = ad6_db.db_query(
+            "SELECT pose_id, num_interactions, num_hb FROM Results ORDER BY pose_id"
+        )
+        assert before
+
+        ad6_db.db_query("DELETE FROM Receptors", commit=True)
+        with pytest.raises(RTCoreError, match="no receptor"):
+            ad6_db.add_interactions(consent=True)
+
+        assert TestInteractionAnalysis._from_db(ad6_db) == before
+        assert (
+            ad6_db.db_query(
+                "SELECT pose_id, num_interactions, num_hb FROM Results ORDER BY pose_id"
+            )
+            == counts_before
+        )
+        assert RECALC_TRACKING_TABLE not in ad6_db.all_database_tables()
+
+    def test_recalc_with_an_unreadable_receptor_raises_before_deleting(self, ad6_db):
+        """Same guard, for a receptor that is stored but cannot be parsed."""
+        before = TestInteractionAnalysis._from_db(ad6_db)
+        assert before
+
+        # valid JSON, so the column accepts it on duckdb, but not a Polymer
+        ad6_db.db_query(
+            "UPDATE Receptors SET receptor_object=NULL, polymer=?",
+            ['{"not_a_polymer": 1}'],
+            commit=True,
+        )
+        with pytest.raises(RTCoreError, match="could not be read"):
+            ad6_db.add_interactions(consent=True)
+
+        assert TestInteractionAnalysis._from_db(ad6_db) == before
+        assert RECALC_TRACKING_TABLE not in ad6_db.all_database_tables()
 
     def test_recalc_groups_poses_by_ligand(self, ad6_db, ad6_db_no_interactions):
         """Grouping a ligand's poses into one call must not change the answer.

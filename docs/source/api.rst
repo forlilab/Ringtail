@@ -455,7 +455,9 @@ If you have created a Ringtail database with ``calculate_interactions=False``, o
 
     rtc.add_interactions(hb_cutoff=3.9,vdw_cutoff = 4.2)
 
-Recalculating over a database that already has interactions deletes them, so it requires ``consent=True``. Pass ``backup=True`` to have Ringtail clone the database before it deletes anything; the copy is written next to the original with ``.bk`` appended. There is also a command line equivalent, ``rt_recalc_interactions``, which takes one or more databases.
+Recalculating over a database that already has interactions deletes them, so it requires ``consent=True``. Finishing an interrupted run does not, since it only computes the poses that were never reached. Pass ``backup=True`` to have Ringtail clone the database before it deletes anything; the copy is written next to the original with ``.bk`` appended. There is also a command line equivalent, ``rt_recalc_interactions``, which takes one or more databases.
+
+The interactions are computed against the receptor stored in the database, so one has to be there: a database built without ``save_receptor=True`` has no receptor, which is easy to end up with since ``receptor_file`` is optional for vina. ``add_interactions`` raises ``RTCoreError`` in that case, and does so before deleting anything, so nothing is lost — add the receptor with ``save_receptor`` and call it again.
 
 Because the calculation is long, it can report progress and be stopped. ``progress_callback`` is called with ``(poses_done, poses_total)`` after every committed batch, and ``should_cancel`` is checked between batches; returning ``True`` from it stops the run on a committed boundary and leaves the database resumable. The method returns a dict saying what happened.
 
