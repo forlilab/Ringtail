@@ -974,6 +974,58 @@ class TestVinaHandling:
             assert warning in f.read()
 
 
+class TestAD6DeprecatedProperties:
+    """The pre-release AD6 score property, and what happens when no score is present.
+
+    Both are parser-level, so they run without ingesting anything.
+    """
+
+    @staticmethod
+    def _mol(name="lig", **props):
+        from rdkit import Chem
+        from rdkit.Chem import AllChem
+
+        mol = Chem.AddHs(Chem.MolFromSmiles("CCO"))
+        AllChem.EmbedMolecule(mol, randomSeed=0xC0FFEE)
+        mol.SetProp("_Name", name)
+        for key, value in props.items():
+            mol.SetProp(key, str(value))
+        return mol
+
+    def test_deprecated_score_alias_is_read(self):
+        """adng_free_energy was the pre-release spelling of the score property."""
+        pytest.importorskip("rdkit")
+        from ringtail.parsers import process_docked_mol
+
+        mol = self._mol(adng_free_energy=-7.5, pose_rank=1)
+        parsed = process_docked_mol(mol, calculate_interactions=False)
+        assert parsed["poses"][0].docking_score == -7.5
+
+    def test_current_name_wins_over_the_deprecated_one(self):
+        pytest.importorskip("rdkit")
+        from ringtail.parsers import db_to_ad6, process_docked_mol
+
+        mol = self._mol(pose_rank=1, adng_free_energy=-1.0)
+        mol.SetProp(db_to_ad6("docking_score"), "-9.0")
+        parsed = process_docked_mol(mol, calculate_interactions=False)
+        assert parsed["poses"][0].docking_score == -9.0
+
+    def test_no_score_property_is_a_parsing_error(self):
+        """Without this guard the failure surfaced from the leff division as
+        "unsupported operand type(s) for /: 'NoneType' and 'int'"."""
+        pytest.importorskip("rdkit")
+        from ringtail.exceptions import FileParsingErrorSdf
+        from ringtail.parsers import process_docked_mol
+
+        mol = self._mol(pose_rank=1, some_other_property="x")
+        with pytest.raises(FileParsingErrorSdf) as excinfo:
+            process_docked_mol(mol, calculate_interactions=False)
+        message = str(excinfo.value)
+        assert "lig" in message
+        # the property list is the actionable part: the usual cause is a renamed score
+        assert "some_other_property" in message
+
+
 class TestAD6Handling:
     def test_stream(self, tmp_db):
         rdkit = pytest.importorskip("rdkit")
