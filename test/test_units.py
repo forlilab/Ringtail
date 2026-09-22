@@ -19,6 +19,14 @@ from ringtail.exceptions import OptionError, RTCoreError
 TEST_DATA = Path(__file__).parent / "test_data"
 
 
+def duplicate_pairs(rtc) -> int:
+    """How many (pose_id, interaction_id) pairs are stored more than once."""
+    return rtc.db_query(
+        """SELECT COUNT(*) FROM (SELECT pose_id, interaction_id, COUNT(*) c
+           FROM Interactions GROUP BY pose_id, interaction_id HAVING c > 1)"""
+    )[0][0]
+
+
 class TestCoreOperations:
     """Basic write and read operations using adgpu (default mode)."""
 
@@ -1060,11 +1068,7 @@ class TestAD6Handling:
         assert (
             db.db_query("SELECT COUNT(DISTINCT pose_id) FROM Interactions")[0][0] == 9
         )
-        dupes = db.db_query(
-            """SELECT COUNT(*) FROM (SELECT pose_id, interaction_id, COUNT(*) c
-               FROM Interactions GROUP BY pose_id, interaction_id HAVING c > 1)"""
-        )[0][0]
-        assert dupes == 0
+        assert duplicate_pairs(db) == 0
 
     def test_recalc_refuses_to_resume_with_different_cutoffs(
         self, ad6_db_no_interactions
@@ -1120,11 +1124,7 @@ class TestAD6Handling:
         )
         assert len({rank for _, rank, _ in rows}) > 1, "need >1 rank to be meaningful"
 
-        dupes = ad6_db.db_query(
-            """SELECT COUNT(*) FROM (SELECT pose_id, interaction_id, COUNT(*) c
-               FROM Interactions GROUP BY pose_id, interaction_id HAVING c > 1)"""
-        )[0][0]
-        assert dupes == 0
+        assert duplicate_pairs(ad6_db) == 0
 
     def test_add_interactions_recalc_larger_cutoffs(self, ad6_db):
         # the fixture is populated at the default cutoffs (3.7 HB, 4.0 VDW)
@@ -1225,11 +1225,7 @@ class TestAD6Handling:
         assert db.table_length("Interactions") == 53
         assert RECALC_TRACKING_TABLE not in db.all_database_tables()
         assert db.interaction_recalc_status()["pending"] is False
-        dupes = db.db_query(
-            """SELECT COUNT(*) FROM (SELECT pose_id, interaction_id, COUNT(*) c
-               FROM Interactions GROUP BY pose_id, interaction_id HAVING c > 1)"""
-        )[0][0]
-        assert dupes == 0
+        assert duplicate_pairs(db) == 0
 
     def test_recalc_resumes_without_consent(self, ad6_db_no_interactions):
         """Finishing an interrupted run needs no consent, because it deletes nothing.

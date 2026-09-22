@@ -203,7 +203,6 @@ class InteractionFinder:
 
         # get full interaction counts (count here will not match rows in interaction table
         # because ligand atoms are not counted, and results deduplicated on receptor atom)
-        # (move the counts after unique/dedup to have counts match)
         int_count = len(type_list)
         h_count = type_list.count("H")
 

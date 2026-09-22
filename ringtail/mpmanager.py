@@ -15,7 +15,7 @@ from .mpreaderwriter import Writer
 from .logutils import get_logger
 
 logger = get_logger(__name__)
-from .exceptions import MultiprocessingError
+from .exceptions import MultiprocessingError, OptionError
 import traceback
 from datetime import datetime
 import multiprocessing as mp
@@ -257,6 +257,11 @@ class MPManager:
             MultiprocessingError
         """
 
+        if not os.path.isfile(filename):
+            raise OptionError(
+                f"{filename} is not a docking results file, a directory, or a file "
+                f"list, and does not exist as a path."
+            )
         lig_accepted = []
         c = 0
         with open(filename, "r") as fp:

@@ -3,9 +3,11 @@
 #
 # Ringtail virtual screening manager
 #
+import copy
 import itertools
 import glob
 import os
+import re
 from typing import Callable, Union, NamedTuple
 import functools
 from collections.abc import Iterable
@@ -779,6 +781,7 @@ class RingtailCore:
                 "percentiles": percentiles,
             }
 
+    @_wrap_exceptions
     def filter(
         self,
         filters: Union[Filters, dict] = None,
@@ -972,6 +975,7 @@ class RingtailCore:
             print_string = ""
         # else produce a bookmark for each interaction combination
         else:
+            union_filters = filters.leaf.asdict()
             for ic_idx, combination in enumerate(interaction_combs):
 
                 filters_copy = filters.leaf.asdict()
@@ -1012,7 +1016,7 @@ class RingtailCore:
             with self.storageman:
                 num_passing_ligands, output_bookmark = (
                     self.storageman.get_maxmiss_union(
-                        len(interaction_combs), output_bookmark, filters_copy
+                        len(interaction_combs), output_bookmark, union_filters
                     )
                 )
             # union result is the pre-cluster input for the max_miss path
@@ -1449,6 +1453,11 @@ class RingtailCore:
             )
             return
         with self.storageman:
+            if self.storageman.table_length(bookmark_name) == 0:
+                logger.warning(
+                    f"No poses in bookmark '{bookmark_name}'. Database not exported."
+                )
+                return None
             self.storageman.create_subset_database(bookmark_name, db_filepath)
 
         return db_filepath
@@ -1841,10 +1850,10 @@ class RingtailCore:
     @_wrap_exceptions
     def get_candidate_lignames(self) -> list[str]:
         """
-        #TODO doc string
+        Ligand names that have at least one pose in the screening candidate set.
 
         Returns:
-            list[str]: _description_
+            list[str]: distinct ligand names
         """
         with self.storageman as sm:
             return sm.get_candidate_lignames()
@@ -2310,7 +2319,7 @@ class RingtailCore:
                 try:
                     sm.merge_database(merging_db=merging_db)
                     logger.info(f"Successfully merged {merging_db}.")
-                except MergeError as e:
+                except (MergeError, StorageError) as e:
                     logger.error(f"Database {merging_db} failed to merge: {e}")
                     failed.append((merging_db, str(e)))
 
@@ -2321,7 +2330,8 @@ class RingtailCore:
     @_wrap_exceptions
     def reset_screening_progress(self):
         """
-        #TODO doc string
+        Clear manual screening progress: Accepted, Maybe and Rejected assignments
+        and any pose comments. Filters and bookmarks are untouched.
         """
         with self.storageman as sm:
             sm.reset_screening_tables()
@@ -2654,11 +2664,13 @@ class RingtailCore:
         Returns:
             dict: filters for storageman
         """
+        filters = copy.deepcopy(filters)
         for itype in Filters.get_filter_keys("interaction"):
-            itype_interactions = filters[itype]
-            for interaction in itype_interactions:
-                if itype + "-" + interaction[0] not in interaction_combination:
-                    filters[itype].remove(interaction)
+            filters[itype] = [
+                interaction
+                for interaction in filters[itype]
+                if itype + "-" + interaction[0] in interaction_combination
+            ]
         # we want a match for all interactions when enumerating combinations
         filters["max_miss"] = 0
 
@@ -2680,25 +2692,13 @@ class RingtailCore:
         """
         with self.storageman:
             if self.storageman.is_bookmark(bookmark_name):
-                # check if has max_miss filter
-                # TODO do I always have to do tihs check
-                bookmark_filters = self.storageman.fetch_filters_from_bookmark(
-                    bookmark_name
-                )
-                try:
-                    max_miss_present = bool(
-                        bookmark_filters["max_miss"] > 0
-                        and not bookmark_filters["enumerate_interaction_combs"]
-                        and not "_union" in bookmark_name
+                # a single enumerated combination holds only part of a max_miss search
+                combo = re.match(r"^(.*)_\d+$", bookmark_name)
+                if combo and self.storageman.is_bookmark(combo.group(1) + "_union"):
+                    logger.warning(
+                        f"'{bookmark_name}' is one interaction combination of a max_miss "
+                        f"search; '{combo.group(1)}_union' holds the full result set."
                     )
-                except KeyError:
-                    #  in case bookmark query string does not contain the phrase 'max_miss', carry on
-                    pass
-                else:
-                    if max_miss_present:
-                        logger.warning(
-                            "'max_miss' used in filtering, but the bookmark used for sdfs writing is not the union of the search"
-                        )
             # if bookmark name is not in the database
             else:
                 # does bookmark name + _union resolve the issue

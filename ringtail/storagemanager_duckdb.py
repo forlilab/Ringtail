@@ -1055,20 +1055,44 @@ class StorageManagerDuckDB(StorageManager):
             ) from e
 
     def _sync_auto_increment_state(self):
-        """Reset all sequences to current MAX values in their tables"""
-        sequence_map = {
-            "seq_dbwriteid": (DB_PROPERTIES_SCHEMA.name, "DB_write_session"),
-            "seq_ligandid": (LIGANDS_SCHEMA.name, "ligand_id"),
-            "seq_poseid": (RESULTS_SCHEMA.name, "pose_id"),
-            "seq_interactionid": (INTERACTION_INDICES_SCHEMA.name, "interaction_id"),
-            "seq_interactionposeid": (INTERACTIONS_SCHEMA.name, "interaction_pose_id"),
-        }
-        for seq_name, (table, column) in sequence_map.items():
+        """Advance sequences that lag behind the MAX id in their table."""
+        for table, column in (
+            (DB_PROPERTIES_SCHEMA.name, "DB_write_session"),
+            (LIGANDS_SCHEMA.name, "ligand_id"),
+            (RESULTS_SCHEMA.name, "pose_id"),
+            (INTERACTION_INDICES_SCHEMA.name, "interaction_id"),
+            (INTERACTIONS_SCHEMA.name, "interaction_pose_id"),
+        ):
+            seq_name = f"seq_{table.lower()}_{column.lower()}"
             max_val = self.conn.execute(
                 f"SELECT COALESCE(MAX({column}), 0) FROM {table}"
             ).fetchone()[0]
-            self.conn.execute(f"DROP SEQUENCE IF EXISTS {seq_name};")
-            self.conn.execute(f"CREATE SEQUENCE {seq_name} START {max_val + 1};")
+            row = self.conn.execute(
+                "SELECT last_value, start_value FROM duckdb_sequences() "
+                "WHERE sequence_name = ?",
+                (seq_name,),
+            ).fetchone()
+            if row is None:
+                continue
+            last_value, start_value = row
+            current = last_value if last_value is not None else start_value - 1
+            if current >= max_val:
+                continue
+            # duckdb cannot restart a sequence a column default references
+            replacement = f"{seq_name}_sync{max_val}"
+            try:
+                self.conn.execute(
+                    f"CREATE SEQUENCE IF NOT EXISTS {replacement} START {max_val + 1};"
+                )
+                self.conn.execute(
+                    f"ALTER TABLE {table} ALTER COLUMN {column} "
+                    f"SET DEFAULT nextval('{replacement}');"
+                )
+            except duckdb.Error as e:
+                logger.warning(
+                    f"Could not resync {seq_name} (at {current}, max {max_val}): {e}. "
+                    f"Merge into a freshly created database instead."
+                )
 
     def _rollback_merge(self, merge_id: int):
         """
@@ -1433,10 +1457,10 @@ class StorageManagerDuckDB(StorageManager):
         return backup_name
 
     def convert_pose_coordinates_to_native(self):
-        """DuckDB cannot ALTER/DROP a column on a table referenced by foreign keys
-        (Interactions -> Results.pose_id), so an in-place conversion is impossible.
-        The upgrade requires a full recreate into a fresh native-format database
-        (which also compacts the file ~3-5x).
+        """No-op for DuckDB databases written by this version: pose_coordinates is
+        already a native FLOAT[][]. Only pre-release v3-alpha files hold JSON text,
+        and those need a full recreate, since DuckDB cannot ALTER a column on a
+        table other tables reference by foreign key.
         """
         dtype = self.conn.execute(
             "SELECT data_type FROM information_schema.columns "
@@ -1446,8 +1470,9 @@ class StorageManagerDuckDB(StorageManager):
             logger.info("pose_coordinates is already a native array; nothing to do.")
             return
         raise NotImplementedError(
-            "DuckDB pose_coordinates conversion must recreate the database (DuckDB "
-            "cannot ALTER a foreign-key-referenced table)."
+            "This DuckDB database stores pose_coordinates as JSON text, which only "
+            "pre-release v3-alpha files do. Converting requires recreating the "
+            "database; ask your package administrator for rt_upgrade_from_v3alpha.py."
         )
 
     def _create_connection(self):
@@ -1486,15 +1511,14 @@ class StorageManagerDuckDB(StorageManager):
     ):
         """
         Cleans up storage, especially useful for situations where two databases
-        hvae been connected/attached. Will detach the database, reindex main database,
-        and vacuum the file if requested.
+        have been connected/attached. Will detach the database.
 
         Args:
             attached_db (str, optional): Name of attached database, if any. Defaults to None.
-            vacuum (bool, optional): not used for duckdb, present for signature compatibility
-            reindex (bool, optional): not used for duckdb, present for signature compatibility
+            vacuum (bool, optional): for sqlite compatibility. duckdb VACUUM only
+                rebuilds statistics; compacting a file needs COPY FROM DATABASE.
+            reindex (bool, optional): for sqlite compatibility, duckdb manages its own
         """
-        # TODO vacuum?
         if attached_db_alias is not None:
             self.detach_db(attached_db_alias)
 
@@ -1620,11 +1644,11 @@ class StorageManagerDuckDB(StorageManager):
     def _remove_screening_tables(self):
         self._delete_table(POSE_CLUSTERS_SCHEMA.name)
         self._delete_table(CLUSTER_GROUPS_SCHEMA.name)
-        self.db_query("DROP SEQUENCE IF EXISTS seq_clusterid;")
         self._delete_table(CLUSTERS_SCHEMA.name)
+        self.db_query("DROP SEQUENCE IF EXISTS seq_clusters_cluster_id;")
         self._delete_table(FILTERED_POSES_SCHEMA.name)
         self._delete_table(FILTERS_SCHEMA.name)
-        self.db_query("DROP SEQUENCE IF EXISTS seq_filterid;")
+        self.db_query("DROP SEQUENCE IF EXISTS seq_filters_filter_id;")
         self._delete_table("Accepted")
         self._delete_table("Maybe")
         self._delete_table("Rejected")
@@ -1632,7 +1656,7 @@ class StorageManagerDuckDB(StorageManager):
 
     def _create_screening_tables(self):
         """
-        #TODO doc string
+        Create the filtering, status and GUI tables a screening session needs.
         """
         self._create_filtering_tables()
         self._create_status_tables()

@@ -78,13 +78,6 @@ class StorageManagerSQLite(StorageManager):
             return np.frombuffer(stored, dtype=np.float32).reshape(-1, 3).tolist()
         return json.loads(stored)
 
-    # "db_schema_ver":list("compatible code versions")
-    _db_schema_code_compatibility = {
-        "1.0.0": ["1.0.0"],
-        "1.1.0": ["1.1.0"],
-        "2.0.0": ["2.0.0", "2.1.0", "2.1.1", "2.1.2"],
-        "3.0.0": ["3.0.0"],
-    }
     QueryBuilder = QueryBuilderSQLite
 
     def __init__(
@@ -1405,28 +1398,10 @@ class StorageManagerSQLite(StorageManager):
         logger.info(f"Database {self.db_file} was backed up to {backup_name}.")
 
     def _set_ringtail_db_schema_version(self, db_version: str = "3.0.0"):
+        """Stamp PRAGMA user_version. Only the intermediate steps of the v1/v2
+        upgrade chain still do this; ringtail_schema_version is authoritative.
         """
-        Will check current storage manager db schema version and only set if it
-        is compatible with the code base version (i.e., version(ringtail)).
-
-        Args:
-            db_version (str, optional): _description_. Defaults to "3.0.0".
-
-        Raises:
-            StorageError: _description_
-        """
-
-        # check that code base is compatible with db schema version
-        code_version = version("ringtail")
-        if code_version in self._db_schema_code_compatibility[db_version]:
-            rtdb_version = db_version.replace(".", "")
-            # if so, proceed to set db schema version
-            self.conn.execute(f"PRAGMA user_version = {rtdb_version}")
-            logger.info("Database version set to {0}".format(rtdb_version))
-        else:
-            raise StorageError(
-                f"Code base version {code_version} is not compatible with database schema version {db_version}."
-            )
+        self.conn.execute(f"PRAGMA user_version = {db_version.replace('.', '')}")
 
     def _legacy_pragma_version(self) -> str:
         """Read the legacy PRAGMA user_version of a pre-versioning SQLite database.
@@ -1881,7 +1856,8 @@ class StorageManagerSQLite(StorageManager):
         # build new indices if you got this far successfully
         self._create_indices()
         self.db_query("REINDEX")
-        self._set_ringtail_db_schema_version("3.0.0")
+        self._create_schema_version_table()
+        self._stamp_schema_version("3.0.0")
         self.conn.commit()
 
     def _drop_views(self, db_alias: str = None):
@@ -2018,9 +1994,10 @@ class StorageManagerSQLite(StorageManager):
             DatabaseInsertionError
         """
         try:
+            # sqlite refuses to VACUUM inside an open transaction
+            self.conn.commit()
             cur = self.conn.cursor()
             cur.execute("VACUUM;")
-            self.conn.commit()
             cur.close()
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError(f"Error while vacuuming DB") from e
@@ -2133,7 +2110,7 @@ class StorageManagerSQLite(StorageManager):
 
     def _create_screening_tables(self):
         """
-        #TODO doc string
+        Create the filtering, status and GUI tables a screening session needs.
         """
         self._create_filtering_tables()
         self._create_status_tables()

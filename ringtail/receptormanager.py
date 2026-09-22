@@ -17,20 +17,6 @@ import numpy as np
 from scipy import spatial
 
 
-#I think I'd like to move all receptor stuff here, and build a live meeko model, like
-# the code right here is the meeko interface? 
-
-# And I think i want a receptor object, and then they both provide the same api for the 
-# interaction analysis
-
-
-
-       # TODO probably wanna use polymer if possible, as that can give smarts more easily
-        # and crutch if pdbqt -> already methods to get atoms from each, so can lean on the old method
-        # which will be ported from meeko anyways so I have control
-        # https://github.com/forlilab/Meeko/blob/develop/meeko/data/params/vina_params.json
-    
-
 
 @dataclass(frozen=True)
 class ReceptorData:

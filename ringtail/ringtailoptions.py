@@ -76,7 +76,6 @@ def validate_file_pattern(docking_mode: str, file_pattern: str = None) -> str:
 
 @dataclass
 class RingtailDefaults:
-    # maybe reconsider
     docking_mode: str = "ad6"
     output_db: str = "output.db"
     storage_type: str = "duckdb"

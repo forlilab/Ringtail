@@ -11,7 +11,7 @@
 
 from pathlib import Path
 from typing import Callable, Union
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict, field, fields
 
 from .exceptions import OptionError
 from .logutils import get_logger
@@ -387,7 +387,22 @@ class Filters:
                 op=data.get("op", "and"),
                 children=[cls._child_from_dict(child) for child in children],
             )
-        return cls(children=[Filter(**data)])
+        return cls(children=[cls._leaf_from_dict(data)])
+
+    @staticmethod
+    def _leaf_from_dict(data: dict) -> "Filter":
+        """Build a leaf, reporting unknown keys as OptionError rather than TypeError.
+
+        The Filters column also holds crossref ({"wanted","unwanted"}) and cluster
+        ({"cluster_type","cutoff"}) payloads, which are not filter specifications.
+        """
+        unknown = set(data) - {f.name for f in fields(Filter)}
+        if unknown:
+            raise OptionError(
+                f"Not a filter specification: unrecognized key(s) "
+                f"{', '.join(sorted(unknown))}."
+            )
+        return Filter(**data)
 
     @classmethod
     def _child_from_dict(cls, child):
@@ -400,7 +415,7 @@ class Filters:
             )
         if "op" in child or "children" in child:
             return cls.from_dict(child)
-        return Filter(**child)
+        return cls._leaf_from_dict(child)
 
     def to_dict(self) -> dict:
         """Serialize to plain nested dicts, ready for JSON.

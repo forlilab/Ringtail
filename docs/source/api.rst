@@ -517,7 +517,10 @@ This will not delete any docking data, simply remove the association between pos
 
 Writing raw SQL
 ===============
-It's possible to perform SQL queries directly using the method ``db_query``, this assumes prior knowledge of SQL and backend dialect. The method accepts parameters, as well as having the ability to write, by committing changes, so use with caution. Ringtail does not currently have guards against writes performed usign this method (or any other direct sql access). 
+It's possible to perform SQL queries directly using the method ``db_query``, this assumes prior knowledge of SQL and backend dialect. The method accepts parameters, as well as having the ability to write, by committing changes, so use with caution.
+
+.. warning::
+    Ringtail has no guards against writes performed using this method, or any other direct SQL access. On DuckDB, statements run in autocommit unless a transaction is open, so ``commit=False`` does not prevent a write from persisting.
 
 .. code-block:: python
 

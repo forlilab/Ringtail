@@ -311,7 +311,7 @@ class StorageManager(ABC):
             list: of dependent bookmark names
         """
         cur = self.conn.execute(
-            "SELECT name FROM Filters WHERE filter_window = ?",
+            "SELECT name FROM Filters WHERE LOWER(filter_window) = ?",
             (bookmark_name.lower(),),
         )
         return [row[0].lower() for row in cur.fetchall()]
@@ -456,21 +456,36 @@ class StorageManager(ABC):
         )
 
     def rename_bookmark(self, old_name: str, new_name: str) -> None:
-        """Rename a bookmark. Clusters.cluster_window references remain valid because
-        intermediate bookmarks are never renamed — only the final cluster output is.
+        """Rename a bookmark, and repoint everything that refers to it by name.
 
         Args:
             old_name (str): current bookmark name
             new_name (str): desired bookmark name
         """
+        old_name = old_name.lower()
+        new_name = new_name.lower()
+        if old_name == new_name:
+            return
         if self.is_bookmark(new_name):
             logger.warning(
                 f"The bookmark {new_name} already exists, and will be overwritten."
             )
             self.delete_bookmark(new_name)
         self.conn.execute(
-            "UPDATE Filters SET name = ? WHERE name = ?", (new_name, old_name)
+            "UPDATE Filters SET name = ? WHERE LOWER(name) = ?", (new_name, old_name)
         )
+        # dependents record their parent by name, not by filter_id
+        self.conn.execute(
+            "UPDATE Filters SET filter_window = ? WHERE LOWER(filter_window) = ?",
+            (new_name, old_name),
+        )
+        # Clusters.name is the standardized cluster descriptor, not a bookmark;
+        # only cluster_window names a bookmark
+        if "clusters" in self.tables_in_db():
+            self.conn.execute(
+                "UPDATE Clusters SET cluster_window = ? WHERE LOWER(cluster_window) = ?",
+                (new_name, old_name),
+            )
         self.conn.commit()
         logger.info(f"Bookmark '{old_name}' renamed to '{new_name}'.")
 
@@ -1934,10 +1949,10 @@ class StorageManager(ABC):
 
     def get_candidate_lignames(self) -> list[str]:
         """
-        #TODO doc string
+        Ligand names with at least one pose in the screening candidate set.
 
         Returns:
-            list[str]: _description_
+            list[str]: distinct ligand names
         """
         sql = """SELECT DISTINCT ligname FROM Ligands JOIN Results ON Ligands.ligand_id = Results.ligand_id WHERE Results.pose_id IN ({0});""".format(
             CANDIDATES_SUBQ
@@ -3539,7 +3554,7 @@ class StorageManager(ABC):
             int: number of passing poses
         """
         # make sure bookmark name is not a table name
-        if name in self.tables_in_db():
+        if name.lower() in self.tables_in_db():
             raise OptionError(
                 f"Bookmark name {name} is the same as an existing table in the database, and cannot be used."
             )
@@ -3567,7 +3582,13 @@ class StorageManager(ABC):
         # insert filter info, return filter_id
         filter_id = self.conn.execute(
             insert_query.build()[0],
-            (new_filter_id, name.lower(), query, json.dumps(filters), input_bookmark),
+            (
+                new_filter_id,
+                name.lower(),
+                query,
+                json.dumps(filters),
+                input_bookmark.lower(),
+            ),
         ).fetchone()[0]
 
         # single-pass INSERT — no COUNT pre-flight. SQLite also stores ligand_id
