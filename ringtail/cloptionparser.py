@@ -67,7 +67,7 @@ def cmdline_parser(defaults: dict = None):
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         usage="""rt_process_vs.py [-c CONFIG] write|read OPTS  \n
-                 Script to process virtual screening data by writing/filtering/exporting from database. In 'write' mode, provide docking files for writing to database with --file, --file_list, and/or --file_path. In 'read' mode, provide input database with --input_db. Please see GitHub for full usage details.""",
+                 Script to process virtual screening data by writing/filtering/exporting from a database. In 'write' mode, provide docking results with --docking_results. In 'read' mode, provide an existing database with --input_db. Please see the Ringtail documentation for full usage details.""",
         description="Package for creating, managing, and filtering databases of virtual screening results.",
         epilog="""
 
@@ -115,7 +115,7 @@ def cmdline_parser(defaults: dict = None):
     write_parser.add_argument(
         "-m",
         "--docking_mode",
-        help='specify AutoDock program used to generate results. Available options are "adgpu"/"dlg" and "vina"/"pdbqt". Vina mode will automatically change --pattern to *.pdbqt',
+        help='specify the docking program used to generate results. Canonical modes are "ad6", "adgpu", and "vina"; aliases such as "dlg" and "pdbqt" are also accepted',
         action="store",
         type=str,
         metavar="'ad6','adgpu' or 'vina'",
@@ -226,6 +226,12 @@ def cmdline_parser(defaults: dict = None):
         default="output.db",
     )
     write_parser.add_argument(
+        "-y",
+        "--yes",
+        help="If the database has bookmarks/filters, delete them (and any clusterings) without asking, so results can be added. Needed for unattended runs, where there is no terminal to answer the prompt.",
+        action="store_true",
+    )
+    write_parser.add_argument(
         "-ov",
         "--overwrite",
         help="by default, if a database or filter log file exists, it doesn't get overwritten and an error is returned; this option enable overwriting existing database and/or filter log file.",
@@ -289,7 +295,7 @@ def cmdline_parser(defaults: dict = None):
     read_parser.add_argument(
         "-s",
         "--bookmark_name",
-        help="Specify name for db view of passing results to create or export from. Can only contain lower case letters, numbers, and underscore (_)",
+        help="Specify the bookmark name for passing results or export. Can only contain lower-case letters, numbers, and underscore (_)",
         action="store",
         type=str,
         metavar="STRING",
@@ -777,7 +783,17 @@ class CLOptionParser:
                 )
 
             def _flatten(arg):
-                return list(itertools.chain.from_iterable(arg)) if arg else []
+                # command line gives [["a", "b"], ["c"]] (append + nargs), a config
+                # file gives the raw JSON value: "a", ["a", "b"], or the nested form
+                if not arg:
+                    return []
+                if isinstance(arg, str):
+                    return [arg]
+                return list(
+                    itertools.chain.from_iterable(
+                        [a] if isinstance(a, str) else a for a in arg
+                    )
+                )
 
             all_inputs = (
                 _flatten(parsed_opts.docking_results)
@@ -792,10 +808,23 @@ class CLOptionParser:
                 "save_receptor": parsed_opts.save_receptor,
             }
 
-            if isinstance(parsed_opts.interaction_tolerance, str):
-                parsed_opts.interaction_tolerance = [
-                    float(val) for val in parsed_opts.interaction_cutoffs.split(",")
-                ]
+            interaction_cutoffs = parsed_opts.interaction_cutoffs
+            if isinstance(interaction_cutoffs, str):
+                interaction_cutoffs = interaction_cutoffs.split(",")
+            try:
+                interaction_cutoffs = tuple(
+                    float(value) for value in interaction_cutoffs
+                )
+            except (TypeError, ValueError) as error:
+                raise OptionError(
+                    "--interaction_cutoffs requires two comma-separated numbers: "
+                    "<HB CUTOFF>,<VDW CUTOFF>."
+                ) from error
+            if len(interaction_cutoffs) != 2:
+                raise OptionError(
+                    "--interaction_cutoffs requires exactly two values: "
+                    "<HB CUTOFF>,<VDW CUTOFF>."
+                )
 
             self.write_options = SimpleNamespace(
                 docking_mode=docking_mode,
@@ -805,8 +834,9 @@ class CLOptionParser:
                 max_poses=parsed_opts.max_poses,
                 calculate_interactions=not parsed_opts.no_interactions,
                 interaction_tolerance=parsed_opts.interaction_tolerance,
-                interaction_cutoffs=parsed_opts.interaction_cutoffs,
+                interaction_cutoffs=interaction_cutoffs,
                 max_proc=parsed_opts.max_proc,
+                consent=parsed_opts.yes,
             )
 
         elif self.process_mode == "read":

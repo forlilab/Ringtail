@@ -3,7 +3,7 @@
 Compressing databases for transfer
 ##################################
 
-Ringtail databases from large screens (>>millions of ligands) can be tens of gigabytes. If transfer is desired or required, for example off an HPC unto a personal computer, Ringtail can shrink the file either by simply compressing, or by applying a simple filter and then compressing. The methods will be described both for the command line as well as scripting with the API. The original database is never modified destructively.
+Ringtail databases from large screens (>>millions of ligands) can be tens of gigabytes. If transfer is desired or required, for example from an HPC to a personal computer, Ringtail can shrink the file either by simply compressing, or by applying a simple filter and then compressing. The methods will be described both for the command line as well as scripting with the API. The original database is never modified destructively. Filtering briefly creates and removes a bookmark in the source database, so the source must be writable.
 
 
 From the command line
@@ -12,7 +12,7 @@ From the command line
 ``rt_compress_db`` optionally filters a database by docking score and/or ligand efficiency into a minimal database (using ``export_bookmark_db`` if filtering), then compresses it. Without any filters, it simply compresses the database as-is. The compressed database is unpacked with ``rt_decompress_db``.
 
 .. code-block:: bash
-    
+
     # just compress
     $ rt_compress_db -i screen.db
     # -> screen.db.zst
@@ -28,7 +28,7 @@ From the command line
 ``rt_compress_db`` arguments:
 
 * ``-i`` / ``--input`` — input Ringtail database (required)
-* ``-o`` / ``--output`` — compressed database path (default: input name + the method's extension)
+* ``-o`` / ``--output`` — compressed database path (default: input name + the method's extension, or ``<input stem>_filtered.db`` + extension when filtering)
 * ``-e`` / ``--eworst`` — highest/worst docking score to keep 
 * ``-le`` / ``--leworst`` — worst ligand efficiency to keep
 * ``--compressor`` — ``zstd`` (default), ``gzip``, or ``xz`` (``zstd`` falls back to ``gzip`` if the binary is missing).

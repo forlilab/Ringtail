@@ -36,6 +36,14 @@ ringtail.exceptions module
    :show-inheritance:
    :undoc-members:
 
+ringtail.filters module
+-----------------------
+
+.. automodule:: ringtail.filters
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 ringtail.interactions module
 ----------------------------
 

@@ -57,9 +57,13 @@ from .schema import (
     POSE_COMMENTS_SCHEMA,
     SCHEMA_VERSION_SCHEMA,
     SCHEMA_VERSION,
+    SQLITE_TYPES,
+    DUCKDB_TYPES,
     build_create_table,
 )
 from collections import defaultdict
+from contextlib import contextmanager
+from datetime import datetime, timezone
 
 
 class PoseData(NamedTuple):
@@ -105,6 +109,11 @@ class StorageManager(ABC):
     """
 
     dialect: ClassVar[str]
+    # replay record of the public call currently creating bookmarks, see recording_call
+    _call_record: Union[dict, None] = None
+    # whether the Filters table has been checked for the replay columns, see
+    # ensure_filters_columns
+    _filters_columns_checked: bool = False
 
     # region setup
     def __init__(self):
@@ -323,7 +332,7 @@ class StorageManager(ABC):
         "vdw_interactions",
         "hb_interactions",
         "reactive_interactions",
-        "max_miss",
+        "react_any",
     )
 
     def fetch_bookmarks_with_interaction_filters(self) -> list[str]:
@@ -339,6 +348,10 @@ class StorageManager(ABC):
         inside a boolean tree, and a flat lookup would report those bookmarks as
         interaction-free.
 
+        Also counted: interaction-fingerprint clusterings, and every bookmark derived
+        from an affected one (filtered or clustered with it as input_bookmark), since
+        its selection was made from the old interactions too.
+
         Returns:
             list: names of bookmarks filtered on any interaction criterion
         """
@@ -350,16 +363,19 @@ class StorageManager(ABC):
                         return True
                     if key in self._INTERACTION_FILTER_LISTS and value:
                         return True
+                    if key == "cluster_type" and str(value).lower() == "ifp":
+                        return True
                     if uses_interactions(value):
                         return True
             elif isinstance(node, list):
                 return any(uses_interactions(item) for item in node)
             return False
 
-        names = []
-        for name, filters in self.conn.execute(
-            "SELECT name, filters FROM Filters"
-        ).fetchall():
+        rows = self.conn.execute(
+            "SELECT name, filters, filter_window FROM Filters"
+        ).fetchall()
+        affected = set()
+        for name, filters, _ in rows:
             if not filters:
                 continue
             try:
@@ -370,8 +386,21 @@ class StorageManager(ABC):
                 logger.debug(f"Could not parse stored filters for bookmark {name}.")
                 continue
             if uses_interactions(decoded):
-                names.append(name.lower())
-        return names
+                affected.add(name.lower())
+
+        # follow the input_bookmark lineage down to everything derived from them
+        grew = True
+        while grew:
+            grew = False
+            for name, _, parent in rows:
+                if (
+                    name.lower() not in affected
+                    and parent
+                    and parent.lower() in affected
+                ):
+                    affected.add(name.lower())
+                    grew = True
+        return [name.lower() for name, _, _ in rows if name.lower() in affected]
 
     def get_passing_poses_count(
         self, bookmark_name: str, grouped_by_ligand: bool = False
@@ -454,6 +483,109 @@ class StorageManager(ABC):
         logger.info(
             f"The bookmark {bookmark_name} and its associated filter data has been deleted."
         )
+
+    @contextmanager
+    def recording_call(self, method: str, kwargs: dict):
+        """Record which public call is creating bookmarks, so each bookmark row it
+        writes stores a replayable definition and a shared call_id. A call made from
+        inside another recorded call (e.g. filter clustering its result) belongs to
+        the outer call.
+
+        Args:
+            method (str): RingtailCore method name, e.g. "filter"
+            kwargs (dict): the arguments that determine the selection
+        """
+        if self._call_record is not None:
+            yield
+            return
+        self._call_record = {
+            "definition": json.dumps({"method": method, "kwargs": kwargs}, default=str),
+            "call_id": None,  # allocated per database by the first bookmark written
+        }
+        try:
+            yield
+        finally:
+            self._call_record = None
+
+    def ensure_filters_columns(self) -> list[str]:
+        """Add the Filters columns of the current schema that an older 3.0.0
+        pre-release database lacks. Idempotent.
+
+        Returns:
+            list[str]: names of the columns that were added
+        """
+        if not self._is_table(FILTERS_SCHEMA.name):
+            return []
+        existing = {
+            row[0].lower()
+            for row in self.db_query(
+                "SELECT name FROM pragma_table_info('Filters')"
+            ).fetchall()
+        }
+        type_map = SQLITE_TYPES if self.dialect == "sqlite" else DUCKDB_TYPES
+        added = []
+        for col_name, col in FILTERS_SCHEMA.columns.items():
+            if col_name.lower() in existing:
+                continue
+            # no DEFAULT: SQLite cannot ADD COLUMN with a non-constant default, and
+            # rows written before the column existed have no creation time anyway
+            self.db_query(
+                f"ALTER TABLE Filters ADD COLUMN {col_name} {type_map[col.sql_type]}"
+            )
+            added.append(col_name)
+        if added:
+            self.conn.commit()
+            logger.info(f"Added Filters columns: {', '.join(added)}")
+        self._filters_columns_checked = True
+        return added
+
+    def has_filter_data(self) -> bool:
+        """Whether the database holds any bookmarks/filters or clusterings.
+
+        Returns:
+            bool: True if Filters or Clusters has rows
+        """
+        return any(
+            self._is_table(table)
+            and self.db_query(f"SELECT COUNT(*) FROM {table}").fetchone()[0] > 0
+            for table in (FILTERS_SCHEMA.name, CLUSTERS_SCHEMA.name)
+        )
+
+    def delete_all_filter_data(self) -> None:
+        """Delete every bookmark, filter and clustering, keeping the (empty) tables.
+
+        Status tables and pose comments are screening decisions, not filter output,
+        and are kept.
+        """
+        # children before parents, for the backends that enforce foreign keys
+        for table in (
+            POSE_CLUSTERS_SCHEMA.name,
+            CLUSTER_GROUPS_SCHEMA.name,
+            CLUSTERS_SCHEMA.name,
+            FILTERED_POSES_SCHEMA.name,
+            FILTERS_SCHEMA.name,
+        ):
+            if self._is_table(table):
+                self.db_query(f"DELETE FROM {table}")
+        self.conn.commit()
+        logger.warning("All bookmarks, filters and clusterings have been deleted.")
+
+    def _delete_pose_screening_data(self, pose_ids) -> None:
+        """Delete status assignments and comments for the given poses, e.g. before
+        those poses are replaced by duplicate_handling="replace".
+
+        Args:
+            pose_ids (Iterable[int]): poses whose status and comment to delete
+        """
+        pose_ids = tuple(pose_ids)
+        if not pose_ids:
+            return
+        placeholders = ",".join("?" for _ in pose_ids)
+        for table in ("Accepted", "Maybe", "Rejected", POSE_COMMENTS_SCHEMA.name):
+            if self._is_table(table):
+                self.db_query(
+                    f"DELETE FROM {table} WHERE pose_id IN ({placeholders})", pose_ids
+                )
 
     def rename_bookmark(self, old_name: str, new_name: str) -> None:
         """Rename a bookmark, and repoint everything that refers to it by name.
@@ -573,6 +705,21 @@ class StorageManager(ABC):
             dict: "filter" {"wanted":[list of wanted dbs],"unwanted":[list of unwanted dbs]
         """
         alternative_database_names = alternative_database_names or {}
+        # Aliases must be unique per attached database. The file stem alone is not:
+        # screens are often all named output.db in separate folders, and DuckDB also
+        # names the primary database after its own stem, so it is reserved as well.
+        used_aliases = {"main", db_alias_from_path(wanted_dbs[0][0]).lower()}
+        used_aliases.update(name.lower() for name in alternative_database_names.values())
+
+        def _unique_alias(path: str) -> str:
+            base = f"xref_{db_alias_from_path(path)}"
+            alias, n = base, 1
+            while alias.lower() in used_aliases:
+                n += 1
+                alias = f"{base}_{n}"
+            used_aliases.add(alias.lower())
+            return alias
+
         processed_wanted = []
         for index, database in enumerate(wanted_dbs):
             if index == 0:
@@ -582,7 +729,7 @@ class StorageManager(ABC):
                 if database[0] in alternative_database_names.keys():
                     db_name = alternative_database_names[database[0]]
                 else:
-                    db_name = db_alias_from_path(database[0])
+                    db_name = _unique_alias(database[0])
                     alternative_database_names[database[0]] = db_name
             processed_wanted.append(
                 (
@@ -599,7 +746,7 @@ class StorageManager(ABC):
             if database[0] in alternative_database_names.keys():
                 db_name = alternative_database_names[database[0]]
             else:
-                db_name = db_alias_from_path(database[0])
+                db_name = _unique_alias(database[0])
                 alternative_database_names[database[0]] = db_name
             processed_unwanted.append(
                 (
@@ -696,6 +843,12 @@ class StorageManager(ABC):
                 self.detach_db(db_alias)
                 # make storageman object
                 with type(self)(path) as db:
+                    # same call, but call_id is numbered per database
+                    if self._call_record is not None:
+                        db._call_record = {
+                            "definition": self._call_record["definition"],
+                            "call_id": None,
+                        }
                     db._populate_filter_tables(
                         name=new_bookmark_name,
                         query=self._crossref_bookmark_builder(
@@ -821,9 +974,9 @@ class StorageManager(ABC):
         The merging will create a new table if needed, that keeps track of the primary key
         in the original and the merged database on a per-table basis. Another table will also
         keep track of how many databases has been merged into the primary database.
-        The merging will ensure the two databases are -compatible based on the receptor only-.
-        PLEASE NOTE: If two databases has been docked with dlg and vina respectively,
-            these will be allowed to merge.
+        The merging checks that the two databases have the same receptor and a
+        compatible schema version. Databases produced from different docking formats
+        may be merged when both checks pass.
 
         Args:
             merging_db (str): path to database being merged into current
@@ -1074,7 +1227,7 @@ class StorageManager(ABC):
             "Ligands", "L", "ligand_id"
         ).WHERE(f"R.pose_id IN ({self._get_bookmark_poses_query(bookmark_name)})")
         if group_by:
-            query.GROUP_BY("L.ligname")
+            query.WHERE(self._get_best_pose_per_ligand_condition(bookmark_name))
         if order_results:
             order_by = self._format_orderby(order_results)
             if order_by:
@@ -1405,7 +1558,9 @@ class StorageManager(ABC):
         query = self.QueryBuilder()
         query.SELECT(*outfields_list).FROM("Results", "R").WHERE(
             f"R.pose_id IN ({bookmark_selection})"
-        ).JOIN("ligands", "L", "ligand_id", "results").GROUP_BY("L.ligname")
+        ).WHERE(self._get_best_pose_per_ligand_condition(bookmark_name)).JOIN(
+            "ligands", "L", "ligand_id", "results"
+        )
         if order_results:
             order_by = self._format_orderby(order_results)
             if order_by:
@@ -1960,7 +2115,9 @@ class StorageManager(ABC):
         return [row[0] for row in self.db_query(sql).fetchall()]
 
     def prepare_column_export_query(
-        self, columns: Union[dict[str, str], list[str]], bookmark: str
+        self,
+        columns: Union[dict[str, str], list[str]],
+        bookmark: Union[str, None] = None,
     ) -> str:
         """
         Writes a query based on what columns are requested. Resolves each column
@@ -1970,7 +2127,8 @@ class StorageManager(ABC):
             columns (dict | list): columns to export. A mapping of
                 ``{column: header}`` renames the column in the output; a header of
                 None, or a plain list of column names, keeps the column's own name.
-            bookmark (str): bookmark or status table to filter results by
+            bookmark (str | None): bookmark, status table, or Candidates selection
+                used to filter results. ``None`` or ``Results`` exports all results.
 
         Returns:
             str: SQL query string
@@ -2020,10 +2178,19 @@ class StorageManager(ABC):
                 "Interactions",
             )
 
-        if self.is_bookmark(bookmark):
+        if bookmark is None or bookmark.lower() == "results":
+            pass
+        elif self.is_bookmark(bookmark):
             query.IN_BOOKMARK(bookmark)
         elif self._is_statustable(bookmark):
             query.JOIN(bookmark, bookmark, "pose_id")
+        elif self._is_candidates_table(bookmark):
+            query.JOIN(CANDIDATES_SUBQ, "T", "pose_id")
+        else:
+            raise OptionError(
+                f"Requested selection {bookmark!r} is not a bookmark, status table, "
+                f"or {CANDIDATES_NAME!r}. Pass None or 'Results' to export all results."
+            )
 
         return query.build()[0]
 
@@ -2894,7 +3061,7 @@ class StorageManager(ABC):
             parentheses or WHERE keyword, or None if the group renders nothing, remaining
             RDKit ligand filters)
         """
-        criteria = filters.to_criteria(percentile_cutoff=self._calc_percentile_cutoff)
+        criteria = filters.to_criteria(percentile_cutoff=self._calc_percentile_filter)
         if not criteria:
             if strict:
                 raise OptionError("No filters were provided, cannot filter.")
@@ -3308,6 +3475,27 @@ class StorageManager(ABC):
         """
         return self.QueryBuilder.bookmark_query(bookmark_name, alias)
 
+    def _get_best_pose_per_ligand_condition(
+        self, bookmark_name: str, results_alias: str = "R"
+    ) -> str:
+        """Select the best-scoring pose in a bookmark for each ligand.
+
+        ``pose_id`` provides deterministic ordering when two poses have the same
+        docking score. The correlated subquery is supported by both storage
+        backends and avoids selecting arbitrary rows with ``GROUP BY``.
+        """
+        bookmark_poses = self._get_bookmark_poses_query(bookmark_name)
+        return f"""
+            {results_alias}.pose_id = (
+                SELECT best.pose_id
+                FROM Results AS best
+                WHERE best.ligand_id = {results_alias}.ligand_id
+                    AND best.pose_id IN ({bookmark_poses})
+                ORDER BY best.docking_score ASC, best.pose_id ASC
+                LIMIT 1
+            )
+        """
+
     def _get_scope_poses_query(self, scope_name: str, alias: str = "") -> str:
         """
         Returns a pose_id-selecting subquery for either a bookmark OR a status
@@ -3570,13 +3758,36 @@ class StorageManager(ABC):
                 "SELECT filter_id FROM Filters WHERE name = ?", (name.lower(),)
             ).fetchone()[0]
 
+        # pre-release 3.0.0 databases may lack the replay columns, add them once
+        if not self._filters_columns_checked:
+            self.ensure_filters_columns()
+
         self._begin_transaction()
         new_filter_id = self.conn.execute(
             "SELECT COALESCE(MAX(filter_id), 0) + 1 FROM Filters"
         ).fetchone()[0]
+
+        # replay record, shared by every bookmark the current public call writes
+        definition = call_id = None
+        if self._call_record is not None:
+            if self._call_record["call_id"] is None:
+                self._call_record["call_id"] = self.conn.execute(
+                    "SELECT COALESCE(MAX(call_id), 0) + 1 FROM Filters"
+                ).fetchone()[0]
+            definition = self._call_record["definition"]
+            call_id = self._call_record["call_id"]
+
         insert_query = self.QueryBuilder()
         insert_query.INSERT_INTO(
-            "Filters", "filter_id", "name", "query", "filters", "filter_window"
+            "Filters",
+            "filter_id",
+            "name",
+            "query",
+            "filters",
+            "filter_window",
+            "definition",
+            "call_id",
+            "created",
         ).RETURNING("filter_id")
 
         # insert filter info, return filter_id
@@ -3587,7 +3798,13 @@ class StorageManager(ABC):
                 name.lower(),
                 query,
                 json.dumps(filters),
-                input_bookmark.lower(),
+                # None when clustering all results; stored as filter_results does
+                (input_bookmark or "Results").lower(),
+                definition,
+                call_id,
+                # explicit, since a column added by ensure_filters_columns has no
+                # default; UTC so both backends agree
+                datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
             ),
         ).fetchone()[0]
 
@@ -3616,8 +3833,16 @@ class StorageManager(ABC):
         ).fetchone()
 
         if row is None:
-            # Nothing matched — clean up the empty filter entry, old bookmark untouched
+            # Nothing matched. Reusing a bookmark name still means replacement,
+            # so remove both the empty new entry and the superseded selection.
             self.conn.execute("DELETE FROM Filters WHERE filter_id = ?", (filter_id,))
+            if old_filter_id is not None:
+                self.conn.execute(
+                    "DELETE FROM Filtered_poses WHERE filter_id = ?", (old_filter_id,)
+                )
+                self.conn.execute(
+                    "DELETE FROM Filters WHERE filter_id = ?", (old_filter_id,)
+                )
             self.conn.commit()
             return 0
 
@@ -3864,7 +4089,12 @@ class StorageManager(ABC):
         pass
 
     def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
-        """Make query for percentile by calculating energy or leff cutoff
+        """Return the discrete per-ligand cutoff for a percentile.
+
+        The historical filter retained ``floor(percentile * ligand_count)``
+        ligands. The cutoff is therefore the last accepted per-ligand value. If
+        that count is zero, the best value is returned so the filtering caller
+        can use an exclusive comparison and retain no ligands.
 
         Args:
             percentile (float): cutoff percentile
@@ -3873,7 +4103,67 @@ class StorageManager(ABC):
         Returns:
             float: effective cutoff value of results based on percentile
         """
-        raise NotImplementedError
+        column_spec = RESULTS_SCHEMA.columns.get(column)
+        if column_spec is None or column_spec.sql_type not in NUMERIC_TYPES:
+            raise OptionError(
+                f"Requested column {column} is not a numeric Results column, "
+                "percentiles cannot be calculated."
+            )
+
+        row = self.db_query(
+            "SELECT COUNT(*) FROM (SELECT ligand_id FROM Results GROUP BY ligand_id)"
+        ).fetchone()
+        ligand_count = int(row[0])
+        if ligand_count == 0:
+            raise StorageError("Cannot calculate a percentile for an empty database.")
+
+        accepted_count = int((percentile / 100) * ligand_count)
+        offset = max(accepted_count - 1, 0)
+        minimized_columns = {
+            "docking_score",
+            "leff",
+            "energies_inter",
+            "energies_vdw",
+            "energies_electro",
+            "energies_flexLig",
+            "energies_flexLR",
+            "energies_intra",
+            "energies_torsional",
+            "unbound_energy",
+        }
+        aggregate = "MIN" if column in minimized_columns else "MAX"
+        direction = "ASC" if aggregate == "MIN" else "DESC"
+        query = f"""
+            SELECT best_value
+            FROM (
+                SELECT {aggregate}({column}) AS best_value
+                FROM Results
+                GROUP BY ligand_id
+            ) per_ligand
+            ORDER BY best_value {direction}
+            LIMIT 1 OFFSET ?
+        """
+        cutoff = self.db_query(query, (offset,)).fetchone()[0]
+        logger.debug(f"{column} percentile cutoff is {cutoff}")
+        return cutoff
+
+    def _calc_percentile_filter(
+        self, percentile: float, column: str = "docking_score"
+    ) -> tuple[float, str]:
+        """Return a percentile cutoff and its comparison operator.
+
+        Positive percentiles that retain at least one ligand include the cutoff.
+        Percentiles whose floor-rounded count is zero use an exclusive comparison
+        against the best value and therefore return no ligands.
+        """
+        ligand_count = int(
+            self.db_query(
+                "SELECT COUNT(*) FROM (SELECT ligand_id FROM Results GROUP BY ligand_id)"
+            ).fetchone()[0]
+        )
+        cutoff = self._calc_percentile_cutoff(percentile, column)
+        accepted_count = int((percentile / 100) * ligand_count)
+        return cutoff, "<=" if accepted_count > 0 else "<"
 
     def _cluster_exists(
         self, cluster_name: str, cluster_window: str
@@ -3942,16 +4232,19 @@ class StorageManager(ABC):
         Raises:
             OptionError
         """
-        if isinstance(outfields, str):
+        if outfields is None:
+            outfields_list = ["ligname", "docking_score"]
+        elif isinstance(outfields, str):
             outfields = outfields.replace(" ", "")
             outfields_list = outfields.split(",")
         elif isinstance(outfields, (list, tuple)):
             outfields_list = list(outfields)
         else:
             logger.warning(
-                "The provided outfields is not in a usable format (string or list). Will only use ligname"
+                "The provided outfields is not in a usable format (string or list). "
+                "Using ligname and docking_score."
             )
-            outfields_list = []
+            outfields_list = ["ligname", "docking_score"]
         if "ligname" not in [field.lower() for field in outfields_list]:
             outfields_list.insert(0, "ligname")
         possible_columns, table_formatted_columns = self._get_possible_output_columns()

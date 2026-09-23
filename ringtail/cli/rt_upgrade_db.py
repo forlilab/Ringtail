@@ -70,6 +70,9 @@ def main():
             "WARNING: All existing filters and bookmarks in database will be dropped during database update!"
         )
         consent = input("Type 'yes' if you wish to continue: ") == "yes"
+        if not consent:
+            logger.warning("Consent not given, no databases were upgraded.")
+            return 1
 
         for db in args.database:
             rtcore = RingtailCore(db)

@@ -2,7 +2,7 @@
 
 Installing ringtail
 ###################
-There are three different alternatives to installing Ringtail: through :ref:`conda-forge <condaforge>` which will install all dependencies, through the Python package manager :ref:`PyPi <pypi>` where some packages need to be installed separately, and directly from :ref:`source code <sourcecode>` for advanced users looking to make their own code changes. It is necessary to use an environment manager like conda or mamba to organize your Ringtail :ref:`environment <envsetup>` as some of the dependencies can only be installed in a managed environment. The installation instructions uses conda as an example, but you are free to use any python environment manager. Ringtail 3.0 requires Python ≥3.9 and is tested on Linux, macOS, and Windows.
+There are three different alternatives to installing Ringtail: through :ref:`conda-forge <condaforge>` which will install all dependencies, through the Python package manager :ref:`PyPi <pypi>` where all dependencies need to be installed separately, and directly from :ref:`source code <sourcecode>` for advanced users looking to make their own code changes. It is necessary to use an environment manager like conda or mamba to organize your Ringtail :ref:`environment <envsetup>` as some of the dependencies can only be installed in a managed environment. The installation instructions uses conda as an example, but you are free to use any python environment manager. Ringtail 3.0 requires Python ≥3.10 and is tested on Linux, macOS, and Windows.
 
 .. _pypi:
 
@@ -14,14 +14,16 @@ To install Ringtail from PyPi, create then activate your :ref:`ringtail environm
 
     $ pip install ringtail
 
-A few dependencies may be needed, including:
+Installation via conda-forge installs all dependencies automatically. When using pip, you must install all dependencies separately, including:
 
 * meeko>=0.7.1 (another Forli lab tool)
-* prody>=2.4.1
 * rdkit >=2025.09.5
+* numpy
 * scipy
 * pandas
+* packaging
 * duckdb (new requirement as of v3)
+* prody>=2.4.1 (optional, used by meeko to build receptor Polymers from ProDy structures)
 
 .. code-block:: bash
 
@@ -35,7 +37,7 @@ If you have a previous version of Ringtail installed you can update the package 
 
     $ pip install -U ringtail
 
-    $ pip install ringtail>=3
+    $ pip install "ringtail>=3"
 
 Make sure to :ref:`upgrade any databases <upgrade_database>` made with an older version of Ringtail if you intend to use them with Ringtail v3.
 
@@ -65,7 +67,7 @@ After activating the environment, navigate to the main Ringtail ringtail directo
     $ cd Ringtail
     $ pip install .
 
-This will automatically fetch the required modules and install them into the current environment.
+When installing from source with pip, you must also install all dependencies separately, as described in the :ref:`PyPI installation instructions <pypi>`. Installation via conda-forge installs all dependencies automatically.
 
 If you wish to make the code for Ringtail **editable** without having to re-run ``pip install .``, instead use
 
@@ -94,13 +96,13 @@ Next, navigate to the ``test`` subdirectory within the cloned Ringtail directory
 
 
 
-The compounds used for the testing dataset were taken from the `NCI Diversity Set V <https://wiki.nci.nih.gov/display/NCIDTPdata/Compound+Sets>`_. The receptor used was `PDB: 4J8M <https://www.rcsb.org/structure/4J8M>`_.
+The AutoDock-GPU test compounds (``test/test_data/adgpu``) were taken from the `NCI Diversity Set V <https://wiki.nci.nih.gov/display/NCIDTPdata/Compound+Sets>`_, docked against `PDB: 4J8M <https://www.rcsb.org/structure/4J8M>`_. The AD6 test data used in the documentation examples (``test/test_data/ad6``) contains four ligands docked against the receptor in ``helix--scofu01.json``.
 
 .. _envsetup:
 
 Setting up your environment
 ****************************
-To set up your environment use for example `conda <https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html>`_ or `micromamba <https://mamba.readthedocs.io/en/latest/user_guide/micromamba.html>`_, and ensure the python version is 3.9, 3.10, or 3.11. 
+To set up your environment use for example `conda <https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html>`_ or `micromamba <https://mamba.readthedocs.io/en/latest/user_guide/micromamba.html>`_, and ensure the python version is 3.10 or newer.
 
 .. code-block:: bash
 
@@ -114,4 +116,3 @@ You can install packages from PyPi as well as other channels like ``conda-forge`
     $ conda install <package>
 
     $ conda install -c conda-forge <package_found_on_conda-forge>
-

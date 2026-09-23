@@ -4,6 +4,20 @@
 # Ringtail script for recalculating interactions in an existing database
 #
 
+"""
+This script deletes and recalculates the pose-receptor interactions in one or more existing
+Ringtail databases, from the stored poses and receptor, optionally at new distance cutoffs.
+Work is committed in batches, and an interrupted run resumes where it stopped when the script
+is run again with the same cutoffs.
+
+--------- Example usage ---------
+# recalculate with the default cutoffs, answering the confirmation prompt
+rt_recalc_interactions -d output.db
+
+# recalculate several databases with new cutoffs, without a prompt (e.g., in a batch job)
+rt_recalc_interactions -d vs1.db vs2.db --hb_cutoff 3.5 --vdw_cutoff 4.5 --yes
+"""
+
 import argparse
 from ringtail import RingtailCore, setup_logging, get_logger
 from ringtail.ringtailoptions import RingtailDefaults

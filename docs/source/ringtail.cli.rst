@@ -52,6 +52,14 @@ ringtail.cli.rt\_process\_vs module
    :show-inheritance:
    :undoc-members:
 
+ringtail.cli.rt\_recalc\_interactions module
+---------------------------------------------
+
+.. automodule:: ringtail.cli.rt_recalc_interactions
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 ringtail.cli.rt\_upgrade\_db module
 -----------------------------------
 

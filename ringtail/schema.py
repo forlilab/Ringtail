@@ -293,6 +293,18 @@ FILTERS_SCHEMA = TableSchema(
         "query": Column("VARCHAR", "SQL query string"),
         "filters": Column("VARCHAR", "filter parameters as string"),
         "filter_window": Column("VARCHAR", "filter window parameters"),
+        # replay record: enough to re-create the bookmark after results are added
+        "definition": Column(
+            "VARCHAR",
+            'JSON of the public call that created the bookmark, {"method": ..., "kwargs": ...}',
+        ),
+        "call_id": Column(
+            "INTEGER",
+            "groups the bookmarks one call created (e.g. _preclust, _0.._n, _union and the final bookmark)",
+        ),
+        "created": Column(
+            "DATETIME", "creation timestamp, gives replay order", default="CURRENT_TIMESTAMP"
+        ),
     },
 )
 

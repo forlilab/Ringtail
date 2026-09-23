@@ -95,8 +95,30 @@ def main():
     try:
         if cli.process_mode == "write":
             logger.debug("Starting write process")
+            write_options = cli.write_options
+            if (
+                cli.file_sources["docking_results"]
+                and not write_options.overwrite
+                and not write_options.consent
+                and rtcore.has_filter_data()
+            ):
+                logger.warning(
+                    "This database has bookmarks/filters, which adding results would make "
+                    "inconsistent. Continuing deletes all bookmarks, filters and clusterings."
+                )
+                try:
+                    write_options.consent = (
+                        input("Type 'yes' if you wish to continue: ") == "yes"
+                    )
+                except EOFError:  # no terminal, e.g. a batch job
+                    write_options.consent = False
+                if not write_options.consent:
+                    logger.critical(
+                        "Consent not given, nothing was written. Use --yes to skip the prompt."
+                    )
+                    return 1
             # -#-#- Processes results, will add receptor if "save_receptor" is true
-            rtcore.add_results_from_files(**cli.file_sources, **vars(cli.write_options))
+            rtcore.add_results_from_files(**cli.file_sources, **vars(write_options))
         time1 = time.perf_counter()
 
         # -#-#- Print database summary

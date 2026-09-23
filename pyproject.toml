@@ -7,6 +7,7 @@ name = "ringtail"
 dynamic = ["version"]
 description = "Package for creating database from virtual screening files and performing filtering on results."
 readme = "README.md"
+requires-python = ">=3.10"
 license = { text = "LGPL-2.1-or-later" }
 authors = [
     { name = "Forli Lab", email = "forli@scripps.edu" },
@@ -29,7 +30,8 @@ classifiers = [
     "Operating System :: MacOS",
     "Operating System :: POSIX :: Linux",
     "Operating System :: Microsoft :: Windows",
-    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
     "Topic :: Scientific/Engineering :: Chemistry",
     "Topic :: Software Development :: Libraries",

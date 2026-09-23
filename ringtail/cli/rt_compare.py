@@ -124,7 +124,7 @@ def cmdline_parser(defaults={}):
     parser.add_argument(
         "--export_sdf",
         "-xs",
-        help="Exports all crossreferenced ligands to one SDF per database. File name will be the compared bookmark name prefixed with chosen phrase, defaults to crossref_<bookmark>.sdf",
+        help="Export cross-referenced ligands and poses to one SDF per database.",
         const="crossref",
         nargs="?",
         action="store",
@@ -132,13 +132,13 @@ def cmdline_parser(defaults={}):
     parser.add_argument(
         "--store_best_pose",
         "-bp",
-        help="Will only store in bookmark and export the best ranked pose for each ligand.",
+        help="Write only the best-ranked pose per ligand to the text results log. Does not restrict bookmarks or SDF/database exports.",
         action="store_true",
     )
     parser.add_argument(
         "--export_db",
         "-xd",
-        help="Exports all crossreferenced ligands to one new database per database. File name will be the compared bookmark name prefixed with chosen phrase, defaults to crossref_<bookmark>.db",
+        help="Export cross-referenced ligands to one new database per database, named <database name>_<bookmark>.db.",
         action="store_true",
     )
 
@@ -220,7 +220,9 @@ def main():
             rtc = RingtailCore(db)
 
             if args.output_log:
-                output_log = str(db.split(".")[0]) + "_" + args.output_log
+                # keep the directory and strip only the extension, so ../vs1.db and
+                # my.screen.db give ../vs1_<log> and my.screen_<log>
+                output_log = os.path.splitext(db)[0] + "_" + args.output_log
                 logger.info(f"Writing log text file for {db} bookmark {bookmark}")
                 rtc.write_filter_output(
                     bookmark,

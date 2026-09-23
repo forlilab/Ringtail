@@ -115,6 +115,81 @@ class TestCoreOperations:
         assert tmp_db.table_length("Results") == result_count * 2
         assert tmp_db.table_length("Interactions") == inter_count * 2
 
+    def test_ad6_duplicate_handling_with_null_fields(self, tmp_db):
+        sdf = str(TEST_DATA / "ad6/docked_ligands.sdf")
+        options = {
+            "docking_results": sdf,
+            "docking_mode": "ad6",
+            "calculate_interactions": False,
+        }
+        tmp_db.add_results_from_files(**options)
+        result_count = tmp_db.table_length("Results")
+
+        tmp_db.add_results_from_files(**options, duplicate_handling="replace")
+        assert tmp_db.table_length("Results") == result_count
+
+        tmp_db.add_results_from_files(**options, duplicate_handling="ignore")
+        assert tmp_db.table_length("Results") == result_count
+
+    def test_adding_results_with_filters_needs_consent(self, ad6_db):
+        """No bookmark stays coherent once results are added, so all filter data is
+        deleted first, and only with consent."""
+        sdf = str(TEST_DATA / "ad6/docked_ligands.sdf")
+        ad6_db.filter(eworst=0, output_bookmark="before")
+        ad6_db.filter(eworst=0, mfpt_cluster=0.6, output_bookmark="clustered")
+        result_count = ad6_db.table_length("Results")
+
+        with pytest.raises(OptionError, match="consent=True"):
+            ad6_db.add_results_from_files(docking_results=sdf)
+        assert ad6_db.table_length("Results") == result_count
+        assert "before" in ad6_db.get_bookmark_names()
+
+        ad6_db.add_results_from_files(docking_results=sdf, consent=True)
+        assert ad6_db.table_length("Results") == result_count * 2
+        assert ad6_db.get_bookmark_names() == []
+        assert not ad6_db.has_filter_data()
+        for table in ("Filters", "Filtered_poses", "Clusters", "Pose_clusters"):
+            assert ad6_db.table_length(table) == 0
+
+    def test_streamed_results_with_filters_need_consent(self, ad6_db):
+        from rdkit import Chem
+
+        ad6_db.filter(eworst=0, output_bookmark="before")
+        mols = list(
+            Chem.SDMolSupplier(str(TEST_DATA / "ad6/docked_ligands.sdf"), removeHs=False)
+        )
+        vina = {"sample": (TEST_DATA / "vina/sample-result.pdbqt").read_text()}
+        with pytest.raises(OptionError, match="consent=True"):
+            ad6_db.add_mol(mols, calculate_interactions=False)
+        with pytest.raises(OptionError, match="consent=True"):
+            ad6_db.add_results_from_vina_string(vina, calculate_interactions=False)
+        ad6_db.add_mol(mols, calculate_interactions=False, consent=True)
+        assert ad6_db.get_bookmark_names() == []
+
+    def test_replace_removes_status_and_comment_of_replaced_poses(self, ad6_db):
+        sdf = str(TEST_DATA / "ad6/docked_ligands.sdf")
+        pose_ids = [row[0] for row in ad6_db.db_query("SELECT pose_id FROM Results")]
+        ad6_db.update_pose_status(pose_ids[:2], 1)
+        ad6_db.set_pose_comment(pose_ids[0], "neat ring")
+        result_count = ad6_db.table_length("Results")
+        interaction_count = ad6_db.table_length("Interactions")
+
+        ad6_db.add_results_from_files(
+            docking_results=sdf,
+            receptor_file=str(TEST_DATA / "ad6/helix--scofu01.json"),
+            duplicate_handling="replace",
+        )
+
+        # every pose was a duplicate, so every pose was replaced, interactions included
+        assert ad6_db.table_length("Results") == result_count
+        assert ad6_db.table_length("Interactions") == interaction_count
+        assert ad6_db.table_length("Accepted") == 0
+        assert ad6_db.get_pose_comment(pose_ids[0]) is None
+        orphans = ad6_db.db_query(
+            "SELECT COUNT(*) FROM Interactions WHERE pose_id NOT IN (SELECT pose_id FROM Results)"
+        )[0][0]
+        assert orphans == 0
+
     def test_db_num_poses_warning(self, tmp_db, tmp_path):
         from ringtail import setup_logging
 
@@ -138,6 +213,122 @@ class TestCoreOperations:
 
 class TestFiltering:
     """Filter operations on the full 217-ligand adgpu dataset."""
+
+    @pytest.mark.parametrize(
+        ("percentile", "expected_count"),
+        [(0, 0), (5, 0), (25, 1), (50, 2), (100, 4)],
+    )
+    def test_score_percentile_floor_rounding(
+        self, ad6_db, percentile, expected_count
+    ):
+        """Percentiles preserve legacy floor rounding and include the accepted cutoff."""
+        count, _ = ad6_db.filter(
+            score_percentile=percentile,
+            output_bookmark=f"score_percentile_{percentile}",
+        )
+        assert count == expected_count
+
+    def test_empty_filter_replaces_existing_bookmark(self, ad6_db):
+        count, _ = ad6_db.filter(eworst=0, output_bookmark="replace_me")
+        assert count == 4
+        with ad6_db.storageman as manager:
+            assert manager.get_passing_poses_count("replace_me") == 9
+
+        count, _ = ad6_db.filter(eworst=-100, output_bookmark="replace_me")
+
+        assert count == 0
+        assert "replace_me" not in ad6_db.get_bookmark_names()
+        with ad6_db.storageman as manager:
+            assert manager.get_passing_poses_count("replace_me") == 0
+
+    @staticmethod
+    def _filters_rows(rtc):
+        rows = rtc.db_query(
+            "SELECT name, definition, call_id, created FROM Filters ORDER BY filter_id"
+        )
+        return [
+            (name, json.loads(definition) if definition else None, call_id, created)
+            for name, definition, call_id, created in rows
+        ]
+
+    def test_bookmark_records_replayable_call(self, ad6_db):
+        """Filters.definition holds the call, and calling it again selects the same poses."""
+        ad6_db.filter(
+            eworst=-14,
+            vdw_interactions=[("A:VAL:243:", True)],
+            output_bookmark="hits",
+        )
+        [(name, definition, call_id, created)] = self._filters_rows(ad6_db)
+        assert name == "hits" and call_id == 1 and created
+        assert definition["method"] == "filter"
+        kwargs = definition["kwargs"]
+        assert kwargs["eworst"] == -14 and kwargs["output_bookmark"] == "hits"
+        # output-only arguments are not part of the selection
+        assert "output_log" not in kwargs and "return_iter" not in kwargs
+
+        kwargs["output_bookmark"] = "replayed"
+        getattr(ad6_db, definition["method"])(**kwargs)
+        poses = lambda bm: ad6_db.fetch_select_ligands_poses(bookmark_name=bm)
+        assert poses("replayed") == poses("hits")
+        assert self._filters_rows(ad6_db)[-1][2] == 2  # a new call, a new call_id
+
+    def test_one_call_shares_call_id(self, ad6_db):
+        ad6_db.filter(eworst=0, mfpt_cluster=0.6, output_bookmark="clustered")
+        ad6_db.cluster(output_bookmark="reclustered", cutoff=0.4, input_bookmark="clustered")
+        rows = self._filters_rows(ad6_db)
+        filter_rows = [r for r in rows if r[1]["method"] == "filter"]
+        assert {r[0] for r in filter_rows} == {"clustered", "clustered_preclust"}
+        assert {r[2] for r in filter_rows} == {1}
+        [cluster_row] = [r for r in rows if r[1]["method"] == "cluster"]
+        assert cluster_row[0] == "reclustered" and cluster_row[2] == 2
+        assert cluster_row[1]["kwargs"]["input_bookmark"] == "clustered"
+
+    def test_crossref_records_absolute_paths(self, tmp_path, storage_type, monkeypatch):
+        sdf = str(TEST_DATA / "ad6/docked_ligands.sdf")
+        dbs = []
+        for name in ("a.db", "b.db"):
+            rtc = RingtailCore(str(tmp_path / name), storage_type=storage_type)
+            rtc.add_results_from_files(docking_results=sdf, calculate_interactions=False)
+            rtc.filter(eworst=0, output_bookmark="hits")
+            dbs.append(rtc)
+        monkeypatch.chdir(tmp_path)
+        dbs[0].cross_reference_databases(
+            wanted_dbs=[("a.db", "hits"), ("b.db", "hits")]
+        )
+        for rtc in dbs:
+            [row] = [r for r in self._filters_rows(rtc) if r[0] == "crossref_hits"]
+            assert row[1]["method"] == "cross_reference_databases"
+            assert [db for db, _ in row[1]["kwargs"]["wanted_dbs"]] == [
+                str(tmp_path / "a.db"),
+                str(tmp_path / "b.db"),
+            ]
+            assert row[2] == 2  # numbered per database, after that db's own "hits"
+
+    def test_old_filters_table_gets_replay_columns(self, ad6_db):
+        """A pre-release 3.0.0 database without the columns is upgraded on first write."""
+        ad6_db.db_query("DROP TABLE Filters", commit=True)
+        ad6_db.db_query(
+            "CREATE TABLE Filters (filter_id INTEGER PRIMARY KEY, name VARCHAR, "
+            "query VARCHAR, filters VARCHAR, filter_window VARCHAR)",
+            commit=True,
+        )
+        fresh = RingtailCore(ad6_db.db_file)
+        fresh.filter(eworst=0, output_bookmark="after_upgrade")
+        [(name, definition, call_id, created)] = self._filters_rows(fresh)
+        assert name == "after_upgrade" and definition["method"] == "filter"
+        assert call_id == 1 and created
+        with fresh.storageman as sm:
+            assert sm.ensure_filters_columns() == []  # idempotent
+
+    @pytest.mark.parametrize("input_name", ["keep", "KEEP"])
+    def test_same_input_and_output_bookmark_rejected(self, ad6_db, input_name):
+        """Also when only the case differs: a zero-hit filter would delete the input."""
+        ad6_db.filter(eworst=0, output_bookmark="keep")
+        with pytest.raises(OptionError, match="cannot be the same"):
+            ad6_db.filter(eworst=-100, input_bookmark=input_name, output_bookmark="keep")
+        with pytest.raises(OptionError, match="cannot be the same"):
+            ad6_db.cluster(output_bookmark="keep", input_bookmark=input_name)
+        assert "keep" in ad6_db.get_bookmark_names()
 
     def test_filter(self, populated_db):
         count, _ = populated_db.filter(
@@ -425,6 +616,27 @@ class TestFiltering:
 class TestOutput:
     """Output operations: SDFs, CSVs, logs, bookmark exports."""
 
+    def test_best_passing_pose_and_order_results(self, ad6_db, tmp_path):
+        rows = ad6_db.filter(
+            eworst=0,
+            output_bookmark="ordered_best_poses",
+            output_log=str(tmp_path / "ordered_best_poses.txt"),
+            outfields=["ligname", "docking_score", "pose_rank"],
+            order_results="docking_score",
+            return_iter=True,
+        )
+
+        assert [row[0] for row in rows] == [
+            "second_mol",
+            "third_mol",
+            "first_mol",
+            "fourth_mol",
+        ]
+        assert [row[1] for row in rows] == pytest.approx(
+            [-16.74, -14.77, -13.04, -12.44]
+        )
+        assert [row[2] for row in rows] == [1, 1, 1, 1]
+
     def test_get_filterdata(self, populated_db, tmp_path):
         populated_db.filter(eworst=-7, output_bookmark="has_filterdata")
         log_file = str(tmp_path / "filterdata.txt")
@@ -461,6 +673,39 @@ class TestOutput:
         csv_bookmark = str(tmp_path / "export_csv.csv")
         populated_db.export_table_as_csv("export_csv", csv_bookmark)
         assert Path(csv_bookmark).exists()
+
+    def test_export_columns_selection_validation(self, ad6_db, tmp_path):
+        import csv
+
+        expected_rows = ad6_db.table_length("Results")
+        for index, selection in enumerate((None, "Results")):
+            csv_path = tmp_path / f"all_results_{index}.csv"
+            ad6_db.export_columns_as_csv(
+                ["docking_score"], bookmark_name=selection, csv_name=str(csv_path)
+            )
+            with csv_path.open() as csv_file:
+                rows = list(csv.reader(csv_file))
+            assert len(rows) - 1 == expected_rows
+
+        with pytest.raises(OptionError, match="not a bookmark"):
+            ad6_db.export_columns_as_csv(
+                ["docking_score"],
+                bookmark_name="does_not_exist",
+                csv_name=str(tmp_path / "invalid.csv"),
+            )
+
+    def test_pose_comments_are_created_lazily(self, ad6_db):
+        pose_id = ad6_db.db_query("SELECT pose_id FROM Results LIMIT 1")[0][0]
+
+        assert ad6_db.get_pose_comment(pose_id) is None
+        ad6_db.set_pose_comment(pose_id, "first comment")
+        assert ad6_db.get_pose_comment(pose_id) == "first comment"
+
+        ad6_db.set_pose_comment(pose_id, "updated comment")
+        assert ad6_db.get_pose_comment(pose_id) == "updated comment"
+
+        ad6_db.set_pose_comment(pose_id, "")
+        assert ad6_db.get_pose_comment(pose_id) is None
 
     def test_create_rdkitmol(self, populated_db):
         populated_db.filter(ebest=-3, output_bookmark="rdkit_test")
@@ -892,6 +1137,31 @@ class TestVinaHandling:
         )
         assert tmp_db.table_length("Results") == 6
 
+    def test_string_add_without_receptor_or_interactions(self, tmp_db):
+        vina_path = TEST_DATA / "vina/sample-result.pdbqt"
+        tmp_db.add_results_from_vina_string(
+            results={"sample": vina_path.read_text()},
+            calculate_interactions=False,
+        )
+        assert tmp_db.table_length("Results") == 3
+        assert tmp_db.table_length("Interactions") == 0
+
+    def test_string_add_requires_receptor_for_interactions(self, tmp_db):
+        vina_path = TEST_DATA / "vina/sample-result.pdbqt"
+        with pytest.raises(OptionError, match="requires a receptor"):
+            tmp_db.add_results_from_vina_string(
+                results={"sample": vina_path.read_text()}
+            )
+
+    def test_string_add_with_supplied_receptor(self, tmp_db):
+        vina_path = TEST_DATA / "vina"
+        tmp_db.add_results_from_vina_string(
+            results={"sample": (vina_path / "sample-result.pdbqt").read_text()},
+            receptor_string=(vina_path / "receptor.pdbqt").read_text(),
+        )
+        assert tmp_db.table_length("Results") == 3
+        assert tmp_db.table_length("Interactions") > 0
+
     def test_add_interactions(self, vina_db):
         assert vina_db.table_length("Interaction_indices") == 25
         assert vina_db.table_length("Interactions") == 60
@@ -1038,6 +1308,17 @@ class TestAD6Handling:
         tmp_db.add_mol(suppl)
         assert tmp_db.table_length("Results") == 9
         assert tmp_db.table_length("Interactions") == 53
+
+    def test_stream_without_receptor_or_interactions(self, tmp_db):
+        rdkit = pytest.importorskip("rdkit")
+        from rdkit import Chem
+
+        suppl = Chem.SDMolSupplier(
+            str(TEST_DATA / "ad6/docked_ligands.sdf"), removeHs=False
+        )
+        tmp_db.add_mol(suppl, calculate_interactions=False)
+        assert tmp_db.table_length("Results") == 9
+        assert tmp_db.table_length("Interactions") == 0
 
     def test_file_add(self, ad6_db):
         assert ad6_db.table_length("Results") == 9
@@ -1457,6 +1738,22 @@ class TestAD6Handling:
         )
         assert "nested_tier" in populated_db.bookmarks_with_interaction_filters()
 
+    def test_bookmarks_with_interaction_filters_follows_lineage(self, ad6_db):
+        """A bookmark made from an interaction-filtered one, or an interaction
+        fingerprint clustering, was selected with the old interactions too."""
+        ad6_db.filter(eworst=0, output_bookmark="score_only")
+        ad6_db.filter(vdw_interactions=[(":VAL::", True)], output_bookmark="uses_vdw")
+        ad6_db.filter(eworst=-12, input_bookmark="uses_vdw", output_bookmark="derived")
+        ad6_db.filter(eworst=-12, input_bookmark="derived", output_bookmark="grandchild")
+        ad6_db.cluster(output_bookmark="ifp_clusters", cluster_type="ifp", cutoff=0.5)
+        ad6_db.cluster(
+            output_bookmark="mfp_of_score", cluster_type="mfp", input_bookmark="score_only"
+        )
+
+        found = set(ad6_db.bookmarks_with_interaction_filters())
+        assert {"uses_vdw", "derived", "grandchild", "ifp_clusters"} <= found
+        assert not {"score_only", "mfp_of_score"} & found
+
 
 class TestLogger:
     def test_set_log_level(self):
@@ -1510,6 +1807,3 @@ class TestOptions:
         count_new = tmp_db.table_length("Ligands")
         assert count_old == 3
         assert count_new == 2
-
-
-

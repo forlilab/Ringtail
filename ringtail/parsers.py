@@ -323,13 +323,8 @@ class ADGPUMoleculeSupplier:
             filename (str): dlg file name to parse
 
         Returns:
-            dict: containing a
-                ligand row (list of ligand name, smiles, and binary rdkit mol)
-                receptor row (list of receptor data)
-                resulst rows* (list of docking results such as energies, coordinates, and other relevant per pose data)
-                interaction rows (list of interaction tuples that includes ligname, pose rank, run number to uniqueliy identify
-                    to which pose an interaction belongs, which makes the interaction list independent of other results
-                    when it comes to e.g., inserting data in the database)
+            dict: Ligand, receptor, result, and interaction rows ready for
+            insertion into the database.
         """
 
         ligand_dict, receptor_dict, results_dict = self._parse_docking_file_dlg(

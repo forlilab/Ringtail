@@ -145,6 +145,10 @@ class MPManager:
             self._check_for_worker_exceptions()
 
         writer.join()
+        # the writer can report an error and exit between two polls above (small jobs
+        # finish within one sleep), so read whatever is still waiting in the pipe
+        while self.p_conn.poll():
+            self._check_for_worker_exceptions()
 
         logger.info(f"Wrote {self.num_files} docking results to the database")
 

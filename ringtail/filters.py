@@ -143,9 +143,10 @@ class Filter:
         database handle.
 
         Args:
-            percentile_cutoff (Callable[[float, str], float], optional): resolves
-                (percentile, column) to a concrete cutoff. Required only when
-                'score_percentile' or 'le_percentile' is set.
+            percentile_cutoff (Callable[[float, str], tuple[float, str]], optional):
+                resolves (percentile, column) to a concrete cutoff and comparison
+                operator. Required only when 'score_percentile' or 'le_percentile'
+                is set.
 
         Returns:
             dict: any of ``numeric`` (list of ``(column, operator, value)``), ``interactions``
@@ -173,7 +174,7 @@ class Filter:
                             f"Filtering on '{key}' needs a percentile resolver; "
                             "pass 'percentile_cutoff' to to_criteria()."
                         )
-                    value = percentile_cutoff(value, column)
+                    value, operator = percentile_cutoff(value, column)
                 numeric.append((column, operator, value))
 
             elif key == "hb_count":

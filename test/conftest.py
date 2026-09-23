@@ -227,7 +227,10 @@ def cli(tmp_path):
             str(TEST_MAX_PROC),
             *args,
         ]
-        return subprocess.run(cmd, cwd=str(TEST_DIR), capture_output=True).returncode
+        # no stdin: a consent prompt is answered with EOF (refused) instead of hanging
+        return subprocess.run(
+            cmd, cwd=str(TEST_DIR), capture_output=True, stdin=subprocess.DEVNULL
+        ).returncode
 
     def read(*args):
         cmd = ["rt_process_vs", "read", "--input_db", str(db), *args]

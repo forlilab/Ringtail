@@ -10,7 +10,7 @@ Ringtail
 ##########
 *A tool for handling results from virtual screening of molecules*
 
-Ringtail is an open-source, lightweight, and highly customizable Python package for organizing, filtering, and exploring the results of molecular virtual screening — from a handful of ligands to **tens of millions**. It reads collections of docking results such as the latest SDFs from `AutoDock-6 <https://github.com/forlilab/AutoDock>`, Docking Log Files (DLGs) from `AutoDock-GPU <https://github.com/ccsb-scripps/AutoDock-GPU>`_, and PDBQTs from `AutoDock-Vina <https://github.com/ccsb-scripps/AutoDock-Vina>`_ — into a compact database that stays fast to query as it grows, backed by either DuckDB (the default) or SQLite. Result-file parsing is parallelized across your CPUs for fast database writing.
+Ringtail is an open-source, lightweight, and highly customizable Python package for organizing, filtering, and exploring the results of molecular virtual screening — from a handful of ligands to **tens of millions**. It reads collections of docking results such as the latest SDFs from `AutoDock-6 <https://github.com/forlilab/AutoDock>`_, Docking Log Files (DLGs) from `AutoDock-GPU <https://github.com/ccsb-scripps/AutoDock-GPU>`_, and PDBQTs from `AutoDock-Vina <https://github.com/ccsb-scripps/AutoDock-Vina>`_ — into a compact database that stays fast to query as it grows, backed by either DuckDB (the default) or SQLite. Result-file parsing is parallelized across your CPUs for fast database writing.
 
 Once your docking results are in a database, Ringtail gives you a wealth of ways to apply your chemical intuition to narrow down the results to likely pharmacological hits: filter by docking score, ligand efficiency, receptor interactions, or ligand chemistry; cluster for diversity; compare hits across targets; and export exactly the molecules and data you want.
 
@@ -90,7 +90,7 @@ After :ref:`installing Ringtail <installation>`, a screen is two commands:
 .. code-block:: bash
 
    # write a folder of docking results into a database
-   rt_process_vs write --docking_results results_folder/ --recursive
+   rt_process_vs write --docking_results results_folder/ --recursive --receptor_file receptor.json --save_receptor
 
    # filter for the strongest binders and write a results log
    rt_process_vs read --input_db output.db --eworst -8 --output_log hits.txt
@@ -103,12 +103,14 @@ Citing Ringtail use
 ********************
 Ringtail is developed by the `Forli lab <https://forlilab.org/>`_ at the `Center for Computational Structural Biology (CCSB) <https://ccsb.scripps.edu>`_ at `Scripps Research <https://www.scripps.edu/>`_.
 
-.. important:: \This publication in JCIM describes the original design, implementation, and features of Ringtail:\
+.. important::
 
-      *Ringtail: A Python Tool for Efficient Management and Storage of Virtual Screening Results.*
-      Althea T. Hansel-Harris, Diogo Santos-Martins, Niccolò Bruciaferri, Andreas F. Tillack, Matthew Holcomb, and Stefano Forli.
-      *Journal of Chemical Information and Modeling* **2023** 63 (7), 1858-1864.
-      DOI: `10.1021/acs.jcim.3c00166 <https://pubs.acs.org/doi/full/10.1021/acs.jcim.3c00166>`_
+   This publication in JCIM describes the original design, implementation, and features of Ringtail:
+
+   *Ringtail: A Python Tool for Efficient Management and Storage of Virtual Screening Results.*
+   Althea T. Hansel-Harris, Diogo Santos-Martins, Niccolò Bruciaferri, Andreas F. Tillack, Matthew Holcomb, and Stefano Forli.
+   *Journal of Chemical Information and Modeling* **2023** 63 (7), 1858-1864.
+   DOI: `10.1021/acs.jcim.3c00166 <https://pubs.acs.org/doi/full/10.1021/acs.jcim.3c00166>`_
 
    If using Ringtail in your work, please cite this publication.
 

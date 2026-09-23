@@ -13,7 +13,15 @@ Ringtail is an open-source, lightweight, and highly customizable Python package 
 
 Once your docking results are in a database, Ringtail provides a wealth of ways to apply your chemical intuition and narrow down the results to likely pharmacological hits: filter by docking score, ligand efficiency, receptor interactions, or ligand chemistry; cluster for diversity; compare hits across targets; and export exactly the molecules and data you want.
 
+Filter by ligand molecular weight or supply a CSV of ligand names to select a specific set of compounds, for example, for export.
+
+Export selected results as SDF files or CSVs with your choice of columns.
+
 Use Ringtail however suits you, as a user-friendly [command line tool](https://ringtail.readthedocs.io/en/latest/cmdline.html) for straightforward screening, or an extensive [Python API](https://ringtail.readthedocs.io/en/latest/api.html) for building it into your own pipelines and scripts. In-depth documentation for both can be found on [ReadTheDocs](https://ringtail.readthedocs.io).
+
+The Python API also accepts docked RDKit molecules from AD6 and Vina result strings directly, allowing docking pipelines to write results without intermediate files.
+
+The Python API also lets you mark poses as accepted, maybe, or rejected and attach comments to track screening decisions.
 
 ## Fast, even at scale
 
@@ -28,9 +36,11 @@ With the DuckDB backend, filtering stays in the seconds range as a library grows
 
 Database size scales roughly linearly with the number of stored poses, see [the changelog](https://ringtail.readthedocs.io/en/latest/changes.html) for full benchmarks.
 
+For transferring large databases, Ringtail provides compression and decompression tools, with optional filtering before compression. See [compressing databases](https://ringtail.readthedocs.io/en/latest/compress.html).
+
 ## Installation
 
-Ringtail requires Python ≥3.9 and is tested on Linux, macOS, and Windows. It's recommended to install Ringtail in a dedicated environment such as conda or micromamba.
+Ringtail requires Python ≥3.10 and is tested on Linux, macOS, and Windows. It's recommended to install Ringtail in a dedicated environment such as conda or micromamba.
 
 ```bash
 $ conda create -n ringtail python=3.11
@@ -49,7 +59,7 @@ $ conda install -c conda-forge ringtail
 $ pip install ringtail
 ```
 
-When installing from PyPI you may need one or more dependencies, including `rdkit`, `scipy`, `pandas`, `prody`, and `meeko` (a Forli lab tool). DuckDB is the default storage backend for Ringtail, install if not already present (SQLite ships with Python):
+When installing with pip, you must install all dependencies separately, including `rdkit`, `numpy`, `scipy`, `pandas`, `packaging`, and `meeko` (a Forli lab tool), and optionally `prody`. DuckDB is the default storage backend for Ringtail, install if not already present (SQLite ships with Python):
 
 ```bash
 $ pip install <dependency>
@@ -59,12 +69,16 @@ $ pip install <dependency>
 
 After installing, a virtual screen can be as simple as two commands:
 
+Ringtail defaults to AutoDock-6 SDF input. For AutoDock-GPU DLGs, specify `--docking_mode adgpu`; for Vina PDBQTs, use `--docking_mode vina`. In the Python API, pass `docking_mode="adgpu"` or `"vina"` to `add_results_from_files()`.
+
+Provide the receptor used for docking as a Meeko Polymer JSON or PDBQT file.
+
 ```bash
 # write a folder of docking results into a database
-$ rt_process_vs write --docking_results results_folder/ --recursive
+$ rt_process_vs write --docking_results results_folder/ --recursive --receptor_file receptor.json --save_receptor
 
 # filter for docking score and a specific interaction, and write the list of results to text log
-$ rt_process_vs read --input_db output.db --eworst -6 --vdw_interactions A:VAL:279: --output_log hits.txt
+$ rt_process_vs read --input_db output.db --eworst -6 --vdw_interactions A:VAL:243: --output_log hits.txt
 ```
 
 Same example but using the API:
@@ -74,13 +88,15 @@ from ringtail import RingtailCore
 
 rtc = RingtailCore()
 rtc.add_results_from_files(
-    file_path="results_folder/",
+    docking_results="results_folder/",
     recursive=True,
+    receptor_file="receptor.json",
+    save_receptor=True,
 )
 
 rtc.filter(
     eworst=-6,
-    vdw_interactions=[("A:VAL:279:", True)],
+    vdw_interactions=[("A:VAL:243:", True)],
     output_log="hits.txt",
 )
 ```
@@ -88,7 +104,9 @@ rtc.filter(
 
 ### Upgrading older databases
 
-A database written with an earlier Ringtail will need to be upgraded to work with the current version. Use `rt_upgrade_db` with the target version; see [upgrading a database](https://ringtail.readthedocs.io/en/latest/upgrade_database.html) for details.
+Databases created with Ringtail v2 or earlier require upgrading with `rt_upgrade_db -d old_database.db`. The update script target defaults to `3.0.0`. Upgrading removes existing bookmarks and filters; see the [database upgrade documentation](https://ringtail.readthedocs.io/en/latest/upgrade_database.html) for more details.
+
+Ringtail 3 also changes several CLI options, API arguments, and output-column names, and removes built-in plotting and PyMOL integration. See the [changelog](https://ringtail.readthedocs.io/en/latest/changes.html) for migration details.
 
 ## Citing Ringtail
 

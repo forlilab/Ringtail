@@ -347,11 +347,15 @@ class StorageManagerDuckDB(StorageManager):
             SELECT 1
             FROM Results_temp AS RT
             JOIN Results AS R
-                ON RT.receptor    = R.receptor
+                ON (RT.receptor = R.receptor
+                    OR (RT.receptor IS NULL AND R.receptor IS NULL))
                 AND RT.pose_coordinates = R.pose_coordinates
-                AND RT.flexible_res_coordinates = R.flexible_res_coordinates
+                AND (RT.flexible_res_coordinates = R.flexible_res_coordinates
+                    OR (RT.flexible_res_coordinates IS NULL
+                        AND R.flexible_res_coordinates IS NULL))
             JOIN Ligands AS L
                 ON RT.ligname = L.ligname
+                AND R.ligand_id = L.ligand_id
             WHERE 
                 RT.ligname   = Interactions_temp.ligname
                 AND RT.pose_rank = Interactions_temp.pose_rank
@@ -366,9 +370,12 @@ class StorageManagerDuckDB(StorageManager):
             JOIN Ligands AS L
                 ON RT.ligname = L.ligname
             WHERE 
-                RT.receptor  = R.receptor
+                (RT.receptor = R.receptor
+                    OR (RT.receptor IS NULL AND R.receptor IS NULL))
                 AND RT.pose_coordinates = R.pose_coordinates
-                AND RT.flexible_res_coordinates = R.flexible_res_coordinates
+                AND (RT.flexible_res_coordinates = R.flexible_res_coordinates
+                    OR (RT.flexible_res_coordinates IS NULL
+                        AND R.flexible_res_coordinates IS NULL))
                 AND L.ligand_id    = R.ligand_id);
         """
         self.db_query(delete_int_sql)
@@ -383,28 +390,35 @@ class StorageManagerDuckDB(StorageManager):
         pose_coordinates
         flexible_res_coordinates
         """
-        delete_sql = """
-        WITH target_poseid AS (
-            SELECT R.pose_id
-            FROM Results AS R
-            JOIN Results_temp AS RT
-                ON RT.receptor = R.receptor
-                AND RT.pose_coordinates = R.pose_coordinates
-                AND RT.flexible_res_coordinates = R.flexible_res_coordinates
-            JOIN Ligands AS L
-                ON RT.ligname = L.ligname
-            )
-        DELETE FROM Interactions
-        WHERE pose_id IN (SELECT pose_id from target_poseid)
-        returning pose_id;
+        duplicate_pose_sql = """
+        SELECT DISTINCT R.pose_id
+        FROM Results AS R
+        JOIN Results_temp AS RT
+            ON (RT.receptor = R.receptor
+                OR (RT.receptor IS NULL AND R.receptor IS NULL))
+            AND RT.pose_coordinates = R.pose_coordinates
+            AND (RT.flexible_res_coordinates = R.flexible_res_coordinates
+                OR (RT.flexible_res_coordinates IS NULL
+                    AND R.flexible_res_coordinates IS NULL))
+        JOIN Ligands AS L
+            ON RT.ligname = L.ligname
+            AND R.ligand_id = L.ligand_id;
         """
-        delete_pose_ids = self.db_query(delete_sql).fetchall()
-        delete_pose_ids_list = {row[0] for row in delete_pose_ids}
+        delete_pose_ids_list = {
+            row[0] for row in self.db_query(duplicate_pose_sql).fetchall()
+        }
         placeholders = ",".join("?" for _ in delete_pose_ids_list)
-        if delete_pose_ids:
+        if delete_pose_ids_list:
+            # status and comment rows reference the pose (a foreign key in DuckDB),
+            # so they go first; bookmarks were already cleared before adding results
+            self._delete_pose_screening_data(delete_pose_ids_list)
+            self.db_query(
+                f"""DELETE FROM Interactions WHERE pose_id IN ({placeholders});""",
+                tuple(delete_pose_ids_list),
+            )
             self.db_query(
                 f"""DELETE FROM Results WHERE pose_id IN ({placeholders});""",
-                delete_pose_ids_list,
+                tuple(delete_pose_ids_list),
             )
 
     def _insert_interactions(self, interactions: list[tuple]):
@@ -1357,50 +1371,7 @@ class StorageManagerDuckDB(StorageManager):
         return ligands, bookmark_name, cluster_name
 
     def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
-        """Make query for percentile by calculating energy or leff cutoff
-
-        Args:
-            percentile (float): cutoff percentile
-            column (str, optional): string indicating column for percentile to be calculated over
-
-        Returns:
-            float: effective cutoff value of results based on percentile
-        """
-        # get total number of ligands
-        MIN_columns = [
-            "docking_score",
-            "leff",
-            "energies_inter",
-            "energies_vdw",
-            "energies_electro",
-            "energies_flexLig",
-            "energies_flexLR",
-            "energies_intra",
-            "energies_torsional",
-            "unbound_energy",
-        ]
-        # whether the best value in a column is lowest or highest value
-        if column in MIN_columns:
-            lim_kw = "MIN"
-        else:
-            lim_kw = "MAX"
-        try:
-            logger.debug(f"Generating percentile filter query for {column}")
-            # use duckdb internal method to calculate percentile, may differ slightly from other manual calcs
-            percentile_fraction = percentile / 100
-            query = f"""
-            SELECT quantile_disc(min_val, {percentile_fraction}) AS cutoff
-            FROM (
-                SELECT {lim_kw}({column}) AS min_val
-                FROM Results
-                GROUP BY ligand_id
-            ) percentile_cutoff
-            """
-            cutoff = self.db_query(query).fetchone()[0]
-            logger.debug(f"{column} percentile cutoff is {cutoff}")
-            return cutoff
-        except duckdb.OperationalError as e:
-            raise StorageError("Error while generating percentile query") from e
+        return super()._calc_percentile_cutoff(percentile, column)
 
     # endregion
 
@@ -1722,6 +1693,7 @@ class StorageManagerDuckDB(StorageManager):
         return self.db_query(*query.build()).fetchone()[0]
 
     def set_pose_comment(self, pose_id: int, comment: str) -> None:
+        self.ensure_gui_tables()
         if comment:
             self.db_query(
                 "INSERT INTO Pose_comments (pose_id, comment) VALUES (?, ?)"
@@ -1733,6 +1705,8 @@ class StorageManagerDuckDB(StorageManager):
         self.conn.commit()
 
     def get_pose_comment(self, pose_id: int) -> "str | None":
+        if not self._is_table("Pose_comments"):
+            return None
         row = self.db_query(
             "SELECT comment FROM Pose_comments WHERE pose_id = ?", (pose_id,)
         ).fetchone()

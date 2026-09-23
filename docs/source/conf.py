@@ -9,6 +9,7 @@ import sys
 sys.path.insert(0, os.path.abspath("../../ringtail/"))
 sys.path.insert(0, os.path.abspath("../.."))  # repo root, so `import ringtail` resolves
 from ringtail.ringtailoptions import ringtail_defaults
+from ringtail.filters import Filter
 
 
 def _fmt_default(v):
@@ -21,9 +22,12 @@ def _fmt_default(v):
 
 
 # turn every default into a substitution, e.g. |default_storage_type| -> duckdb
+_doc_defaults = ringtail_defaults()
+_doc_defaults.update(Filter().asdict())
+
 rst_prolog = "\n".join(
     f".. |default_{key}| replace:: {_fmt_default(val)}"
-    for key, val in ringtail_defaults().items()
+    for key, val in _doc_defaults.items()
 )
 
 

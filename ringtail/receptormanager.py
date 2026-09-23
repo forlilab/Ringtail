@@ -7,6 +7,7 @@
 from pathlib import Path
 import gzip
 from dataclasses import dataclass
+from typing import Optional
 from .logutils import get_logger
 from .exceptions import ReceptorError
 
@@ -27,18 +28,18 @@ class ReceptorData:
     representation for each use case rather than reading fields directly.
     """
 
-    name: str | None
-    blob_str: str | None
-    polymer_json: str | None
+    name: Optional[str]
+    blob_str: Optional[str]
+    polymer_json: Optional[str]
 
-    def receptor_string(self) -> str | None:
+    def receptor_string(self) -> Optional[str]:
         """String for interaction calculation: meeko Polymer JSON preferred, else
         pdbqt blob str. The interaction finder reads receptor atoms natively from a
         Polymer (no pdbqt round-trip) and only parses the pdbqt blob for legacy
         receptors that have no Polymer JSON."""
         return self.polymer_json or self.blob_str
 
-    def pdbqt_str(self) -> str | None:
+    def pdbqt_str(self) -> Optional[str]:
         """Pdbqt-format string, converting polymer JSON if needed. Use for .pdbqt file export."""
         if self.blob_str:
             return self.blob_str
@@ -308,4 +309,3 @@ def receptor_atoms_from_polymer(
     kdtree = spatial.cKDTree(atoms["xyz"])
 
     return atoms, _annotate_receptor_atoms(atoms), kdtree
-

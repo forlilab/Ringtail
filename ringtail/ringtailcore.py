@@ -10,6 +10,7 @@ import os
 import re
 from typing import Callable, Union, NamedTuple
 import functools
+import inspect
 from collections.abc import Iterable
 import json
 from pathlib import Path
@@ -104,6 +105,49 @@ def _wrap_exceptions(func):
             ) from e
 
     return wrapper
+
+
+def _records_bookmark_call(exclude: tuple = (), normalize: Callable = None):
+    """Store the call on every bookmark it creates (Filters.definition and call_id),
+    so the bookmark can be re-created by calling the same method with the same
+    arguments. Defaults are applied, so a later change of default does not change
+    what a replay selects.
+
+    Args:
+        exclude (tuple): arguments that only shape output, not the selection
+        normalize (Callable, optional): takes and returns the recorded kwargs dict,
+            e.g. to make paths absolute
+    """
+
+    def decorator(func):
+        signature = inspect.signature(func)
+
+        @functools.wraps(func)
+        def wrapper(self, *args, **kwargs):
+            bound = signature.bind(self, *args, **kwargs)
+            bound.apply_defaults()
+            recorded = {
+                name: value.to_dict() if isinstance(value, Filters) else value
+                for name, value in bound.arguments.items()
+                if name != "self" and name not in exclude
+            }
+            if normalize is not None:
+                recorded = normalize(recorded)
+            with self.storageman.recording_call(func.__name__, recorded):
+                return func(self, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def _absolute_crossref_paths(recorded: dict) -> dict:
+    """Crossref pairs as (absolute database path, bookmark), so a replay does not
+    depend on the working directory."""
+    for key in ("wanted_dbs", "unwanted_dbs"):
+        if recorded.get(key):
+            recorded[key] = [(os.path.abspath(db), scope) for db, scope in recorded[key]]
+    return recorded
 
 
 @_wrap_exceptions
@@ -209,27 +253,30 @@ class RingtailCore:
         interaction_cutoffs: list = RingtailDefaults.interaction_cutoffs,
         max_proc: int = RingtailDefaults.max_proc,
         finalize: bool = True,
+        consent: bool = False,
     ):
         """
         Call storage manager to process result files and add to database. Creates or adds to an existing a database.
-        Options can be provided as a dict or as individual options. If both are provided, individual options will overwrite those from the dictionary.
+        Adding results to a database that has bookmarks or filters would leave those out of date, so it
+        requires consent=True, which deletes all bookmarks, filters and clusterings first.
 
         Args:
             docking_results (str | list[str]): one or more docking result files, directories to scan,
                 or text files listing result paths. Type is auto-detected per item.
             recursive (bool): used to recursively search directories in docking_results
-            receptor_file (str): string containing the receptor .pdbqt
+            receptor_file (str): path to the receptor, as a meeko Polymer .json or a .pdbqt
             save_receptor (bool): whether or not to store the full receptor details in the database (needed for some things)
             duplicate_handling (str, options): specify how duplicate Results rows should be handled when inserting into database. Options are "ignore" or "replace". Default behavior will allow duplicate entries.
             overwrite (bool): whether or not to overwrite existing storage
             docking_mode (str): what docking engine was used to perform the docking
-            store_all_poses (bool): store all ligand poses, does it take precedence over max poses?
-            max_poses (int): how many poses to save (ordered by soem score?)
-            calculate_interactions (bool): use if not wanting Ringtail to calculate and store interactions, only in vina mode
-            interaction_tolerance (float): longest ångström distance that is considered interaction?
-            interaction_cutoffs (list): ångström distance cutoffs for x and y interaction
+            store_all_poses (bool): store all ligand poses, takes precedence over max_poses
+            max_poses (int): how many top-ranked poses to save per ligand
+            calculate_interactions (bool): whether Ringtail calculates and stores interactions for AD6 and vina results
+            interaction_tolerance (float): RMSD (ångström) within which the interactions of a cluster's poses are added to its top pose (AD-GPU)
+            interaction_cutoffs (list): ångström distance cutoffs for hydrogen bond and van der Waals interactions
             max_proc (int): max number of computer processors to use for file reading
             finalize (bool, optional): whether to finalize database creation and write indices, or wait, for example when you write to the db in batches
+            consent (bool, optional): if the database has bookmarks or filters, delete them all (and any clusterings) so results can be added. Defaults to False, which raises OptionError in that case.
 
         Raises:
             OptionError
@@ -272,6 +319,8 @@ class RingtailCore:
                 self.storageman.overwrite_storage()
 
             self.storageman.check_storage_ready(self._run_mode, docking_mode, num_poses)
+            if results.docking_results:
+                self._clear_filters_for_new_results(consent)
         if results.save_receptor:
             self.save_receptor(results.receptor_file_path)
 
@@ -360,6 +409,7 @@ class RingtailCore:
         receptor_string: str = None,
         chunk_size: int = RingtailDefaults.chunk_size,
         finalize: bool = False,
+        consent: bool = False,
     ):
         """Add Vina docking results from a dict or iterable of dicts to the database.
 
@@ -373,19 +423,15 @@ class RingtailCore:
             receptor_string (str): receptor PDBQT or polymer JSON string; fetched from DB if omitted
             chunk_size (int): number of ligands to buffer before flushing to DB
             finalize (bool): reserved for future use
+            consent (bool): if the database has bookmarks or filters, delete them all (and any clusterings) so results can be added. Defaults to False, which raises OptionError in that case.
         """
         if isinstance(results, dict):
             results = [{key: value} for key, value in results.items()]
         elif not isinstance(results, Iterable):
             results = [results]
 
-        receptor_string = (
-            receptor_string or self.get_receptor_object().receptor_string()
-        )
-        interaction_finder = (
-            make_interaction_finder(receptor_string, interaction_cutoffs)
-            if calculate_interactions
-            else None
+        interaction_finder = self._prepare_interaction_finder(
+            calculate_interactions, receptor_string, interaction_cutoffs
         )
         num_poses = self._num_poses_to_store(max_poses, store_all_poses)
         vina_parser = VinaMoleculeSupplier(num_poses)
@@ -403,6 +449,7 @@ class RingtailCore:
             num_poses,
             chunk_size,
             finalize,
+            consent,
         )
 
     @_wrap_exceptions
@@ -416,6 +463,7 @@ class RingtailCore:
         chunk_size: int = RingtailDefaults.chunk_size,
         duplicate_handling: str = RingtailDefaults.duplicate_handling,
         finalize: bool = False,
+        consent: bool = False,
     ):
         """Add RDKit Mol objects directly to the database.
 
@@ -430,6 +478,7 @@ class RingtailCore:
             chunk_size (int): number of ligands to buffer before flushing to DB
             duplicate_handling (str): how to handle duplicate Results rows
             finalize (bool): reserved for future use
+            consent (bool): if the database has bookmarks or filters, delete them all (and any clusterings) so results can be added. Defaults to False, which raises OptionError in that case.
         """
         docking_mode = validate_docking_mode(docking_mode)
         if docking_mode != "ad6":
@@ -439,13 +488,8 @@ class RingtailCore:
         if not isinstance(mols, Iterable):
             mols = [mols]
 
-        receptor_string = (
-            receptor_string or self.get_receptor_object().receptor_string()
-        )
-        interaction_finder = (
-            make_interaction_finder(receptor_string, interaction_cutoffs)
-            if calculate_interactions
-            else None
+        interaction_finder = self._prepare_interaction_finder(
+            calculate_interactions, receptor_string, interaction_cutoffs
         )
 
         self._insert_non_file_results(
@@ -460,7 +504,19 @@ class RingtailCore:
             -1,
             chunk_size,
             finalize,
+            consent,
         )
+
+    @_wrap_exceptions
+    def has_filter_data(self) -> bool:
+        """Whether the database has bookmarks, filters or clusterings. If so, adding
+        results requires consent=True, which deletes them all.
+
+        Returns:
+            bool: True if there is filter data
+        """
+        with self.storageman:
+            return self.storageman.has_filter_data()
 
     @_wrap_exceptions
     def finalize_write(self):
@@ -782,6 +838,15 @@ class RingtailCore:
             }
 
     @_wrap_exceptions
+    @_records_bookmark_call(
+        exclude=(
+            "output_log",
+            "outfields",
+            "order_results",
+            "return_iter",
+            "output_all_poses",
+        )
+    )
     def filter(
         self,
         filters: Union[Filters, dict] = None,
@@ -912,6 +977,13 @@ class RingtailCore:
         if output_bookmark is None:
             raise OptionError(
                 "Bookmark name contains illegal symbols, please only use letters, numbers, and underscore."
+            )
+        # bookmark lookups ignore case, so compare lowercased names: 'KEEP' as input and
+        # 'keep' as output would otherwise pass and overwrite the input bookmark
+        input_bookmark = input_bookmark.lower() if input_bookmark else None
+        if input_bookmark == output_bookmark:
+            raise OptionError(
+                f"'input_bookmark' and 'output_bookmark' cannot be the same ({output_bookmark!r}), please choose a different 'output_bookmark'."
             )
         # make sure enumerate_interaction_combs always true if max_miss = 0, since we don't ever worry about the union in this case
         if max_miss == 0:
@@ -1061,6 +1133,7 @@ class RingtailCore:
             return num_passing_ligands, output_bookmark
 
     @_wrap_exceptions
+    @_records_bookmark_call()
     def cluster(
         self,
         output_bookmark: str,
@@ -1080,6 +1153,16 @@ class RingtailCore:
         Returns:
             tuple[int, str]: number of cluster representatives, output_bookmark
         """
+        output_bookmark = valid_bookmark_name(output_bookmark)
+        if output_bookmark is None:
+            raise OptionError(
+                "Bookmark name contains illegal symbols, please only use letters, numbers, and underscore."
+            )
+        input_bookmark = input_bookmark.lower() if input_bookmark else None
+        if input_bookmark == output_bookmark:
+            raise OptionError(
+                f"'input_bookmark' and 'output_bookmark' cannot be the same ({output_bookmark!r}), please choose a different 'output_bookmark'."
+            )
         with self.storageman as sm:
             generated_name, num_clusters = sm.cluster_data(
                 input_bookmark,
@@ -1277,8 +1360,8 @@ class RingtailCore:
         Args:
             bookmark_name (str): bookmark name from which to export Mols
             sdf_path (str, optional): Optional path existing or to be created in cd where SDF files will be saved
-            all_in_one (bool, optional): If True will write all molecules to one SDF (separated by $$$$), if False will write one molecule pre SDF
-            ligname (str | list): ligand name for which the receptor flexible residue info should be collected
+            all_in_one (bool, optional): If True will write all molecules to one SDF (separated by $$$$), if False will write one molecule per SDF
+            ligname (str | list): ligand name(s) to export; with bookmark_name, only these ligands' poses in the bookmark
         Raises:
             StorageError: if bookmark or data not found
         """
@@ -1389,7 +1472,7 @@ class RingtailCore:
     def export_columns_as_csv(
         self,
         columns: Union[dict[str, str], list[str]],
-        bookmark_name: str,
+        bookmark_name: str = None,
         csv_name: str = "columns_output.csv",
     ):
         """
@@ -1400,7 +1483,8 @@ class RingtailCore:
                 ``{column: header}`` renames the column in the csv; a header of None,
                 or a plain list of column names, keeps the column's own name. Columns
                 are given as bare names — the source table is resolved automatically.
-            bookmark_name (str): data limiting table/bookmark to export for
+            bookmark_name (str, optional): bookmark, status table, or Candidates
+                selection to export. ``None`` or ``Results`` exports all results.
             csv_name (str, optional): name of csv file. Defaults to "columns_output.csv".
         """
         bookmark_name = bookmark_name.lower() if bookmark_name else None
@@ -1519,6 +1603,7 @@ class RingtailCore:
                 opm.write_filter_results_in_log(new_data)
 
     @_wrap_exceptions
+    @_records_bookmark_call(normalize=_absolute_crossref_paths)
     def cross_reference_databases(
         self,
         wanted_dbs: list[tuple[str, Union[str, None]]] = None,
@@ -2416,6 +2501,7 @@ class RingtailCore:
         num_poses: int,
         chunk_size: int,
         finalize: bool,
+        consent: bool = False,
     ):
         """
         Method to process non-file results
@@ -2428,9 +2514,11 @@ class RingtailCore:
             num_poses (int): num poses to store for each
             chunk_size (int): how many results to parse before writing to db
             finalize (bool): whether to finalize db write
+            consent (bool): delete existing bookmarks/filters so results can be added
         """
         with self.storageman:
             self.storageman.check_storage_ready(self._run_mode, docking_mode, num_poses)
+            self._clear_filters_for_new_results(consent)
 
         buffer = {"ligands": [], "poses": [], "interactions": []}
         with self.storageman as sm:
@@ -2451,6 +2539,33 @@ class RingtailCore:
         if finalize:
             self.finalize_write()
 
+    def _clear_filters_for_new_results(self, consent: bool):
+        """Bookmarks are stored selections: new results would not be in them, and
+        replaced poses would drop out of them, so no bookmark stays coherent once
+        results are added. With consent, delete them all; otherwise refuse.
+        Must be called with the storage manager open.
+
+        Args:
+            consent (bool): whether the user agreed to delete all filter data
+
+        Raises:
+            OptionError: if there are bookmarks/filters and consent was not given
+        """
+        if not self.storageman.has_filter_data():
+            return
+        if not consent:
+            raise OptionError(
+                "This database has bookmarks/filters, which adding results would make "
+                "inconsistent. Pass consent=True (command line: answer 'yes' or use "
+                "--yes) to delete all bookmarks, filters and clusterings and add the "
+                "results. Nothing was written."
+            )
+        logger.warning(
+            "Adding results to a database with bookmarks/filters: deleting all "
+            "bookmarks, filters and clusterings. Re-run filtering afterwards."
+        )
+        self.storageman.delete_all_filter_data()
+
     def _num_poses_to_store(self, max_poses: int, store_all_poses: bool) -> int:
         """
         Determine number of poses to store based on Ringtail user arguments
@@ -2466,6 +2581,50 @@ class RingtailCore:
             return -1
         else:
             return max_poses
+
+    def _prepare_interaction_finder(
+        self,
+        calculate_interactions: bool,
+        receptor_string: str,
+        interaction_cutoffs: list,
+    ):
+        """Resolve and validate interaction-calculation prerequisites.
+
+        Direct result insertion does not need a receptor when interaction
+        calculation is disabled. When it is enabled, an explicitly supplied
+        receptor takes precedence over one stored in the database.
+        """
+        if not calculate_interactions:
+            return None
+
+        if not receptor_string:
+            with self.storageman as sm:
+                has_receptor_table = any(
+                    table.lower() == "receptors" for table in sm.tables_in_db()
+                )
+                receptor_data = sm.fetch_receptor_object() if has_receptor_table else {}
+            if receptor_data:
+                receptor_string = RM.ReceptorData(
+                    name=receptor_data.get("recname"),
+                    blob_str=RM.blob2str(receptor_data.get("receptor_object")),
+                    polymer_json=receptor_data.get("polymer"),
+                ).receptor_string()
+
+        if not receptor_string:
+            raise OptionError(
+                "Interaction calculation requires a receptor. Pass receptor_string "
+                "or save a receptor to the database first, or set "
+                "calculate_interactions=False."
+            )
+
+        interaction_finder = make_interaction_finder(
+            receptor_string, interaction_cutoffs
+        )
+        if interaction_finder is None:
+            raise OptionError(
+                "The receptor could not be read for interaction calculation."
+            )
+        return interaction_finder
 
     @staticmethod
     def _interactions_str(interactions: list) -> str:
