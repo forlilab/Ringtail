@@ -16,14 +16,14 @@ To install Ringtail from PyPi, create then activate your :ref:`ringtail environm
 
 Installation via conda-forge installs all dependencies automatically. When using pip, you must install all dependencies separately, including:
 
-* meeko>=0.7.1 (another Forli lab tool)
-* rdkit >=2025.09.5
+* meeko >=0.8.0 (another Forli lab tool)
+* rdkit
 * numpy
 * scipy
 * pandas
 * packaging
 * duckdb (new requirement as of v3)
-* prody>=2.4.1 (optional, used by meeko to build receptor Polymers from ProDy structures)
+* prody (optional, used by meeko to build receptor Polymers from ProDy structures)
 
 .. code-block:: bash
 

@@ -9,21 +9,16 @@
 ![Build Status](https://github.com/forlilab/Ringtail/actions/workflows/python-package.yml/badge.svg?event=push)
 [![Documentation Status](https://readthedocs.org/projects/ringtail/badge/?version=latest)](https://ringtail.readthedocs.io)
 
-Ringtail is an open-source, lightweight, and highly customizable Python package for organizing, filtering, and exploring the results of molecular docking and virtual screening, from a handful of ligands to **tens of millions**. It reads collections of docking results such as SDFs from [AutoDock-6](https://github.com/forlilab/AutoDock), Docking Log Files (DLGs) from [AutoDock-GPU](https://github.com/ccsb-scripps/AutoDock-GPU), and PDBQTs from [AutoDock-Vina](https://github.com/ccsb-scripps/AutoDock-Vina) — into a compact database that stays fast to query as it grows, backed by either DuckDB (default) or SQLite. Results file parsing is parallelized across your CPUs for fast database writing.
+Ringtail is an open-source Python package for organizing, filtering, and exploring molecular docking results at the scale of millions of ligands. It reads [AutoDock-6](https://github.com/forlilab/AutoDock) (AD6) SDFs, [AutoDock-GPU](https://github.com/ccsb-scripps/AutoDock-GPU) DLGs, and [AutoDock-Vina](https://github.com/ccsb-scripps/AutoDock-Vina) PDBQTs into compact DuckDB (default) or SQLite databases, with parallell input file processing. 
 
-Once your docking results are in a database, Ringtail provides a wealth of ways to apply your chemical intuition and narrow down the results to likely pharmacological hits: filter by docking score, ligand efficiency, receptor interactions, or ligand chemistry; cluster for diversity; compare hits across targets; and export exactly the molecules and data you want.
+Filter by docking score, ligand efficiency, receptor interactions, or ligand chemistry, cluster for diversity, compare hits across different targets, and export selected results as SDF or CSV files. 
 
-Filter by ligand molecular weight or supply a CSV of ligand names to select a specific set of compounds, for example, for export.
+Use the easy-to-use [command line tool](https://ringtail.readthedocs.io/en/latest/cmdline.html) or the extensive [Python API](https://ringtail.readthedocs.io/en/latest/api.html) for building it into your own pipelines and scripts. See the [documentation](https://ringtail.readthedocs.io) for detailed instructions.
 
-Export selected results as SDF files or CSVs with your choice of columns.
+Some of the strengths of the Python API include accepting docked RDKit molecules from AD6 and Vina result strings directly, allowing docking pipelines to write results without intermediate files. Through the API you can also screen the poses by marking them as either accepted, maybe, or rejected, and you can attach comments to track screening decisions.
 
-Use Ringtail however suits you, as a user-friendly [command line tool](https://ringtail.readthedocs.io/en/latest/cmdline.html) for straightforward screening, or an extensive [Python API](https://ringtail.readthedocs.io/en/latest/api.html) for building it into your own pipelines and scripts. In-depth documentation for both can be found on [ReadTheDocs](https://ringtail.readthedocs.io).
 
-The Python API also accepts docked RDKit molecules from AD6 and Vina result strings directly, allowing docking pipelines to write results without intermediate files.
-
-The Python API also lets you mark poses as accepted, maybe, or rejected and attach comments to track screening decisions.
-
-## Fast, even at scale
+## Fast at scale
 
 With the DuckDB backend, filtering stays in the seconds range as a library grows into the millions of ligands (Intel i9, 18 cores, 64 GB RAM, SSD; docking score alone, then combined with one, and two interaction filters):
 
@@ -34,9 +29,8 @@ With the DuckDB backend, filtering stays in the seconds range as a library grows
 | 9,039,451 | 24,801,508 | 15 GB | 2.0 s | 16.5 s | 13.8 s |
 
 
-Database size scales roughly linearly with the number of stored poses, see [the changelog](https://ringtail.readthedocs.io/en/latest/changes.html) for full benchmarks.
+See the [changelog](https://ringtail.readthedocs.io/en/latest/changes.html) for full benchmarks and the [compression guide](https://ringtail.readthedocs.io/en/latest/compress.html) for how to easily transfer large databases.
 
-For transferring large databases, Ringtail provides compression and decompression tools, with optional filtering before compression. See [compressing databases](https://ringtail.readthedocs.io/en/latest/compress.html).
 
 ## Installation
 
@@ -59,7 +53,7 @@ $ conda install -c conda-forge ringtail
 $ pip install ringtail
 ```
 
-When installing with pip, you must install all dependencies separately, including `rdkit`, `numpy`, `scipy`, `pandas`, `packaging`, and `meeko` (a Forli lab tool), and optionally `prody`. DuckDB is the default storage backend for Ringtail, install if not already present (SQLite ships with Python):
+When installing with pip, you must install all dependencies separately, including `duckdb`, `rdkit`, `numpy`, `scipy`, `pandas`, `packaging`, and `meeko >= 0.8.0` (a Forli lab tool), and optionally `prody`. DuckDB is the default storage backend for Ringtail >=3, install if not already present (or switch backend to SQLite, which ships with Python):
 
 ```bash
 $ pip install <dependency>
@@ -67,11 +61,11 @@ $ pip install <dependency>
 
 ## Quick start
 
-After installing, a virtual screen can be as simple as two commands:
+After installing, import and filter docking results with two commands:
 
 Ringtail defaults to AutoDock-6 SDF input. For AutoDock-GPU DLGs, specify `--docking_mode adgpu`; for Vina PDBQTs, use `--docking_mode vina`. In the Python API, pass `docking_mode="adgpu"` or `"vina"` to `add_results_from_files()`.
 
-Provide the receptor used for docking as a Meeko Polymer JSON or PDBQT file.
+Provide the receptor used for docking as a Meeko Polymer JSON or PDBQT file. Ringtail also stores up to three poses per ligand as a default, if you wish to retain all poses use `--store_all_poses`. 
 
 ```bash
 # write a folder of docking results into a database
@@ -104,9 +98,8 @@ rtc.filter(
 
 ### Upgrading older databases
 
-Databases created with Ringtail v2 or earlier require upgrading with `rt_upgrade_db -d old_database.db`. The update script target defaults to `3.0.0`. Upgrading removes existing bookmarks and filters; see the [database upgrade documentation](https://ringtail.readthedocs.io/en/latest/upgrade_database.html) for more details.
+Upgrade databases from Ringtail v2 or earlier with `rt_upgrade_db -d old_database.db` (note that this will remove existing filters and bookmarks). See the [upgrade guide](https://ringtail.readthedocs.io/en/latest/upgrade_database.html) and [v3 changelog](https://ringtail.readthedocs.io/en/latest/changes.html) for database migration, renamed options, and removal of built-in plotting and PyMOL integration. 
 
-Ringtail 3 also changes several CLI options, API arguments, and output-column names, and removes built-in plotting and PyMOL integration. See the [changelog](https://ringtail.readthedocs.io/en/latest/changes.html) for migration details.
 
 ## Citing Ringtail
 
