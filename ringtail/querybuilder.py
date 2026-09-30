@@ -19,9 +19,7 @@ class QueryBuilder:
         self.order_by = None
         self.delete_from = None
         self.drop_if_exists = None
-        self.subqueries = []
         self.params = []
-        self.subquery_params = []
         self.aliases = {}
         self.insert_into = None
         self.returning = None
@@ -67,9 +65,6 @@ class QueryBuilder:
         END AS status"""
         self.selects.append(status_case)
         return self
-
-    def FROM_BOOKMARK(self, bookmark, alias=None, db_alias=""):
-        return self.FROM(f"({self.bookmark_query(bookmark, db_alias)})", alias)
 
     @staticmethod
     def bookmark_query(bookmark, db_alias=""):
@@ -137,13 +132,6 @@ class QueryBuilder:
         self.descending = bool(descending)
         return self
 
-    def WITH_SUBQUERY(self, name, query, params=None):
-        self.subqueries.append((name, query))
-        if params:
-            # CTEs render before the main statement, so their params must lead.
-            self.subquery_params.extend(params)
-        return self
-
     def DELETE_FROM(self, table: str):
         self.delete_from = f"""DELETE FROM {table}"""
         return self
@@ -165,7 +153,7 @@ class QueryBuilder:
         self.aliases[table.lower()] = alias.lower()
         return alias
 
-    def build(self, count=False):
+    def build(self):
         statements = {
             "INSERT": bool(self.insert_into),
             "SELECT": bool(self.selects),
@@ -182,10 +170,6 @@ class QueryBuilder:
         parts = []
         if self.insert_into:
             parts.append(f"""{self.insert_into}""")
-
-        if self.subqueries:
-            ctes = ", ".join(f"{name} AS ({query})" for name, query in self.subqueries)
-            parts.append(f"WITH {ctes}")
 
         if self.selects:
             parts.extend(["SELECT", ", ".join(self.selects)])
@@ -226,13 +210,7 @@ class QueryBuilder:
         if self.returning:
             parts.append("RETURNING " + self.returning)
 
-        sql = " ".join(parts)
-        params = self.subquery_params + self.params
-        if count:
-            if not self.selects:
-                raise ValueError("build(count=True) is only valid for SELECT queries")
-            return f"SELECT COUNT(*) FROM ({sql})", params
-        return sql, params
+        return " ".join(parts), self.params
 
 
 class QueryBuilderSQLite(QueryBuilder):
