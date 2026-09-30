@@ -24,6 +24,9 @@ import multiprocessing as mp
 from .storagemanager import StorageManager
 from .interactions import InteractionFinder
 
+# tag the writer puts on pipe messages, so the parent treats them as fatal
+WRITER_ERROR_SOURCE = "Database"
+
 
 class DockingFileReader(mp.Process):
     """This class is the individual worker for processing docking results.
@@ -59,7 +62,7 @@ class DockingFileReader(mp.Process):
     ):
 
         # initialize the parent class to inherit all multiprocess methods
-        mp.Process.__init__(self)
+        super().__init__()
         # each worker knows the queue in (where data to process comes from)
         self.queueIn = queueIn
         # ...and a queue out (where to send the results)
@@ -93,6 +96,9 @@ class DockingFileReader(mp.Process):
                     "interaction_tolerance": self.interaction_tolerance,
                 }
             )
+        # ad6 has multiple ligands per file, so need to keep processing file if one bad ligand/record
+        if self.docking_mode == "ad6":
+            common_processing_vars["report_error"] = self._report_bad_record
         if self.calculate_interactions:
             try:
                 interaction_finder = InteractionFinder(
@@ -167,13 +173,13 @@ class DockingFileReader(mp.Process):
 
     def _add_to_queueout(self, obj):
         """
-        Adds processed object (string, dict, etc) to the output queue which will shuttle it to the Writer
+        Adds a parsed result to the output queue for the Writer, waiting while it is full.
 
         Args:
-            obj (_type_): _description_
+            obj (dict): parsed docking result
 
         Raises:
-            MultiprocessingError: _description_
+            MultiprocessingError
         """
         max_attempts = 750
         timeout = 0.5  # seconds
@@ -192,30 +198,45 @@ class DockingFileReader(mp.Process):
                 )
                 attempts += 1
 
+    def _report_bad_record(self, name: str, tb: str):
+        """Sends a skipped record to the parent for the failed-files log."""
+        self.pipe.send((FileParsingError(f"Error while parsing {name}"), tb, name))
+
 
 class Writer(mp.Process):
-    """This class is a listener that retrieves data from the queue and writes it
-    into datbase"""
+    """Listener that writes parsed docking results from the queue into the database.
+
+    Args:
+        queue (mp.Queue): parsed results, ending with one None per reader
+        pipe_conn: connection to the parent, used to report a failed write
+        num_readers (int): number of readers to wait for
+        db_file (str): database file
+        storageman_class (type[StorageManager]): storage manager class for the database
+        chunk_size (int): number of results to buffer before each write
+        duplicate_handling (str): how to handle duplicate Results rows
+    """
 
     def __init__(
         self,
         queue,
+        pipe_conn,
         num_readers: int,
         db_file: str,
-        storageman_class: StorageManager,
+        storageman_class: type[StorageManager],
         chunk_size: int,
         duplicate_handling: str,
     ):
-        mp.Process.__init__(self)
+        super().__init__()
         self.queue = queue
+        self.pipe = pipe_conn
         # this class knows about how many multi-processing workers there are and where the pipe to the parent is
         self.num_readers = num_readers
         # assign pointer to storage object, set chunksize
         self.storageman: StorageManager = storageman_class(db_file)
         self.chunk_size = chunk_size
         self.duplicate_handling = duplicate_handling
-        # initialize data array (stack of dictionaries)
-        self.docked_ligands = {"ligands": [], "poses": [], "interactions": []}
+        # parsed results of the current chunk, one per docking file or SDF record
+        self.packets = []
         self.receptor_written_to_db = False
         self.receptor_row = None
         # progress tracking instance variables
@@ -259,9 +280,7 @@ class Writer(mp.Process):
 
                 if self.receptor_row is None and not self.receptor_written_to_db:
                     self.receptor_row = list(next_task.get("receptor"))
-                self.docked_ligands["ligands"].extend(next_task["ligands"])
-                self.docked_ligands["poses"].extend(next_task["poses"])
-                self.docked_ligands["interactions"].extend(next_task["interactions"])
+                self.packets.append(next_task)
                 self.counter += 1
                 now = time.perf_counter()
                 if now - self.last_print_time >= 2.0:
@@ -270,31 +289,88 @@ class Writer(mp.Process):
                 if self.counter >= self.chunk_size:
                     self.write_to_storage()
 
-        except Exception:
+        except Exception as e:
             tb = traceback.format_exc()
-            logger.error("Exception during writing:\n" + tb)
-            raise WriteToStorageError("Error occurred while writing to the database.")
+            error = WriteToStorageError(f"Error occurred while writing to the database: {e}")
+            # child logging is not visible under spawn, so report to the parent
+            self.pipe.send((error, tb, WRITER_ERROR_SOURCE))
+            raise error
 
     def write_to_storage(self):
         """Inserting data to the database through the designated storagemanager."""
-        # insert result, ligand, and receptor data
+        # insert receptor data
         with self.storageman as sm:
             if not self.receptor_written_to_db and self.receptor_row:
                 sm.insert_receptor_basic_info(self.receptor_row)
                 self.receptor_written_to_db = True
                 self.receptor_row = None
-            sm.insert_data(
-                self.docked_ligands,
-                self.duplicate_handling,
-            )
+            last_ids = sm.last_row_ids()
+
+        # insert ligand, result and interaction data, one ligand at a time if the chunk fails
+        try:
+            self._insert(self.packets)
+            self.num_files_written += len(self.packets)
+        except Exception:
+            self._undo_write(last_ids)
+            self.num_files_written += self._insert_one_by_one()
 
         # calulate time for processing/writing speed
-        self.num_files_written += self.counter
         self.total_runtime = time.perf_counter() - self.time0
 
         # reset data holder for next chunk
-        self.docked_ligands = {"ligands": [], "poses": [], "interactions": []}
+        self.packets = []
         self.counter = 0
+
+    def _insert(self, packets: list):
+        """Writes the ligands, poses and interactions of the given parsed results in one go."""
+        data = {
+            key: [row for packet in packets for row in packet[key]]
+            for key in ("ligands", "poses", "interactions")
+        }
+        with self.storageman as sm:
+            sm.insert_data(data, self.duplicate_handling)
+
+    def _undo_write(self, last_ids: dict):
+        """Deletes what a failed write left in the database."""
+        with self.storageman as sm:
+            sm.delete_rows_after(last_ids)
+
+    def _insert_one_by_one(self) -> int:
+        """Writes the chunk's parsed results one at a time, reporting the ones that fail.
+
+        Raises:
+            WriteToStorageError: if every result of a chunk of several fails
+
+        Returns:
+            int: number of results written
+        """
+        written = 0
+        for packet in self.packets:
+            with self.storageman as sm:
+                last_ids = sm.last_row_ids()
+            try:
+                self._insert([packet])
+                written += 1
+            except Exception as e:
+                self._undo_write(last_ids)
+                if packet["ligands"]:
+                    name = packet["ligands"][0][0]
+                elif packet["poses"]:
+                    name = packet["poses"][0].ligname
+                else:
+                    name = "unknown"
+                self.pipe.send(
+                    (
+                        WriteToStorageError(f"Error while writing {name} to the database: {e}"),
+                        traceback.format_exc(),
+                        f"ligand {name}",
+                    )
+                )
+        if not written and len(self.packets) > 1:
+            raise WriteToStorageError(
+                "No ligand of the chunk could be written, the database may not be writable."
+            )
+        return written
 
     def _log_progress(self):
         current = self.num_files_written + self.counter

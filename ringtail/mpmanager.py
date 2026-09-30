@@ -10,8 +10,11 @@ import queue
 import fnmatch
 import os
 import glob
-from .mpreaderwriter import DockingFileReader
-from .mpreaderwriter import Writer
+from .mpreaderwriter import (
+    DockingFileReader,
+    Writer,
+    WRITER_ERROR_SOURCE,
+)
 from .logutils import get_logger
 
 logger = get_logger(__name__)
@@ -44,7 +47,6 @@ class MPManager:
         results (ResultsObject): has all docking results data such as file paths and directories to be written
         num_readers (int): numer of processors
         chunk_size (int): how many tasks ot send to the write processor at the time, essentially how many ligands files to read before writing them per processor
-        num_files (int): number of files processed at any given time
         queueIn (mp.Queue): queue for files about to be processed by file reader
         queueOut (mp.Queue): queue for files that have been processed and should be written
         writer_options (dict): incoming results writing options
@@ -81,7 +83,6 @@ class MPManager:
         # Start reader processes
         self.workers = []
         self.p_conn, self.c_conn = mp.Pipe(duplex=True)
-        self.num_files = 0
 
         # used to ensure docking file is not receptor file (for pdbqt)
         self.receptor_file_path = receptor_file_path
@@ -116,9 +117,10 @@ class MPManager:
             )
             reader.start()
             self.workers.append(reader)
-        # Start writer in a thread (pulls from queueOut)
+        # Start writer process (pulls from queueOut)
         writer = Writer(
             self.queueOut,
+            self.c_conn,
             self.num_readers,
             db_file,
             storageman_class,
@@ -143,14 +145,14 @@ class MPManager:
         while writer.is_alive():
             sleep(0.5)
             self._check_for_worker_exceptions()
+            self._check_workers_alive()
 
         writer.join()
         # the writer can report an error and exit between two polls above (small jobs
         # finish within one sleep), so read whatever is still waiting in the pipe
         while self.p_conn.poll():
             self._check_for_worker_exceptions()
-
-        logger.info(f"Wrote {self.num_files} docking results to the database")
+        self._check_workers_alive()
 
     def _process_data_sources(self, results: ResultsObject, file_pattern: str):
         """Adds each docking result item to the queue.
@@ -170,7 +172,8 @@ class MPManager:
                     self._scan_file_list(item, file_pattern.replace("*", ""))
 
     def _add_to_queue(self, results_data):
-        """_summary_
+        """
+        Adds docking results to the reader queue, skipping the receptor file.
 
         Args:
             results_data (string or dict): results data provided as a file path or a dictionary kw pair
@@ -195,30 +198,51 @@ class MPManager:
                 ) from queue.Full()
             try:
                 self.queueIn.put(results_data, block=True, timeout=timeout)
-                self.num_files += 1
                 self._check_for_worker_exceptions()
                 break
             except queue.Full:
                 attempts += 1
                 self._check_for_worker_exceptions()
+                self._check_workers_alive()
+
+    def _check_workers_alive(self):
+        """
+        Raises if any reader or the writer exited with an error.
+
+        Raises:
+            MultiprocessingError
+        """
+        for worker in self.workers:
+            if worker.exitcode not in (None, 0):
+                # the writer's own error message is more useful than its exit code
+                while self.p_conn.poll():
+                    self._check_for_worker_exceptions()
+                self._kill_all_workers(
+                    MultiprocessingError(
+                        f"{worker.name} exited unexpectedly with code {worker.exitcode}."
+                    ),
+                    worker.name,
+                    "",
+                )
 
     def _check_for_worker_exceptions(self):
+        """Handles one waiting worker error: fatal when the writer fails, logged for a file, record or ligand."""
         if self.p_conn.poll():
             error, tb, filename = self.p_conn.recv()
             logger.error(f"Caught error in multiprocess from {filename}:")
             logger.error(f"{tb}")
             # don't kill parser errors, only database error
-            if filename == "Database":
+            if filename == WRITER_ERROR_SOURCE:
                 self._kill_all_workers(error, filename, tb)
             else:
                 with open("ringtail_failed_files.log", "a") as f:
                     f.write(
-                        str(datetime.now()) + f"\tRingtail failed to parse {filename}\n"
+                        str(datetime.now()) + f"\tRingtail failed to add {filename}\n"
                     )
-                    self.num_files -= 1
                     logger.debug(tb)
 
     def _kill_all_workers(self, error, filename, tb):
+        """Stops every worker process and raises the given error."""
         for s in self.workers:
             s.kill()
         logger.debug(f"Error encountered while handling {filename}")
