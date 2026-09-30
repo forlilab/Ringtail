@@ -99,7 +99,13 @@ class Filter:
                 f"Given 'le_percentile' {self.le_percentile} not allowed. Should be within percentile range of 0-100."
             )
 
-        if self.ligand_operator not in ["OR", "AND"] and (
+        if isinstance(self.ligand_operator, str):
+            self.ligand_operator = self.ligand_operator.upper()
+        if self.ligand_operator is not None and self.ligand_operator not in ["OR", "AND"]:
+            raise OptionError(
+                f"'ligand_operator' must be 'AND' or 'OR', not {self.ligand_operator!r}."
+            )
+        if self.ligand_operator is None and (
             self.ligand_substruct or self.ligand_substruct_pos
         ):
             logger.debug(f"'ligand_operator' set to default 'OR'.")
@@ -188,6 +194,10 @@ class Filter:
             elif key in interaction_keys:
                 for interact in value:
                     # interact is ["chain:res:resno:resatom", wanted(bool)]
+                    if len(interact[0].split(":")) != 4:
+                        raise OptionError(
+                            f"Interaction {interact[0]!r} must be 'chain:resname:resid:atom', fields may be empty (e.g. 'A:VAL:279:')."
+                        )
                     interaction_string = (
                         INTERACTION_TYPE_LETTERS[key] + ":" + interact[0]
                     )
@@ -235,27 +245,6 @@ class Filter:
     def has_criteria(self) -> bool:
         """True if this leaf sets any filter criterion at all."""
         return self.asdict() != _FILTER_DEFAULTS
-
-    def rdkit_only(self) -> Union["Filter", None]:
-        """A copy carrying only this leaf's RDKit criteria, or None if it has none.
-
-        Used when flat SMARTS/property criteria are given alongside a nested expression:
-        they apply to the whole expression, so they become their own leaf ANDed onto it.
-
-        Returns:
-            Filter | None: a leaf with just the RDKit criteria (plus ligand_operator,
-            which controls how multiple SMARTS combine)
-        """
-        criteria = {
-            key: getattr(self, key)
-            for key in self.RDKIT_CRITERIA
-            if getattr(self, key) not in (None, [], "", 0)
-        }
-        if not criteria:
-            return None
-        if self.ligand_operator:
-            criteria["ligand_operator"] = self.ligand_operator
-        return Filter(**criteria)
 
     @classmethod
     def get_filter_keys(cls, group: str) -> list:
@@ -463,10 +452,6 @@ class Filters:
                 yield from child.leaves()
             else:
                 yield child
-
-    def is_empty(self) -> bool:
-        """True if no leaf sets any criterion."""
-        return not any(leaf.has_criteria() for leaf in self.leaves())
 
     def uses_percentile(self) -> bool:
         """True if any leaf filters on a score or ligand-efficiency percentile."""
