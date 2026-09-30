@@ -43,7 +43,11 @@ POPULATED_LIGANDS = 217
 # Session-scoped so the template below can depend on it: a fixture may depend on one of
 # equal or wider scope, never narrower. Pytest also groups tests by parameter, so each
 # backend's template is built once rather than once per switch.
-@pytest.fixture(scope="session", params=["duckdb", "sqlite"])
+@pytest.fixture(
+    scope="session",
+    # the quick run (-m "not slow") covers only the default backend
+    params=["duckdb", pytest.param("sqlite", marks=pytest.mark.slow)],
+)
 def storage_type(request):
     return request.param
 

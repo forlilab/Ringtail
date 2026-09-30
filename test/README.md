@@ -3,8 +3,8 @@
 ## Running
 
 ```bash
-pytest -m "not slow"     # quick: 106 cases, ~2m20s — API level only
-pytest                   # deep:  175 cases, ~9m20s — adds the CLI integration tests
+pytest -m "not slow"     # quick: 73 cases, API level, duckdb only
+pytest                   # deep:  179 cases, adds sqlite and the CLI integration tests
 ```
 
 `pytest` with no arguments is the full run, on purpose — see "Why `slow` and not `quick`"
@@ -16,7 +16,7 @@ without activating the env, every CLI test errors with
 `FileNotFoundError: 'rt_process_vs'`.
 
 ```bash
-micromamba activate saltyringtail && pytest      # entry points on PATH
+conda activate <your_ringtail_env> && pytest
 ```
 
 ## Layout
@@ -28,9 +28,7 @@ micromamba activate saltyringtail && pytest      # entry points on PATH
 | `test_cmdline.py` | the same ground through `rt_process_vs` and friends — all `slow` |
 | `test_data/` | adgpu, vina and ad6 docking results, receptors, file lists |
 
-Every fixture that touches a database is parametrized over **duckdb and sqlite**, so a
-dialect-specific bug in one backend fails the suite rather than waiting for a user to find
-it.
+Every fixture that touches a database is parametrized over **duckdb and sqlite**, so a dialect-specific bug in one backend fails the suite rather than waiting for a user to find it. The sqlite cases are marked `slow`, so the quick run covers only the default backend.
 
 ## Why `slow` and not `quick`
 
@@ -48,6 +46,7 @@ decorator that does nothing.
 - **all of `test_cmdline.py`** — a subprocess per call, each with its own import and ingest,
   re-covering through the CLI what `test_units.py` covers through the API.
 - **`TestMergeDB`, `TestCrossref`** — clone databases and attach extra ones.
+- **every sqlite case** — through the `storage_type` fixture in `conftest.py`.
 
 Deliberately *not* marked slow: the ingest tests in `TestCoreOperations`,
 `TestVinaHandling` and `TestAD6Handling`. They do cost seconds each, but the write path is
@@ -55,8 +54,7 @@ where the bugs are, and a quick run with no ingest coverage would be false comfo
 
 ## The expensive thing is ingest
 
-Two changes account for the 17 minutes becoming 9, and they are worth understanding before
-adding tests.
+Two things keep the suite fast, and they are worth understanding before adding tests.
 
 **1. Shared templates.** Many tests ingest byte-identical data and differ only in what they
 assert. Those datasets are built **once per backend per session** and each test gets a copy
@@ -80,19 +78,18 @@ Tests that are *about* ingest still ingest for real. `test_add_folder` and
 `test_append_to_database` would test nothing if handed a prebuilt database.
 
 **2. Capped ingest parallelism** (`TEST_MAX_PROC`, and `--max_proc` for the CLI helper). See
-the gotcha below — this one turned out to be the larger of the two, taking the quick run
-from 4m06 to 2m22 on its own.
+the gotcha below.
 
 ## Gotchas
 
-**Ingest cannot run from a piped script.** Ringtail forces the `spawn` start method, and
-spawned children re-import `__main__`; from `python - <<EOF` that is `<stdin>`, which does
+**Ingest cannot run from a piped script (macOS and Windows).** Ringtail uses the `spawn`
+start method there (`fork` on Linux), and spawned children re-import `__main__`; from `python - <<EOF` that is `<stdin>`, which does
 not exist, and you get a wall of `FileNotFoundError` from the child processes. Put the code
 in a real file under `if __name__ == "__main__":`.
 
 **`max_proc` defaults to `cpu_count()` regardless of input size.** A 3-file ingest measured
 4.67 s with the default 11 readers against 1.93 s with one reader — the same work, the
-difference being 11 interpreter startups under the forced `spawn` method. `conftest.py` caps
+difference being 11 interpreter startups under the `spawn` method (macOS and Windows). `conftest.py` caps
 this session-wide via `TEST_MAX_PROC`, and passes `--max_proc` to the CLI helper because a
 subprocess cannot see the in-process patch.
 
