@@ -40,7 +40,7 @@ from .ringtailoptions import (
     statuses,
     validate_docking_mode,
 )
-from .schema import OUTFIELD_BY_TABLE
+from .schema import OUTFIELD_BY_TABLE, CANDIDATES_NAME
 from .exceptions import (
     RTCoreError,
     OutputError,
@@ -146,7 +146,10 @@ def _absolute_crossref_paths(recorded: dict) -> dict:
     depend on the working directory."""
     for key in ("wanted_dbs", "unwanted_dbs"):
         if recorded.get(key):
-            recorded[key] = [(os.path.abspath(db), scope) for db, scope in recorded[key]]
+            # "" names this database, it has no path to make absolute
+            recorded[key] = [
+                (os.path.abspath(db) if db else db, scope) for db, scope in recorded[key]
+            ]
     return recorded
 
 
@@ -193,7 +196,7 @@ class RingtailCore:
         Args:
             db_file (str): Database file to initialize core with. Defaults to "output.db".
             storage_type (str, optional): Database setup to use for interacting with the database.
-                        If db file exist, it will attempt to detect storage type. Defaults to "sqlite".
+                        If db file exist, it will attempt to detect storage type. Defaults to "duckdb".
             access_mode (str, optional): through what process Ringtail is accessed. Defaults to "api".
         """
 
@@ -233,7 +236,8 @@ class RingtailCore:
             Union[None, str]: None or previous docking mode
         """
         with self.storageman as sm:
-            return validate_docking_mode(sm.get_previous_docking_mode())
+            docking_mode = sm.get_previous_docking_mode()
+        return validate_docking_mode(docking_mode) if docking_mode else None
 
     # region write to database
     @_wrap_exceptions
@@ -313,6 +317,51 @@ class RingtailCore:
         if docking_mode == "adgpu":
             calculate_interactions = False
 
+        # need receptor file contents if adding interaction, checked before anything is deleted
+        if calculate_interactions:
+            # grab receptor info from database, this assumes there is only one receptor in the database
+            if results.receptor_file_path:
+                # parse the receptor string for interaction calculation
+                # make receptor string
+                suffixes = [s.lower() for s in Path(results.receptor_file_path).suffixes]
+                if ".pdbqt" in suffixes:
+                    logger.debug(
+                        "Building receptor string from .pdbqt file for interaction calculation"
+                    )
+                    results.receptor_string = RM.receptor_str_from_file(
+                        results.receptor_file_path
+                    )
+                elif ".json" in suffixes:
+                    logger.debug(
+                        "Loading polymer .json receptor string for interaction calculation"
+                    )
+                    # Pass the polymer JSON straight through: the interaction
+                    # finder reads receptor atoms natively from the Polymer, with
+                    # no pdbqt round-trip.
+                    with open(results.receptor_file_path, "r") as f:
+                        results.receptor_string = f.read()
+                else:
+                    raise OptionError(
+                        f"Receptor file {results.receptor_file_path} must be a .pdbqt or a meeko Polymer .json."
+                    )
+            # overwrite deletes the stored receptor, and a new database has no Receptors table yet
+            elif not overwrite and "receptors" in [t.lower() for t in self.all_database_tables()]:
+                logger.debug(
+                    "No receptor file path provided, attempting to load receptor string from database"
+                )
+                results.receptor_string = self.get_receptor_object().receptor_string()
+            if not results.receptor_string:
+                raise OptionError(
+                    "Interaction calculation requires a receptor. Pass receptor_file, "
+                    "save a receptor to the database first, or set calculate_interactions=False."
+                )
+            # readers log nowhere under spawn, so check the receptor here
+            if make_interaction_finder(results.receptor_string, interaction_cutoffs) is None:
+                logger.warning(
+                    "The receptor could not be read, interactions will not be calculated."
+                )
+                calculate_interactions = False
+
         # Process results files and handle database versioning
         with self.storageman:
             if overwrite:
@@ -329,59 +378,13 @@ class RingtailCore:
             max_proc=max_proc, receptor_file_path=results.receptor_file_path
         )
 
-        # need receptor file contents if adding interaction
-        if calculate_interactions:
-            # grab receptor info from database, this assumes there is only one receptor in the database
-            if results.receptor_file_path:
-                # parse the receptor string for interaction calculation
-                # make receptor string
-                if ".pdbqt" in Path(results.receptor_file_path).suffixes:
-                    logger.debug(
-                        "Building receptor string from .pdbqt file for interaction calculation"
-                    )
-                    results.receptor_string = RM.receptor_str_from_file(
-                        results.receptor_file_path
-                    )
-                elif ".json" in Path(results.receptor_file_path).suffixes:
-                    logger.debug(
-                        "Loading polymer .json receptor string for interaction calculation"
-                    )
-                    # Pass the polymer JSON straight through: the interaction
-                    # finder reads receptor atoms natively from the Polymer, with
-                    # no pdbqt round-trip.
-                    with open(results.receptor_file_path, "r") as f:
-                        results.receptor_string = f.read()
-                else:
-                    logger.warning(
-                        f"Receptor file {results.receptor_file_path} has unrecognized extension — receptor string not set, interactions will not be calculated."
-                    )
-                if results.receptor_string:
-                    logger.debug(
-                        f"Receptor string set successfully (length={len(results.receptor_string)})"
-                    )
-                else:
-                    logger.warning(
-                        "Receptor string is empty after parsing receptor file — interactions will not be calculated."
-                    )
-            else:
-                logger.debug(
-                    "No receptor file path provided, attempting to load receptor string from database"
-                )
-                results.receptor_string = self.get_receptor_object().receptor_string()
-                if results.receptor_string:
-                    logger.debug(
-                        f"Receptor string loaded from database (length={len(results.receptor_string)})"
-                    )
-                else:
-                    logger.warning(
-                        "Could not load receptor string from database — interactions will not be calculated."
-                    )
-
         logger.debug(
             f"These are the provided docking results for database storage: {results.docking_results}"
         )
 
         logger.info("Adding results...")
+        ligands_before = self.table_length("Ligands")
+        poses_before = self.table_length("Results")
         mpmanager.process_results(
             results,
             docking_mode,
@@ -393,6 +396,10 @@ class RingtailCore:
             self.storageman.__class__,
             5000,
             duplicate_handling,
+        )
+        logger.info(
+            f"Added {self.table_length('Ligands') - ligands_before} ligands and "
+            f"{self.table_length('Results') - poses_before} poses to the database."
         )
         if finalize:
             self.finalize_write()
@@ -422,7 +429,7 @@ class RingtailCore:
             interaction_cutoffs (list): [hb_cutoff, vdw_cutoff] in ångströms
             receptor_string (str): receptor PDBQT or polymer JSON string; fetched from DB if omitted
             chunk_size (int): number of ligands to buffer before flushing to DB
-            finalize (bool): reserved for future use
+            finalize (bool): create the database indices after writing
             consent (bool): if the database has bookmarks or filters, delete them all (and any clusterings) so results can be added. Defaults to False, which raises OptionError in that case.
         """
         if isinstance(results, dict):
@@ -477,7 +484,7 @@ class RingtailCore:
             receptor_string (str): receptor PDBQT or polymer JSON string; fetched from DB if omitted
             chunk_size (int): number of ligands to buffer before flushing to DB
             duplicate_handling (str): how to handle duplicate Results rows
-            finalize (bool): reserved for future use
+            finalize (bool): create the database indices after writing
             consent (bool): if the database has bookmarks or filters, delete them all (and any clusterings) so results can be added. Defaults to False, which raises OptionError in that case.
         """
         docking_mode = validate_docking_mode(docking_mode)
@@ -529,10 +536,10 @@ class RingtailCore:
     @_wrap_exceptions
     def save_receptor(self, receptor: Union[str, dict]):
         """
-        Add receptor to database. Accets .pdbqt file as well as a polymer .json or a polymer object
+        Add receptor to database.
 
         Args:
-            receptor_file (str): path to receptor file
+            receptor (str | dict): path to a .pdbqt or meeko Polymer .json file, or {receptor_name: Polymer}
 
         """
         with self.storageman:
@@ -549,6 +556,10 @@ class RingtailCore:
             elif ".pdbqt" in extensions:
                 receptor_name, receptor_blob = RM.make_receptor_blob(
                     receptor
+                )
+            else:
+                raise OptionError(
+                    f"Receptor {receptor} must be a .pdbqt or a meeko Polymer .json file."
                 )
         else:
             from meeko import Polymer
@@ -805,6 +816,8 @@ class RingtailCore:
             # of which half.
             if not cancelled:
                 sm._delete_table(track_table_name)
+                # the interaction tables were recreated without their indices
+                sm.finalize_database_write()
 
         return {
             "completed": not cancelled,
@@ -902,25 +915,25 @@ class RingtailCore:
             lebest (float): specify the best ligand efficiency value accepted
             score_percentile (float): specify the worst energy percentile accepted. Express as percentage e.g. 1 for top 1 percent.
             le_percentile (float): specify the worst ligand efficiency percentile accepted. Express as percentage e.g. 1 for top 1 percent.
-            vdw_interactions (list[tuple]): define van der Waals interactions with residue as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
-            hb_interactions (list[tuple]): define HB (ligand acceptor or donor) interaction as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
-            reactive_interactions (list[tuple]): check if ligand reacted with specified residue as [-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
+            vdw_interactions (list[tuple]): define van der Waals interactions with residue as [CHAIN]:[RES]:[NUM]:[ATOM_NAME], with wanted False to exclude it. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
+            hb_interactions (list[tuple]): define HB (ligand acceptor or donor) interaction as [CHAIN]:[RES]:[NUM]:[ATOM_NAME], with wanted False to exclude it. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
+            reactive_interactions (list[tuple]): check if ligand reacted with specified residue as [CHAIN]:[RES]:[NUM]:[ATOM_NAME], with wanted False to exclude it. E.g., [('A:VAL:279:', True), ('A:LYS:162:', True)] -> [('chain:resname:resid:atomname', <wanted (bool)>), ('chain:resname:resid:atomname', <wanted (bool)>)]
             hb_count (int): accept ligands with at least the requested number of HB interactions, e.g. 5 accepts poses with 5 or more. If a negative number is provided, then accept ligands with no more than that number, e.g. -5 accepts poses with 5 or fewer. Both bounds are inclusive. 0 means "no more than 0", i.e. only poses with no hydrogen bonds.
             react_any (bool): check if ligand reacted with any residue
             max_miss (int): Will compute all possible combinations of interaction filters excluding up to max_miss numer of interactions from given set. Default will only return union of poses interaction filter combinations. Use with 'enumerate_interaction_combs' for enumeration of poses passing each individual combination of interaction filters.
             ligand_name (list[str]): specify ligand name(s). Will combine name filters with OR, e.g., [["lig1", "lig2"]]
-            ligand_substruct (list[str]): SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords, e.g., [["ccc", "CN"]]
-            ligand_substruct_pos (list[list[type]]): SMARTS pattern(s) for substructure matching, e.g., [["[Oh]C", 0, 1.2, -5.5, 10.0, 15.5]] -> [["smart_string", index_of_positioned_atom, cutoff_distance, x, y, z]]
+            ligand_substruct (list[str]): SMARTS pattern(s) for substructure matching, e.g., [["ccc", "CN"]]
+            ligand_substruct_pos (list[list[type]]): SMARTS, index of atom in SMARTS, cutoff dist, and target XYZ coords, e.g., [["[Oh]C", 0, 1.2, -5.5, 10.0, 15.5]] -> [["smart_string", index_of_positioned_atom, cutoff_distance, x, y, z]]
             ligand_max_atoms (int): Maximum number of heavy atoms a ligand may have
             ligand_min_molweight (float): min molweight (inclusive, g/mol) for the ligand
             ligand_max_molweight (float): max molweight (inclusive, g/mol) for the ligand
             ligand_operator (str): logical join operator for multiple SMARTS (default: OR), either AND or OR
-            ligand_name_file (str); csv file containing a list of ligand names to be filtered for
-            enumerate_interaction_combs (bool): When used with `max_miss` > 0, will log ligands/poses passing each separate interaction filter combination as well as union of combinations. Can significantly increase runtime.
+            ligand_name_file (str): csv file containing a list of ligand names to be filtered for
+            enumerate_interaction_combs (bool): When used with `max_miss` > 0, will save a bookmark for each separate interaction filter combination as well as the union of combinations, and log the union. Can significantly increase runtime.
             output_all_poses (bool): By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged.
-            mfpt_cluster (float): Cluster filtered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for selecting chemically dissimilar ligands.
-            interaction_cluster (float): Cluster filtered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster. Default clustering cutoff is 0.5. Useful for enhancing selection of ligands with diverse interactions.
-            output_log (str): by default, results are saved in `output_log.txt`; if this option is used, ligands and requested info passing the filters will be written to specified file
+            mfpt_cluster (float): Cluster filtered ligands by Tanimoto distance of Morgan fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster, using this clustering cutoff (the command line uses 0.5 if no cutoff is given). Useful for selecting chemically dissimilar ligands.
+            interaction_cluster (float): Cluster filtered ligands by Tanimoto distance of interaction fingerprints with Butina clustering and output ligand with lowest ligand efficiency from each cluster, using this clustering cutoff (the command line uses 0.5 if no cutoff is given). Useful for enhancing selection of ligands with diverse interactions.
+            output_log (str): if given, ligands and requested info passing the filters will be written to this file. No log is written otherwise.
             outfields (str): Comma-separated columns to include in output, e.g.
                 ``"docking_score,leff,num_hb"``. Ligand name is always returned first.
                 Available fields are the keys of ``ringtail.schema.OUTFIELD_SCHEMA``.
@@ -976,7 +989,7 @@ class RingtailCore:
         output_bookmark = valid_bookmark_name(output_bookmark)
         if output_bookmark is None:
             raise OptionError(
-                "Bookmark name contains illegal symbols, please only use letters, numbers, and underscore."
+                "Bookmark name must only use letters, numbers and underscore, and cannot be a table name."
             )
         # bookmark lookups ignore case, so compare lowercased names: 'KEEP' as input and
         # 'keep' as output would otherwise pass and overwrite the input bookmark
@@ -988,13 +1001,6 @@ class RingtailCore:
         # make sure enumerate_interaction_combs always true if max_miss = 0, since we don't ever worry about the union in this case
         if max_miss == 0:
             enumerate_interaction_combs = True
-
-        # guard against unsing percentile filter with all_poses
-        if output_all_poses and not (score_percentile is None or le_percentile is None):
-            logger.warning(
-                "Cannot return all passing poses with percentile filter. Will only log best pose."
-            )
-            output_all_poses = False
 
         # Nested filtering is incompatible with enumerate interaction combs/max miss
         if not filters.is_flat():
@@ -1067,16 +1073,6 @@ class RingtailCore:
                     logger.info(
                         f"\nNumber passing ligands filter combination {str(combination)}:{num_passing_ligands}"
                     )
-                    if output_log:
-                        self.write_filter_output(
-                            iterated_bookmark_name,
-                            temp_filters,
-                            num_passing_ligands,
-                            output_log,
-                            outfields,
-                            output_all_poses,
-                            order_results,
-                        )
                 else:
                     logger.warning(
                         f"WARNING: No ligands found passing filter combination {str(combination)}."
@@ -1086,13 +1082,18 @@ class RingtailCore:
 
             # Process the union of the max miss combinations of interactions
             with self.storageman:
-                num_passing_ligands, output_bookmark = (
+                num_passing_ligands, union_bookmark = (
                     self.storageman.get_maxmiss_union(
-                        len(interaction_combs), output_bookmark, union_filters
+                        len(interaction_combs),
+                        output_bookmark,
+                        union_filters,
+                        input_bookmark,
                     )
                 )
             # union result is the pre-cluster input for the max_miss path
-            effective_bookmark = output_bookmark
+            effective_bookmark = union_bookmark
+            if not clustering:
+                output_bookmark = union_bookmark
             print_string = " in max_miss union"
 
         if num_passing_ligands:
@@ -1114,11 +1115,14 @@ class RingtailCore:
                     output_all_poses,
                     order_results,
                     clustering,
+                    max_miss_combs=None if write_one_bookmark else len(interaction_combs),
                 )
         else:
             logger.warning(f"WARNING: No ligands found passing filters{print_string}.")
 
         if return_iter:
+            if not num_passing_ligands:
+                return []
             with self.storageman:
                 formatted_query = self.storageman.get_bookmark_selection(
                     output_bookmark, outfields, not output_all_poses, order_results
@@ -1156,7 +1160,7 @@ class RingtailCore:
         output_bookmark = valid_bookmark_name(output_bookmark)
         if output_bookmark is None:
             raise OptionError(
-                "Bookmark name contains illegal symbols, please only use letters, numbers, and underscore."
+                "Bookmark name must only use letters, numbers and underscore, and cannot be a table name."
             )
         input_bookmark = input_bookmark.lower() if input_bookmark else None
         if input_bookmark == output_bookmark:
@@ -1218,15 +1222,15 @@ class RingtailCore:
         if clustering:
             cluster_string = f"Morgan Fingerprints butina clustering cutoff: {clustering.get('mfp')}\nInteraction Fingerprints clustering cutoff: {clustering.get('ifp')}"
         else:
-            cluster_string = "No clustering performed\n."
+            cluster_string = "No clustering performed.\n"
         with OutputManager(output_log, append_to_log) as opm:
+            # the max_miss union gets its own header below the filters
+            opm.write_filtervalues_in_log(
+                filters, None if max_miss_combs else bookmark_name, cluster_string
+            )
             if max_miss_combs:
                 opm.write_maxmiss_union_header()
                 opm.write_bookmarkname_in_log(bookmark_name)
-            else:
-                opm.write_filtervalues_in_log(
-                    filters, [], bookmark_name, cluster_string
-                )
             with self.storageman:
                 opm.write_filter_results_in_log(
                     self.storageman.db_query(formatted_query).fetchall()
@@ -1241,37 +1245,22 @@ class RingtailCore:
         bookmark_name: str = None,
         filename: str = "receptor.pdb",
         consent: bool = False,
-    ) -> tuple[Chem.rdchem.Mol, dict]:
+    ) -> dict:
         """
-        _summary_
+        Writes one receptor pdb per ligand with the flexible residues as placed in each pose, one MODEL per pose
 
         Args:
-            receptor_polymer (Union[object, str], optional): _description_. Defaults to None.
-            ligname (Union[str, list], optional): _description_. Defaults to None.
-            bookmark_name (str, optional): _description_. Defaults to None.
-            filename (str, optional): _description_. Defaults to "receptor.pdb".
-            consent (bool, optional): _description_. Defaults to False.
+            receptor_polymer (Polymer | str, optional): receptor Polymer produced by meeko, or its json string or .json file. Defaults to the polymer saved in the database.
+            ligname (Union[str, list], optional): ligand name(s) to write pdbs for. Defaults to None.
+            bookmark_name (str, optional): if provided, it will only use ligand poses passing bookmark filters. Defaults to None.
+            filename (str, optional): name of the output pdb, the ligand name is added and the extension defaults to '.pdb'. Defaults to "receptor.pdb".
+            consent (bool, optional): Necessary if exporting more than 10 pdbs. Defaults to False.
 
         Raises:
-            OptionError: _description_
+            OptionError: if no polymer is provided and none is saved in the database
 
         Returns:
-            dict: dict of mols for the ligand and for the fleixble residue setups
-        """
-        """
-        Writes a receptor pdb with flexible residues based on the ligand provided
-
-        Args:
-            receptor_polymer (Polymer, json string, .json file): version of receptor produced by meeko,
-                                        or a json representation that can be rebuilt to a polymer, including
-                                        valid json string and valid json file
-            ligname (Union[str, list], optional): ligand name for which the receptor flexible residue info should be collected. Defaults to None.
-            bookmark_name (str, optional): if provided, it will only export flex res for ligand poses passing bookmark filters. Defaults to None.
-            filename (str, optional): name of the output pdb, extension is optional, will default to '.pdb'. Defaults to "receptor.pdb".
-            consent (bool, optional): Necessary if exporting more than 10 poses/flexres PDBs per one receptor. Defaults to False. 
-        
-        Returns
-            dict: dictionary describing the Mols for the flexible residues
+            dict: {ligand name: {"ligand_mol": Mol, "flexmoldict": {"chain:resnum": Mol of the first pose}}}, or None if more than 10 pdbs were requested without consent
         """
         bookmark_name = bookmark_name.lower() if bookmark_name else None
         # check database if polymer not provided, else error
@@ -1457,6 +1446,16 @@ class RingtailCore:
             similar_ligands, bookmark_name, cluster_name = (
                 self.storageman.fetch_clustered_similars(query_ligname, cluster_id)
             )
+            if similar_ligands:
+                # ligand names may hold characters bookmark names can't
+                bookmark_name = re.sub(r"[^a-z0-9_]", "_", bookmark_name.lower())
+                self.storageman._populate_filter_tables(
+                    name=bookmark_name,
+                    query=self.storageman._crossref_bookmark_builder(
+                        [row[0] for row in similar_ligands]
+                    ),
+                    filters={"similar_to": query_ligname, "cluster_id": cluster_id},
+                )
             if similar_ligands is not None and output_log is not None:
                 with OutputManager(output_log) as opm:
                     opm.write_find_similar_header(query_ligname, cluster_name)
@@ -1526,7 +1525,9 @@ class RingtailCore:
         Returns:
             str: name of the new, exported database
         """
-        bookmark_name = bookmark_name.lower() if bookmark_name else None
+        if not bookmark_name:
+            raise OptionError("A bookmark name has to be provided.")
+        bookmark_name = bookmark_name.lower()
         if db_filepath is None:
             db_filepath = self.db_file.removesuffix(".db") + "_" + bookmark_name + ".db"
 
@@ -1537,6 +1538,7 @@ class RingtailCore:
             )
             return
         with self.storageman:
+            self.storageman._require_scope(bookmark_name)
             if self.storageman.table_length(bookmark_name) == 0:
                 logger.warning(
                     f"No poses in bookmark '{bookmark_name}'. Database not exported."
@@ -1627,9 +1629,9 @@ class RingtailCore:
         the intersect/exclude be scoped by acceptance status as well as by bookmark.
 
         Args:
-            wanted_dbs (list[tuple[str, Union[str, None]]], optional): (database_path, scope) tuples, where scope is a bookmark or status table name. Defaults to None.
-            unwanted_dbs (list[tuple[str, Union[str, None]]], optional): (database_path, scope) tuples to exclude, where scope is a bookmark or status table name. Defaults to None.
-            bookmark_prefix (str, optional): _description_. Defaults to "crossref".
+            wanted_dbs (list[tuple[str, Union[str, None]]], optional): (database_path, scope) tuples, where scope is a bookmark, a status table, or None/"Results" for all results. The first must be this database, by its path or as "". Defaults to None.
+            unwanted_dbs (list[tuple[str, Union[str, None]]], optional): (database_path, scope) tuples to exclude, scoped the same way. Defaults to None.
+            bookmark_prefix (str, optional): prefix of the bookmark written in each database. Defaults to "crossref".
             alternative_database_names (dict, optional):  {path: alt name}. Defaults to None.
 
         Returns:
@@ -1637,9 +1639,27 @@ class RingtailCore:
             dict: {db_file: new_bookmark_name,}
             dict: "filter" {"wanted":[list of wanted dbs],"unwanted":[list of unwanted dbs]
         """
+        bookmark_prefix = valid_bookmark_name(bookmark_prefix)
+        if not bookmark_prefix:
+            raise OptionError(
+                "Bookmark prefix contains illegal symbols, please only use letters, numbers, and underscore."
+            )
+        first = wanted_dbs[0][0] if wanted_dbs else None
+        if first is None or (first and os.path.abspath(first) != os.path.abspath(self.db_file)):
+            raise OptionError(
+                f"The first wanted database must be this database ({self.db_file}), given by its path or as ''."
+            )
+        for path, _ in list(wanted_dbs[1:]) + list(unwanted_dbs or []):
+            if not os.path.isfile(path):
+                raise OptionError(f"Database {path} does not exist.")
+            if not self.db_compatibility_check(path):
+                raise OptionError(f"{path} is not a {self.storagetype} database.")
         with self.storageman as sm:
             return sm.crossref_databases(
-                wanted_dbs, unwanted_dbs, bookmark_prefix, alternative_database_names
+                wanted_dbs=wanted_dbs,
+                unwanted_dbs=unwanted_dbs,
+                bookmark_prefix=bookmark_prefix,
+                alternative_database_names=alternative_database_names,
             )
 
     @_wrap_exceptions
@@ -1660,10 +1680,10 @@ class RingtailCore:
         Makes a db safe alias for a database based on its path (cannot start with a number, only underscore symbols)
 
         Args:
-            db_path (str): _description_
+            db_path (str): path to the database file
 
         Returns:
-            str: _description_
+            str: alias to attach the database under
         """
         return db_alias_from_path(db_path)
 
@@ -1717,7 +1737,7 @@ class RingtailCore:
         """
         if status not in statuses.keys():
             raise OptionError(
-                f"""The selected status {status} is not a valid option for Ringtail. Please choose between {','.join(statuses)}"""
+                f"""The selected status {status} is not a valid option for Ringtail. Please choose between {', '.join(f"{k}={v or 'remove'}" for k, v in statuses.items())}"""
             )
 
         with self.storageman as sm:
@@ -1781,7 +1801,7 @@ class RingtailCore:
             pose_id (int):
 
         Returns:
-            int: row in given table
+            int: row id in given table, the paging key of get_scrolling_table_data (for a SQLite bookmark the pose_id)
         """
         table = table.lower()
         with self.storageman as sm:
@@ -1789,17 +1809,15 @@ class RingtailCore:
 
     @_wrap_exceptions
     def get_scrolling_table_data(
-        self, table: str, length: int = 100, starting_row_id: int = 1, reverse=False
+        self, table: str, length: int = 100, starting_row_id: int = None, reverse=False
     ) -> dict[list[str], list]:
         """
-        Returns a pointer or cursor (iterable) to the data in the Results table,
-        if table is a bookmark it will limit the Results data to the poses represented
-        in the bookmark.
+        Returns a page of rows from the Results table, limited to the poses in the bookmark if table is a bookmark.
 
         Args:
             table (str): name of table or bookmark
             length (int, optional): number of rows to collect. Defaults to 100.
-            starting_row_id (int, optional): rowid to start fetching from. Defaults to 0.
+            starting_row_id (int, optional): rowid to start fetching from. Defaults to the first row of the table.
             reverse (bool, optional): whether to collect data in descending/reverse order. Defaults to False
 
         Returns:
@@ -1807,6 +1825,8 @@ class RingtailCore:
         """
         table = table.lower()
         with self.storageman as sm:
+            if starting_row_id is None:
+                starting_row_id = sm.get_starting_rowid(table)
             return sm.fetch_viewable_data_columns_from(
                 table, length, starting_row_id, reverse
             )
@@ -1878,8 +1898,7 @@ class RingtailCore:
     @_wrap_exceptions
     def get_starting_rowid(self, table: str):
         """
-        Returns the starting row id for a table. For a normal table like Results or status table, this will be
-        1, but for a bookmark, this will be the rowid it start with in the Filtered_poses table
+        Returns the lowest row id of a table or bookmark, the paging key of get_scrolling_table_data (for a SQLite bookmark its lowest pose_id).
 
         Args:
             table (str): table or bookmark name
@@ -1924,10 +1943,10 @@ class RingtailCore:
         Gets all interactions for a given pose as a list of tuples with the interaction specification
 
         Args:
-            pose_id (int): _description_
+            pose_id (int): pose to get interactions for
 
         Returns:
-            list'tuple: interaction specifications as interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid
+            list[tuple]: interaction specifications as interaction_type,rec_chain,rec_resname,rec_resid,rec_atom,rec_atomid
         """
         with self.storageman as sm:
             return sm.fetch_pose_interactions(pose_id)
@@ -2093,10 +2112,10 @@ class RingtailCore:
         (could also be status table)
 
         Args:
-            bookmark_name (str): _description_
+            bookmark_name (str): bookmark, status table, or candidates
 
         Returns:
-            dict: key is column name,
+            pd.DataFrame: one row per distinct interaction (type, chain, residue, atom) in the selection
         """
         bookmark_name = bookmark_name.lower() if bookmark_name else None
         with self.storageman as sm:
@@ -2115,21 +2134,17 @@ class RingtailCore:
         the pose_ids were given.
 
         Args:
-            ligand_names (Union[str, list], optional): _description_. Defaults to None.
-            pose_ids (Union[int, list], optional): _description_. Defaults to None.
-            bookmark_name (str, optional): _description_. Defaults to None.
+            ligand_names (Union[str, list], optional): ligand name(s) to select. Defaults to None.
+            pose_ids (Union[int, list], optional): pose id(s) to select. Defaults to None.
+            bookmark_name (str, optional): bookmark, status table, or candidates to select from. Defaults to None.
 
         Returns:
-            dict[str, list[int]]: _description_
+            dict[str, list[int]]: ligand name mapped to its selected pose ids
         """
 
         # if just given bookmark, get all ligands in that bookmark
-        if bookmark_name is not None and not self._validate_bookmark_name(
-            bookmark_name
-        ):
-            raise RTCoreError(
-                f"Requested data, -{bookmark_name}-, is not a valid bookmark."
-            )
+        if bookmark_name is not None:
+            bookmark_name = self._validate_bookmark_name(bookmark_name)
 
         # if just pose_id(s), get their ligand names and add to dict
         # assumes that the specific IDs were given for a reason, bookmark will not be considered
@@ -2313,10 +2328,10 @@ class RingtailCore:
         Makes rdkit.Chem.Mols for the receptor based on flexible residues
 
         Raises:
-            OutputError: _description_
+            OutputError: if a flexible residue can't be made into a Mol
 
         Returns:
-            tuple[list, list, list, list]: _description_
+            tuple[list, list, list, list]: residue Mols, (smiles, index map, h parents) per residue, empty coordinate lists, and residue names
         """
 
         mols = []
@@ -2391,7 +2406,7 @@ class RingtailCore:
             raise OptionError("No valid databases to merge after filtering.")
 
         logger.warning(
-            "If you have performed filtering or clustering, this data will be lost in the new, merged database."
+            "If you have performed filtering or clustering, or assigned pose statuses or comments, this data will be lost in the new, merged database."
         )
         logger.info(f"Merging {len(expanded_dbs)} databases into {self.db_file}")
 
@@ -2400,23 +2415,27 @@ class RingtailCore:
                 sm.clone()
             sm.prepare_for_merging()
             failed = []
-            for merging_db in expanded_dbs:
-                try:
-                    sm.merge_database(merging_db=merging_db)
-                    logger.info(f"Successfully merged {merging_db}.")
-                except (MergeError, StorageError) as e:
-                    logger.error(f"Database {merging_db} failed to merge: {e}")
-                    failed.append((merging_db, str(e)))
-
-            sm.complete_merging()
+            try:
+                for merging_db in expanded_dbs:
+                    try:
+                        if not self.db_compatibility_check(merging_db):
+                            raise MergeError(
+                                f"{merging_db} is not a {self.storagetype} database."
+                            )
+                        sm.merge_database(merging_db=merging_db)
+                        logger.info(f"Successfully merged {merging_db}.")
+                    except Exception as e:
+                        logger.error(f"Database {merging_db} failed to merge: {e}")
+                        failed.append((merging_db, str(e)))
+            finally:
+                sm.complete_merging()
 
         return failed
 
     @_wrap_exceptions
     def reset_screening_progress(self):
         """
-        Clear manual screening progress: Accepted, Maybe and Rejected assignments
-        and any pose comments. Filters and bookmarks are untouched.
+        Clear screening progress: Accepted, Maybe and Rejected assignments, pose comments, and all bookmarks, filters and clusterings.
         """
         with self.storageman as sm:
             sm.reset_screening_tables()
@@ -2426,13 +2445,12 @@ class RingtailCore:
         self, consent: bool = False, new_version: str = "3.0.0", backup: bool = False
     ):
         """
-        Updates/upgrades sqlite database schema 1.0.0 through 3.0.0. Upgrades step-by-step,
-        e.g. 1.0.0 -> 1.1.0 -> 2.0.0 -> 3.0.0. All existing filters and bookmarks will be dropped.
+        Upgrades a Ringtail 1.x/2.x SQLite database step by step to new_version, dropping its bookmarks.
 
         Args:
             consent (bool): must be True to proceed. Defaults to False.
             new_version (str, optional): target version. Defaults to "3.0.0".
-            backup (bool, optional): clone database before upgrading. Defaults to False.
+            backup (bool, optional): keep a copy of the database as it was before upgrading. Defaults to False.
         """
         if not consent:
             logger.critical("Consent not given for database update. Cancelling...")
@@ -2452,11 +2470,10 @@ class RingtailCore:
     @_wrap_exceptions
     def db_compatibility_check(self, database_path: str) -> bool:
         """
-        Checks if the database in the provided path is compatible for operations with the
-        current Ringtail database.
+        Checks if the database in the provided path uses the same database engine (sqlite or duckdb) as the current Ringtail database.
 
         Args:
-            database_path (str): _description_
+            database_path (str): path to the other database
 
         Returns:
             bool: whether or not compatible
@@ -2476,16 +2493,28 @@ class RingtailCore:
         return ringtail_defaults()
 
     @staticmethod
-    def generate_config_file_template():
-        """Outputs to "config.json in current working directory
+    def generate_config_file_template(filename: str = "config.json"):
+        """Writes a config file template with the default values of the command line options.
+
+        Args:
+            filename (str, optional): file to write. Defaults to "config.json".
 
         Returns:
             str: file name of config file with template including default values
-        """
 
-        filename = "config.json"
+        Raises:
+            FileExistsError: if the file already exists
+        """
+        if os.path.exists(filename):
+            raise FileExistsError(f"Refusing to overwrite existing file: {filename}")
+        # the command line reads --no_interactions instead and has no chunk_size option
+        template = {
+            k: v
+            for k, v in RingtailCore.defaults().items()
+            if k not in ("calculate_interactions", "chunk_size")
+        }
         with open(filename, "w") as f:
-            f.write(json.dumps(RingtailCore.defaults(), indent=4))
+            f.write(json.dumps(template, indent=4))
         return filename
 
     # endregion
@@ -2723,11 +2752,11 @@ class RingtailCore:
         Adds a conformer with given coordinates to a mol
 
         Args:
-            mol (Chem.Mol): _description_
-            coordinates (list[list]): _description_
+            mol (Chem.Mol): mol to add the conformer to, changed in place
+            coordinates (list[list]): [x, y, z] per atom, in atom order
 
         Returns:
-            Chem.Mol: _description_
+            Chem.Mol: the same mol, with the new conformer
         """
         from rdkit import Geometry
 
@@ -2866,8 +2895,10 @@ class RingtailCore:
                     logger.warning(
                         "Requested 'export_sdf_path' with 'max_miss' and 'enumerate_interaction_combs' used in the filtering process. Exported SDFs will be for union of interaction combinations."
                     )
-                elif bookmark_name.lower() in statuses.values():
-                    # that is valid, will be handled properly
+                elif bookmark_name.lower() in statuses.values() or (
+                    bookmark_name.lower() == CANDIDATES_NAME
+                ):
+                    # status tables and candidates are valid selections too
                     pass
                 # if not, raise error
                 else:
@@ -2876,11 +2907,9 @@ class RingtailCore:
                     )
             bookmark_name = bookmark_name.lower() if bookmark_name else None
 
-            if not self.storageman.get_passing_poses_count(bookmark_name) and not (
-                bookmark_name in statuses
-            ):
+            if not self.storageman.table_length(bookmark_name):
                 raise StorageError(
-                    "Given results bookmark exists but does not have any data. Cannot write passing molecule SDFs"
+                    f"Selection {bookmark_name} exists but does not have any data. Cannot write passing molecule SDFs"
                 )
         return bookmark_name
 
@@ -2915,21 +2944,22 @@ class RingtailCore:
                 "N.B.: If using both interaction and morgan fingerprint clustering, the morgan fingerprint clustering will be performed first."
             )
         count_reps = 0
+        # with both, the mfp representatives are clustered again by ifp
+        both = bool(cluster_data.get("mfp") and cluster_data.get("ifp"))
+        mfp_output = f"{output_bookmark}_mfp" if both else output_bookmark
         if cluster_data.get("mfp"):
             count_reps, _ = self.cluster(
-                output_bookmark,
+                mfp_output,
                 "mfp",
                 cluster_data.get("mfp"),
                 input_bookmark,
             )
         if cluster_data.get("ifp"):
-            # if mfp was also run, chain: cluster the mfp output
-            ifp_input = output_bookmark if cluster_data.get("mfp") else input_bookmark
             count_reps, _ = self.cluster(
                 output_bookmark,
                 "ifp",
                 cluster_data.get("ifp"),
-                ifp_input,
+                mfp_output if both else input_bookmark,
             )
         logger.info(f"\nNumber of cluster representative ligands: {count_reps}")
         return output_bookmark, count_reps
@@ -2942,8 +2972,16 @@ class RingtailCore:
             csv_name (str): Name for exported CSV file
             table (bool): flag indicating is requested data is a table name
         """
-        with self.storageman:
-            df = self.storageman.to_dataframe(requested_data, table=table)
-            df.to_csv(csv_name)
+        with self.storageman as sm:
+            df = sm.to_dataframe(requested_data, table=table)
+        if "pose_coordinates" in df.columns:
+            df["pose_coordinates"] = df["pose_coordinates"].map(
+                lambda stored: None
+                if stored is None
+                else json.dumps(
+                    [[round(float(c), 3) for c in atom] for atom in sm._deserialize_pose_coordinates(stored)]
+                )
+            )
+        df.to_csv(csv_name, index=False)
 
     # endregion
