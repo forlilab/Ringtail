@@ -1,4 +1,7 @@
 include README.md
 include LICENSE
 include docs/*
-include test/*
+graft docs/source
+graft test
+prune test/.pytest_cache
+global-exclude __pycache__ *.py[cod] .DS_Store *.db *.log

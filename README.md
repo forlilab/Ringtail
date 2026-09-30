@@ -9,7 +9,7 @@
 ![Build Status](https://github.com/forlilab/Ringtail/actions/workflows/python-package.yml/badge.svg?event=push)
 [![Documentation Status](https://readthedocs.org/projects/ringtail/badge/?version=latest)](https://ringtail.readthedocs.io)
 
-Ringtail is an open-source Python package for organizing, filtering, and exploring molecular docking results at the scale of millions of ligands. It reads [AutoDock-6](https://github.com/forlilab/AutoDock) (AD6) SDFs, [AutoDock-GPU](https://github.com/ccsb-scripps/AutoDock-GPU) DLGs, and [AutoDock-Vina](https://github.com/ccsb-scripps/AutoDock-Vina) PDBQTs into compact DuckDB (default) or SQLite databases, with parallell input file processing. 
+Ringtail is an open-source Python package for organizing, filtering, and exploring molecular docking results at the scale of millions of ligands. It reads [AutoDock-6](https://github.com/forlilab/AutoDock) (AD6) SDFs, [AutoDock-GPU](https://github.com/ccsb-scripps/AutoDock-GPU) DLGs, and [AutoDock-Vina](https://github.com/ccsb-scripps/AutoDock-Vina) PDBQTs into compact DuckDB (default) or SQLite databases, with parallel input file processing. 
 
 Filter by docking score, ligand efficiency, receptor interactions, or ligand chemistry, cluster for diversity, compare hits across different targets, and export selected results as SDF or CSV files. 
 
@@ -98,7 +98,7 @@ rtc.filter(
 
 ### Upgrading older databases
 
-Upgrade databases from Ringtail v2 or earlier with `rt_upgrade_db -d old_database.db` (note that this will remove existing filters and bookmarks). See the [upgrade guide](https://ringtail.readthedocs.io/en/latest/upgrade_database.html) and [v3 changelog](https://ringtail.readthedocs.io/en/latest/changes.html) for database migration, renamed options, and removal of built-in plotting and PyMOL integration. 
+Upgrade databases from Ringtail v2 or earlier with `rt_upgrade_db -db old_database.db` (note that this will remove existing filters and bookmarks). See the [upgrade guide](https://ringtail.readthedocs.io/en/latest/upgrade_database.html) and [v3 changelog](https://ringtail.readthedocs.io/en/latest/changes.html) for database migration, renamed options, and removal of built-in plotting and PyMOL integration. 
 
 
 ## Citing Ringtail
@@ -116,7 +116,7 @@ If using Ringtail in your work, please cite this publication.
 
 ## Contributing
 
-Found a bug or have a feature request? Open an issue on [GitHub](https://github.com/forlilab/Ringtail/issues).
+If you find a bug, or have a feature request, simply open an issue on [GitHub](https://github.com/forlilab/Ringtail/issues).
 
 ## License
 
