@@ -7,6 +7,7 @@
 import os
 import gzip
 import json
+import traceback
 from typing import Union, NamedTuple
 from collections import defaultdict
 import numpy as np
@@ -35,8 +36,8 @@ class PoseRecord(NamedTuple):
     energies_inter: object = 0
     energies_vdw: object = 0
     energies_electro: object = 0
-    energies_flexLig: object = 0
-    energies_flexLR: object = 0
+    energies_flexlig: object = 0
+    energies_flexlr: object = 0
     energies_intra: object = 0
     energies_torsional: object = 0
     unbound_energy: object = 0
@@ -127,7 +128,6 @@ class VinaMoleculeSupplier:
             """
             scores = []
             run_number = []
-            num_heavy_atoms = 0
             intermolecular_energy = []
             internal_energy = []
             unbound_energy = []
@@ -141,7 +141,7 @@ class VinaMoleculeSupplier:
                 try:
                     if line.startswith("MODEL"):
                         flexible_res_coords.append([])
-                        run_number.append(line.split()[1])
+                        run_number.append(int(line.split()[1]))
                     elif line.startswith("REMARK VINA RESULT:"):
                         scores.append(float(line.split()[3]))
                     elif line.startswith("REMARK INTER:"):
@@ -157,8 +157,6 @@ class VinaMoleculeSupplier:
                             )
                             if first_model:
                                 flexres_atomnames[-1].append(line[12:16].strip())
-                        elif first_model and line[13] != "H":
-                            num_heavy_atoms += 1
                     elif line.startswith("ENDMDL") and first_model:
                         first_model = False
                     # make new flexible residue list if in the coordinates for a flexible residue
@@ -178,8 +176,7 @@ class VinaMoleculeSupplier:
                         "ERROR! Cannot parse {0} in {1}".format(line, name)
                     )
 
-            # calculate ligand efficiency and deltas from the best pose
-            leff = [round(x / num_heavy_atoms, 2) for x in scores]
+            # deltas from the best pose, ligand efficiency is set once the mol is built
             delta = [round(x - scores[0], 2) for x in scores]
 
             receptor_dict = {
@@ -188,13 +185,13 @@ class VinaMoleculeSupplier:
             }
 
             results = {
-                "pose_rank": [1] * len(scores),  # list
+                # vina writes models best first
+                "pose_rank": list(range(1, len(scores) + 1)),  # list
                 "run_number": run_number,  # list
                 "flexible_res_coordinates": [
                     json.dumps(coordinate) for coordinate in flexible_res_coords
                 ],  # list of lists
                 "docking_score": scores,  # list
-                "leff": leff,  # list
                 "delta": delta,  # list
                 "energies_inter": intermolecular_energy,  # list
                 "energies_intra": internal_energy,  # list
@@ -237,8 +234,8 @@ class VinaMoleculeSupplier:
             "reference_rmsd": [None] * data_length,
             "energies_vdw": [None] * data_length,
             "energies_electro": [None] * data_length,
-            "energies_flexLig": [None] * data_length,
-            "energies_flexLR": [None] * data_length,
+            "energies_flexlig": [None] * data_length,
+            "energies_flexlr": [None] * data_length,
             "energies_torsional": [None] * data_length,
             # these two are calculated with interactions
             "cluster_size": [1] * data_length,
@@ -252,6 +249,10 @@ class VinaMoleculeSupplier:
             pdbqt_str_list,
             is_dlg=False,
         )
+        heavy_atoms = mol.GetNumHeavyAtoms()
+        results_dict["leff"] = [
+            round(x / heavy_atoms, 2) for x in results_dict["docking_score"]
+        ]
         pose_coordinates = pick_best_poses(coordinates, self.num_poses)
 
         if calculate_interactions and not interaction_finder:
@@ -341,12 +342,14 @@ class ADGPUMoleculeSupplier:
                 )
 
         # create rdkit mol from file, get coordinates for each pose
-        ligand_row, poses_coordinates, _ = generate_ligand_data_list_from_pdbqt_dlg(
+        ligand_row, poses_coordinates, mol = generate_ligand_data_list_from_pdbqt_dlg(
             ligand_dict["name"], ligand_dict["file_str"], is_dlg=True
         )
         ligname = ligand_row[0]
+        heavy_atoms = mol.GetNumHeavyAtoms()
         results_dict.update(
             {
+                "leff": [round(x / heavy_atoms, 2) for x in results_dict["docking_score"]],
                 # plain float lists; serialized per dialect by the storage manager
                 "pose_coordinates": [
                     coordinate.tolist() for coordinate in poses_coordinates
@@ -440,8 +443,9 @@ class ADGPUMoleculeSupplier:
 
             sorted_indices_all = np.argsort(results_dict.get("docking_score"))
             # results_dict needs to be made into list of dicts for each index
-            for sorted_idx, run_number in enumerate(sorted_indices_all):
-                data_index = run_number - 1
+            for sorted_idx, data_index in enumerate(sorted_indices_all):
+                data_index = int(data_index)
+                run_number = data_index + 1
                 pose_rank = sorted_idx + 1
                 # parse Results data
                 results_rows.append(
@@ -540,8 +544,8 @@ class ADGPUMoleculeSupplier:
             energies_inter=results_dict["energies_inter"][data_index],
             energies_vdw=results_dict["energies_vdw"][data_index],
             energies_electro=results_dict["energies_electro"][data_index],
-            energies_flexLig=results_dict["energies_flexLig"][data_index],
-            energies_flexLR=results_dict["energies_flexLR"][data_index],
+            energies_flexlig=results_dict["energies_flexlig"][data_index],
+            energies_flexlr=results_dict["energies_flexlr"][data_index],
             energies_intra=results_dict["energies_intra"][data_index],
             energies_torsional=results_dict["energies_torsional"][data_index],
             unbound_energy=results_dict["unbound_energy"][data_index],
@@ -596,8 +600,6 @@ class ADGPUMoleculeSupplier:
         # Define empty center list for backwards compatibility with DLGs without grid centers
         center = [None, None, None]
 
-        heavy_at_count = 0
-        heavy_at_count_complete = False
         # read file contents
         with open_fn(fname, "rb") as fp:
             file_as_string = fp.read().decode("utf-8")
@@ -698,7 +700,6 @@ class ADGPUMoleculeSupplier:
             elif STD_END in line:
                 inside_pose = False
                 inside_res = False
-                heavy_at_count_complete = True
             elif "DOCKED: ROOT" in line:
                 inside_res = False
 
@@ -721,11 +722,6 @@ class ADGPUMoleculeSupplier:
                                 )
                             target.append(e)
                             break
-                # update heavy atom count
-                if not heavy_at_count_complete:
-                    if line[0:4] == "ATOM" or line[0:6] == "HETATM":
-                        if not line[-2] == "HD":
-                            heavy_at_count += 1
 
             # store poses in each cluster in dictionary as list of ordered runs
             elif "RANKING" in line:
@@ -751,13 +747,12 @@ class ADGPUMoleculeSupplier:
 
         results = {
             "docking_score": scores,
-            "leff": [round(x / heavy_at_count, 2) for x in scores],
-            "delta": [round(x - scores[0], 2) for x in scores],
+            "delta": [round(x - min(scores), 2) for x in scores],
             "energies_inter": intermolecular_energy,
             "energies_vdw": vdw_hb_desolv,
             "energies_electro": electrostatic,
-            "energies_flexLig": flex_ligand,
-            "energies_flexLR": flexLigand_flexReceptor,
+            "energies_flexlig": flex_ligand,
+            "energies_flexlr": flexLigand_flexReceptor,
             "energies_intra": internal_energy,
             "energies_torsional": torsion,
             "unbound_energy": unbound_energy,
@@ -799,6 +794,7 @@ class SDFMoleculeSupplier:
         interaction_finder=None,
         interaction_cutoffs: list[float] = None,
         receptor_string: str = None,
+        report_error=None,
     ):
         """
         Method to parse docking results from SDF files, uses Chem.ForwardSDMolSupplier
@@ -809,6 +805,7 @@ class SDFMoleculeSupplier:
             interaction_finder (_type_, optional): _description_. Defaults to None.
             interaction_cutoffs (list[float], optional): _description_. Defaults to None.
             receptor_string (str, optional): _description_. Defaults to None.
+            report_error (callable, optional): called with (record name, traceback) to skip a bad record; without it a bad record raises.
 
         Yields:
             _type_: _description_
@@ -821,7 +818,8 @@ class SDFMoleculeSupplier:
         processed_ligands = set()
         last_ligand = None
 
-        with open(fname, "rb") as file_stream:
+        open_fn, _ = _open_fn_and_name(fname)
+        with open_fn(fname, "rb") as file_stream:
             suppl = Chem.ForwardSDMolSupplier(file_stream, removeHs=False)
             for mol in suppl:
                 if mol is None:
@@ -842,9 +840,12 @@ class SDFMoleculeSupplier:
                         interaction_finder=interaction_finder,
                     )
                 except Exception as e:
-                    raise FileParsingErrorSdf(
-                        f"Failed to process mol '{ligname}' in {fname}: {e}"
-                    ) from e
+                    if report_error is None:
+                        raise FileParsingErrorSdf(
+                            f"Failed to process mol '{ligname}' in {fname}: {e}"
+                        ) from e
+                    report_error(f"{ligname} in {fname}", traceback.format_exc())
+                    continue
                 # Only emit the ligand row on first occurrence — subsequent poses
                 # of the same ligand rely on ON CONFLICT IGNORE in the DB, but
                 # avoid the smiles/binary cost by clearing the list here.
