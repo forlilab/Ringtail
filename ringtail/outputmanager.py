@@ -154,7 +154,6 @@ class OutputManager:
     def write_filtervalues_in_log(
         self,
         filters_dict: dict,
-        included_interactions: list,
         bookmark_name: str,
         additional_info="",
     ):
@@ -162,7 +161,7 @@ class OutputManager:
 
         Args:
             filters_dict (dict): dictionary with filtering options
-            included_interactions (list): types of interactions to include in the filtering
+            bookmark_name (str): bookmark the results were written to
             additional_info (str): any additional information to write to top of log file
 
         Raises:
@@ -177,7 +176,6 @@ class OutputManager:
             for i, child in enumerate(filters_dict["children"], start=1):
                 self.write_filtervalues_in_log(
                     child,
-                    included_interactions,
                     bookmark_name=None,
                     additional_info=f"### GROUP {i}",
                 )
@@ -206,17 +204,11 @@ class OutputManager:
             buff.append("#### INTERACTIONS")
             for _type in Filters.get_filter_keys("interaction"):
                 info = filters.pop(_type, None)
-                kept_interactions = []
                 if len(info or []) == 0:
                     buff.append("#  % 7s :  [ none ]" % (_type))
                     continue
-                for interact in info:
-                    if _type + "-" + interact[0] not in included_interactions:
-                        continue
-                    else:
-                        kept_interactions.append(interact)
                 res_str = ", ".join(
-                    ["(%s)%s" % ("~" if x[1] else "", x[0]) for x in kept_interactions]
+                    ["(%s)%s" % ("" if x[1] else "~", x[0]) for x in info]
                 )
                 label_str = "#  % 7s : %s" % (_type, res_str)
                 buff.append(label_str)
