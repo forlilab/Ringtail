@@ -137,8 +137,8 @@ RESULTS_SCHEMA = TableSchema(
         "energies_inter": Column("FLOAT", "intermolecular energy"),
         "energies_vdw": Column("FLOAT", "van der Waals energy"),
         "energies_electro": Column("FLOAT", "electrostatic energy"),
-        "energies_flexLig": Column("FLOAT", "flexible ligand energy"),
-        "energies_flexLR": Column("FLOAT", "flexible receptor energy"),
+        "energies_flexlig": Column("FLOAT", "flexible ligand energy"),
+        "energies_flexlr": Column("FLOAT", "flexible receptor energy"),
         "energies_intra": Column("FLOAT", "intramolecular energy"),
         "energies_torsional": Column("FLOAT", "torsional energy"),
         "unbound_energy": Column("FLOAT", "unbound state energy"),
@@ -403,10 +403,10 @@ PK_CONVERSIONS_SCHEMA = TableSchema(
             "INTEGER", "merge session", foreign_key="merged_tables.merge_id"
         ),
         "table_name": Column("VARCHAR", "table with remapped primary keys"),
-        "original_PK": Column("INTEGER", "original primary key value"),
-        "merged_PK": Column("INTEGER", "new primary key after merge"),
+        "original_pk": Column("INTEGER", "original primary key value"),
+        "merged_pk": Column("INTEGER", "new primary key after merge"),
     },
-    sqlite_indices=[["merge_id", "original_PK"]],
+    sqlite_indices=[["merge_id", "original_pk"]],
 )
 
 # Accepted, Maybe, Rejected share this structure; pass the name to build_create_table.
@@ -602,7 +602,11 @@ def build_create_table(table_name: str, schema: TableSchema, dialect: str) -> li
                 parts.append("UNIQUE")
 
         if col.default:
-            parts.append(f"DEFAULT {col.default}")
+            default = col.default
+            # DuckDB's CURRENT_TIMESTAMP is local time in a TIMESTAMP column, SQLite's is UTC
+            if dialect == "duckdb" and default == "CURRENT_TIMESTAMP":
+                default = "(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')"
+            parts.append(f"DEFAULT {default}")
 
         if col.check and not skip_constraints:
             parts.append(f"CHECK ({col.check})")
