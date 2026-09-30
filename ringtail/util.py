@@ -70,7 +70,12 @@ def valid_bookmark_name(name: str) -> Union[str, None]:
         )
         name = name.lower()
 
-    return name if re.match(r"^[a-z0-9_]*$", name) else None
+    from .schema import ALL_TABLE_NAMES, CANDIDATES_NAME
+
+    if name in ALL_TABLE_NAMES or name == CANDIDATES_NAME:
+        logger.warning(f"Bookmark name '{name}' is reserved for a table and cannot be used.")
+        return None
+    return name if re.match(r"^[a-z0-9_]+$", name) else None
 
 
 def detect_db_type(filepath: str) -> str:
@@ -136,6 +141,8 @@ def compress_file(
             dst = dst[: -len(_ext)]
             break
     dst += _COMPRESS_EXT[method]
+    if os.path.abspath(dst) == os.path.abspath(src):
+        raise ValueError(f"Refusing to compress {src} onto itself, choose another output path.")
 
     logger.info(f"Compressing {src} -> {dst} ({method} -{level})")
     if method == "zstd":
@@ -173,6 +180,8 @@ def decompress_file(src: str, dst: str = None) -> str:
     ext = os.path.splitext(src)[1].lower()
     if dst is None:
         dst = src[: -len(ext)] if ext in (".zst", ".gz", ".xz") else src + ".out"
+    if os.path.exists(dst):
+        raise FileExistsError(f"Refusing to overwrite existing file: {dst}")
 
     logger.info(f"Decompressing {src} -> {dst}")
     if ext == ".zst":
