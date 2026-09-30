@@ -199,7 +199,11 @@ def main():
                     raise ValueError(
                         f"Given cluster number {cluster_choice} does not exist in the database. Please be sure you are specifying an integer in the given cluster options."
                     )
-                rtcore.fetch_clustered_similars(ligname, cluster_choice, output_log="cluster_log.txt")
+                similars, similar_bookmark, _ = rtcore.fetch_clustered_similars(
+                    ligname, cluster_choice, output_log="cluster_log.txt"
+                )
+                if similars:
+                    bookmark_name = similar_bookmark
 
             # write out molecules if requested
             if cli.output_options.export_sdf_path:
