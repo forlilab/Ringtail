@@ -20,7 +20,7 @@ def cmdline_parser():
         description="Given one or multiple Ringtail databases made with older versions (e.g., 1.1.0, 2.0.0), will upgrade them to the latest version 3.0.0, unless given a specific version (e.g., intermediate 2.0.0). Can only upgrade, not downgrade.",
     )
     parser.add_argument(
-        "-d",
+        "-db",
         "--database",
         help="Database file(s) made with older Ringtail versions (1.0.0, 1.1.0, 2.0.0)",
         nargs="+",

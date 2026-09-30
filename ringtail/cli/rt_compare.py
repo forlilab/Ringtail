@@ -64,7 +64,7 @@ def cmdline_parser(defaults={}):
         COPYRIGHT
                 Copyright (C) 2022 Stefano Forli Laboratory, Center for Computational Structural Biology,
                              The Scripps Research Institute.
-                GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+                GNU L-GPL version 2.1 or later <https://www.gnu.org/licenses/old-licenses/lgpl-2.1.en.html>
         """,
         exit_on_error=False,
     )
@@ -124,7 +124,7 @@ def cmdline_parser(defaults={}):
     parser.add_argument(
         "--export_sdf",
         "-xs",
-        help="Export cross-referenced ligands and poses to one SDF per database.",
+        help="Export cross-referenced ligands and poses to one SDF per database, in the given folder (default: crossref).",
         const="crossref",
         nargs="?",
         action="store",
@@ -220,9 +220,12 @@ def main():
             rtc = RingtailCore(db)
 
             if args.output_log:
-                # keep the directory and strip only the extension, so ../vs1.db and
-                # my.screen.db give ../vs1_<log> and my.screen_<log>
-                output_log = os.path.splitext(db)[0] + "_" + args.output_log
+                # <db name>_<log name>, next to the database unless the log path has a folder
+                log_dir, log_name = os.path.split(args.output_log)
+                db_dir, db_stem = os.path.split(os.path.splitext(db)[0])
+                if log_dir:
+                    os.makedirs(log_dir, exist_ok=True)
+                output_log = os.path.join(log_dir or db_dir, f"{db_stem}_{log_name}")
                 logger.info(f"Writing log text file for {db} bookmark {bookmark}")
                 rtc.write_filter_output(
                     bookmark,
@@ -234,7 +237,7 @@ def main():
                 logger.info(f"Wrote {db} bookmark {bookmark} results to log file.")
 
             if args.export_sdf:
-                rtc.write_molecule_sdfs(bookmark_name=bookmark)
+                rtc.write_molecule_sdfs(bookmark_name=bookmark, sdf_path=args.export_sdf)
                 logger.info(f"Exported {db} bookmark {bookmark} to SDF.")
 
             if args.export_db:

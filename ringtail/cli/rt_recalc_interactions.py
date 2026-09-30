@@ -12,13 +12,14 @@ is run again with the same cutoffs.
 
 --------- Example usage ---------
 # recalculate with the default cutoffs, answering the confirmation prompt
-rt_recalc_interactions -d output.db
+rt_recalc_interactions -db output.db
 
 # recalculate several databases with new cutoffs, without a prompt (e.g., in a batch job)
-rt_recalc_interactions -d vs1.db vs2.db --hb_cutoff 3.5 --vdw_cutoff 4.5 --yes
+rt_recalc_interactions -db vs1.db vs2.db --hb_cutoff 3.5 --vdw_cutoff 4.5 --yes
 """
 
 import argparse
+import os
 from ringtail import RingtailCore, setup_logging, get_logger
 from ringtail.ringtailoptions import RingtailDefaults
 
@@ -42,7 +43,7 @@ def cmdline_parser():
         ),
     )
     parser.add_argument(
-        "-d",
+        "-db",
         "--database",
         help="Ringtail database file(s) to recalculate interactions for",
         nargs="+",
@@ -109,6 +110,9 @@ def main():
 
         if args.chunk_size < 1:
             raise ValueError(f"--chunk_size must be at least 1, got {args.chunk_size}")
+        missing = [db for db in args.database if not os.path.isfile(db)]
+        if missing:
+            raise FileNotFoundError(f"Database(s) not found: {', '.join(missing)}")
 
         logger.warning(
             "WARNING: existing interactions in the database will be deleted and "
