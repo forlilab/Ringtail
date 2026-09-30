@@ -65,16 +65,9 @@ class MultiprocessingError(RingtailError):
     pass
 
 
-class ResultsProcessingError(RingtailError):
-    pass
-
-
 class OutputError(RingtailError):
     pass
 
-
-class InteractionError(RingtailError):
-    pass
 
 class ReceptorError(RingtailError):
     pass
