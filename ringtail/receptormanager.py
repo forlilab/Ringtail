@@ -261,10 +261,7 @@ def receptor_atoms_from_pdbqt_string(
 def receptor_atoms_from_polymer(
     polymer: Polymer,
 ) -> tuple[np.ndarray, dict[str, set[int]], spatial.cKDTree]:
-    """Read rigid receptor atoms directly from a meeko Polymer. Mirrors
-    PDBQTWriterLegacy.write_from_polymer's atom selection (skip movable monomers,
-    ignored/padding atoms, and flexible sidechain atoms) so the resulting atom
-    set matches the legacy pdbqt path.
+    """Read rigid receptor atoms from a meeko Polymer, skipping ignored atoms and flexible sidechain atoms (movable monomers keep their backbone atoms).
 
     Returns:
         tuple[np.ndarray, dict[str, set[int]], spatial.cKDTree]: atoms,
