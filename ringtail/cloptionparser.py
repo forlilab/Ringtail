@@ -68,7 +68,7 @@ def cmdline_parser(defaults: dict = None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         usage="""rt_process_vs.py [-c CONFIG] write|read OPTS  \n
                  Script to process virtual screening data by writing/filtering/exporting from a database. In 'write' mode, provide docking results with --docking_results. In 'read' mode, provide an existing database with --input_db. Please see the Ringtail documentation for full usage details.""",
-        description="Package for creating, managing, and filtering databases of virtual screening results.",
+        description="Package for creating, managing, and filtering databases of virtual screening results. Use -c/--config CONFIG to read option values from a JSON config file (see rt_generate_config_file), options given on the command line take precedence.",
         epilog="""
 
         CITATION
@@ -107,10 +107,10 @@ def cmdline_parser(defaults: dict = None):
     write_parser.add_argument(
         "-st",
         "--storage_type",
-        help="specify a database file to perform actions with",
+        help="specify the database engine for a new database, duckdb (default) or sqlite. The engine of an existing database is detected",
         action="store",
         type=str,
-        metavar="duckdb",
+        metavar="'duckdb' or 'sqlite'",
     )
     write_parser.add_argument(
         "-m",
@@ -129,7 +129,7 @@ def cmdline_parser(defaults: dict = None):
     write_parser.add_argument(
         "-v",
         "--verbose",
-        help="Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used.",
+        help="Print info-level log messages (progress and results summaries) to STDOUT.",
         action="store_true",
     )
     write_parser.add_argument(
@@ -315,7 +315,7 @@ def cmdline_parser(defaults: dict = None):
     read_parser.add_argument(
         "-v",
         "--verbose",
-        help="Print results passing filtering criteria to STDOUT. NOTE: runtime may be slower option used.",
+        help="Print info-level log messages (progress and results summaries) to STDOUT.",
         action="store_true",
     )
     read_parser.add_argument(
@@ -362,7 +362,7 @@ def cmdline_parser(defaults: dict = None):
     output_group.add_argument(
         "-oap",
         "--output_all_poses",
-        help="By default, will output only top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be included in export option(s).",
+        help="By default, the log will only list the top-scoring pose passing filters per ligand. This flag will cause each pose passing the filters to be logged. Exports always include every passing pose.",
         action="store_true",
     )
     output_group.add_argument(
@@ -407,7 +407,7 @@ def cmdline_parser(defaults: dict = None):
     output_group.add_argument(
         "-sdf",
         "--export_sdf_path",
-        help="specify the path where to save poses of ligands passing the filters (SDF format); if the directory does not exist, it will be created; if it already exist, it will throw an error, unless the --overwrite is used  NOTE: the log file will be automatically saved in this path. Ligands will be stored as one large SDF file unless using '--individual_sdf_files'.",
+        help="specify the path where to save poses of ligands passing the filters (SDF format). The directory will be created if it does not exist. Ligands will be stored as one large SDF file unless using '--individual_sdf_files'.",
         action="store",
         type=str,
         metavar="DIRECTORY_NAME",
@@ -573,7 +573,7 @@ def cmdline_parser(defaults: dict = None):
 
     interaction_group = read_parser.add_argument_group(
         "Interaction Filters",
-        'Specify interaction filters, either by count or by specific residue interaction. Residue specifications are described using CHAIN:RES:NUM:ATOM_NAME, and any combination is allowed, e.g.: CHAIN:::, :RES::, ::NUM:, :::ATOM_NAME, :RES:NUM:, etc... Unwanted interactions can be defined by prepending "~" to the residue specification, e.g. "~B:THR:276:". Multiple residues can be specified in a single option by separating them with a space (e.g.: --vdw=B:THR:276: B:HIS:226:), or by repeating the interaction options (e.g. --vdw=B:THR:276: --vdw=B:HIS:226: ).',
+        'Specify interaction filters, either by count or by specific residue interaction. Residue specifications are described using CHAIN:RES:NUM:ATOM_NAME, and any combination is allowed, e.g.: CHAIN:::, :RES::, ::NUM:, :::ATOM_NAME, :RES:NUM:, etc... Unwanted interactions can be defined by prepending "~" to the residue specification, e.g. "~B:THR:276:". Multiple residues can be specified in a single option by separating them with a comma (e.g.: --vdw=B:THR:276:,B:HIS:226:), or by repeating the interaction options (e.g. --vdw=B:THR:276: --vdw=B:HIS:226: ).',
     )
     interaction_group.add_argument(
         "-vdw",
@@ -581,7 +581,7 @@ def cmdline_parser(defaults: dict = None):
         help="define van der Waals interactions with residue",
         action="append",
         type=str,
-        metavar="[-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]",
+        metavar="[~][CHAIN]:[RES]:[NUM]:[ATOM_NAME]",
     )
     interaction_group.add_argument(
         "-hb",
@@ -589,7 +589,7 @@ def cmdline_parser(defaults: dict = None):
         help="define HB (ligand acceptor or donor) interaction",
         action="append",
         type=str,
-        metavar="[-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]",
+        metavar="[~][CHAIN]:[RES]:[NUM]:[ATOM_NAME]",
     )
     interaction_group.add_argument(
         "-r",
@@ -597,7 +597,7 @@ def cmdline_parser(defaults: dict = None):
         help="check if ligand reacted with specified residue",
         action="append",
         type=str,
-        metavar="[-][CHAIN]:[RES]:[NUM]:[ATOM_NAME]",
+        metavar="[~][CHAIN]:[RES]:[NUM]:[ATOM_NAME]",
     )
     interaction_group.add_argument(
         "-hc",
@@ -635,20 +635,26 @@ def cmdline_parser(defaults: dict = None):
             "Script called with no commandline options. Please call with either 'read' or 'write'. See --help for details."
         )
 
+    config_lists = {}
     if confargs.config is not None:
         # update default values with those given in the config file
         try:
             with open(confargs.config) as json_file:
                 config_dict = json.load(json_file)
-                defaults.update(config_dict)
         except FileNotFoundError as e:
             raise OptionError("Config file not found in current directory.") from e
+        # argparse appends command line values to a list default, so config lists are filled in after parsing
+        config_lists = {k: v for k, v in config_dict.items() if isinstance(v, list)}
+        defaults.update({k: None if k in config_lists else v for k, v in config_dict.items()})
 
     cmd_line_prompt = str(sys.argv)
     parser.set_defaults(**defaults)
     write_parser.set_defaults(**defaults)
     read_parser.set_defaults(**defaults)
     args = parser.parse_args(remaining_argv)
+    for key, value in config_lists.items():
+        if getattr(args, key, None) is None:
+            setattr(args, key, value)
     return args, parser, confargs, write_parser, read_parser, cmd_line_prompt
 
 
@@ -850,6 +856,7 @@ class CLOptionParser:
             optional_filters.append(
                 "react_any"
             )  # react_any is not part of the three formal list but works as a filter on its own
+            optional_filters.append("ligand_name_file")  # also a filter on its own
             for f in optional_filters:
                 value = getattr(parsed_opts, f)
                 # react_any is a flag: unset is False, not a criterion. Checked by name
