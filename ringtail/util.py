@@ -117,7 +117,7 @@ def compress_file(
         src: path to the file to compress (never modified, moved, or deleted).
         dst: output artifact path. If None, ``src`` + the method's extension.
         method: "zstd" (default), "gzip", or "xz".
-        level: compression level (zstd 1-22, gzip 1-9, xz 0-9).
+        level: compression level (zstd 1-19, gzip 1-9, xz 0-9).
 
     Returns:
         str: the artifact path actually written (extension reflects the method
