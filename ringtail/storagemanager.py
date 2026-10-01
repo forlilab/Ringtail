@@ -702,7 +702,7 @@ class StorageManager(ABC):
         Will create an intersect of ligand names in the wanted databases+bookmarks,
         and delete any ligands found in the union of the unwanted databases+bookmarks.
 
-        A bookmark with specified prefix to the original bookmark name will be stored in each database,
+        A bookmark with specified prefix to the original bookmark name will be stored in each wanted database,
         making the crossreferencing data easily available for later use.
 
         The second element of each (database, scope) tuple may be a bookmark name
@@ -712,7 +712,7 @@ class StorageManager(ABC):
         Args:
             wanted_dbs (list[tuple[str, Union[str, None]]], optional): (database_path, scope) tuples, where scope is a bookmark, a status table, or None/"Results" for all results. Defaults to None.
             unwanted_dbs (list[tuple[str, Union[str, None]]], optional): (database_path, scope) tuples to exclude, scoped the same way. Defaults to None.
-            bookmark_prefix (str, optional): prefix of the bookmark written in each database. Defaults to "crossref".
+            bookmark_prefix (str, optional): prefix of the bookmark written in each wanted database. Defaults to "crossref".
             alternative_database_names (dict, optional):  {path: alt name}. Defaults to None.
 
         Raises:
@@ -821,7 +821,10 @@ class StorageManager(ABC):
         filter_dict = {"wanted": wanted_dbs, "unwanted": unwanted_dbs}
         bookmark_query = self._crossref_bookmark_builder(approved_ligand_names)
         dbs_new_bookmark_names = {}
-        for _, alias, path, scope in entries:
+        for kind, alias, path, scope in entries:
+            # unwanted databases hold none of the selected ligands
+            if kind == "unwanted":
+                continue
             # lowercase the suffix so the stored bookmark name stays SQLite-safe
             # and re-queryable when the scope is a (capitalized) status table.
             new_bookmark_name = f"{bookmark_prefix}_{(scope or 'results').lower()}"

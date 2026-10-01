@@ -1621,7 +1621,7 @@ class RingtailCore:
         Will create an intersect of ligand names in the wanted databases+bookmarks,
         and omit any ligands found in the union of the unwanted databases+bookmarks.
 
-        A bookmark with specified prefix to the original bookmark name will be stored in each database,
+        A bookmark with specified prefix to the original bookmark name will be stored in each wanted database,
         making the crossreferencing data easily available for later use.
 
         The second element of each (database, scope) tuple may be a bookmark name
@@ -1631,7 +1631,7 @@ class RingtailCore:
         Args:
             wanted_dbs (list[tuple[str, Union[str, None]]], optional): (database_path, scope) tuples, where scope is a bookmark, a status table, or None/"Results" for all results. The first must be this database, by its path or as "". Defaults to None.
             unwanted_dbs (list[tuple[str, Union[str, None]]], optional): (database_path, scope) tuples to exclude, scoped the same way. Defaults to None.
-            bookmark_prefix (str, optional): prefix of the bookmark written in each database. Defaults to "crossref".
+            bookmark_prefix (str, optional): prefix of the bookmark written in each wanted database. Defaults to "crossref".
             alternative_database_names (dict, optional):  {path: alt name}. Defaults to None.
 
         Returns:
