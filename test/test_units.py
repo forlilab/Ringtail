@@ -346,10 +346,10 @@ class TestFiltering:
         with tmp_db.storageman as sm:
             sql = sm._generate_filtering_query(Filters.from_dict(expr), "out")
         assert (
-            "((R.docking_score <= CAST(CAST(-8 AS DOUBLE) AS FLOAT)) "
-            "AND ((R.docking_score >= CAST(CAST(-12 AS DOUBLE) AS FLOAT)) "
-            "OR ((R.docking_score <= CAST(CAST(-9 AS DOUBLE) AS FLOAT)) "
-            "AND (R.leff >= CAST(CAST(-0.5 AS DOUBLE) AS FLOAT)))))" in sql
+            "((R.docking_score <= -8) "
+            "AND ((R.docking_score >= -12) "
+            "OR ((R.docking_score <= -9) "
+            "AND (R.leff >= -0.5))))" in sql
         )
 
     def test_smarts_inside_group(self, populated_db):

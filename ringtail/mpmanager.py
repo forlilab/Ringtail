@@ -139,7 +139,7 @@ class MPManager:
 
         # Now safe to shut down readers
         for _ in range(self.num_readers):
-            self.queueIn.put(None)
+            self._add_to_queue(None)
 
         # check for exceptions
         while writer.is_alive():
@@ -150,8 +150,7 @@ class MPManager:
         writer.join()
         # the writer can report an error and exit between two polls above (small jobs
         # finish within one sleep), so read whatever is still waiting in the pipe
-        while self.p_conn.poll():
-            self._check_for_worker_exceptions()
+        self._check_for_worker_exceptions()
         self._check_workers_alive()
 
     def _process_data_sources(self, results: ResultsObject, file_pattern: str):
@@ -184,7 +183,7 @@ class MPManager:
         # adds result file to the multiprocess queue
         max_attempts = 750
         timeout = 0.5  # seconds
-        if not isinstance(results_data, dict) and self.receptor_file_path is not None:
+        if isinstance(results_data, str) and self.receptor_file_path is not None:
             if (
                 os.path.split(results_data)[-1]
                 == os.path.split(self.receptor_file_path)[-1]
@@ -215,8 +214,7 @@ class MPManager:
         for worker in self.workers:
             if worker.exitcode not in (None, 0):
                 # the writer's own error message is more useful than its exit code
-                while self.p_conn.poll():
-                    self._check_for_worker_exceptions()
+                self._check_for_worker_exceptions()
                 self._kill_all_workers(
                     MultiprocessingError(
                         f"{worker.name} exited unexpectedly with code {worker.exitcode}."
@@ -226,8 +224,8 @@ class MPManager:
                 )
 
     def _check_for_worker_exceptions(self):
-        """Handles one waiting worker error: fatal when the writer fails, logged for a file, record or ligand."""
-        if self.p_conn.poll():
+        """Handles every waiting worker error: fatal when the writer fails, logged for a file, record or ligand."""
+        while self.p_conn.poll():
             error, tb, filename = self.p_conn.recv()
             logger.error(f"Caught error in multiprocess from {filename}:")
             logger.error(f"{tb}")

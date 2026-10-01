@@ -175,6 +175,10 @@ class VinaMoleculeSupplier:
                     raise FileParsingErrorPdbqt(
                         "ERROR! Cannot parse {0} in {1}".format(line, name)
                     )
+            if not scores:
+                raise FileParsingErrorPdbqt(
+                    f"{name} has no Vina results, it may be a receptor file"
+                )
 
             # deltas from the best pose, ligand efficiency is set once the mol is built
             delta = [round(x - scores[0], 2) for x in scores]
