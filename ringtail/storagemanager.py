@@ -10,18 +10,26 @@ import os.path
 import re
 from abc import ABC, abstractmethod
 from pathlib import Path
+import numpy as np
 import pandas as pd
 from .logutils import get_logger
 
 logger = get_logger(__name__)
+
+# how to upgrade a database this version of Ringtail cannot open
+UPGRADE_HINT = (
+    "Upgrade Ringtail 1.x/2.x databases with rt_upgrade_db. Pre-release 3.0 databases "
+    "need rt_upgrade_from_v3alpha.py, ask your package administrator for it."
+)
+
 from .util import db_alias_from_path, numlist2str
 import sys
 from signal import signal, SIGINT
 from rdkit import Chem
 from typing import Any, Union, ClassVar, NamedTuple
-from importlib.metadata import version
+from ._version import __version__
 from packaging.version import Version
-from .filters import Filter, Filters
+from .filters import Filters
 from .ringtailoptions import statuses
 from .exceptions import (
     StorageError,
@@ -50,11 +58,12 @@ from .schema import (
     CLUSTERS_SCHEMA,
     CLUSTER_GROUPS_SCHEMA,
     POSE_CLUSTERS_SCHEMA,
-    MERGED_TABLES_SCHEMA,
-    PK_CONVERSIONS_SCHEMA,
     RECEPTORS_SCHEMA,
     STATUS_TABLE_SCHEMA,
     POSE_COMMENTS_SCHEMA,
+    MINIMIZED_COLUMNS,
+    ROW_ID_OWNERS,
+    ROW_ID_TABLES,
     SCHEMA_VERSION_SCHEMA,
     SCHEMA_VERSION,
     SQLITE_TYPES,
@@ -86,14 +95,6 @@ class PoseData(NamedTuple):
 
 
 class StorageManager(ABC):
-    QueryBuilder = QueryBuilder
-
-    # Whether Filtered_poses carries a denormalized ligand_id column. SQLite sets
-    # this True so passing-ligand counts are a single-table COUNT(DISTINCT) instead
-    # of a costly JOIN into the row-store Results table. DuckDB leaves it False
-    # (its columnar count-JOIN is cheap) so existing DuckDB databases stay valid.
-    _filtered_poses_has_ligand_id: ClassVar[bool] = False
-
     """Base class for a generic virtual screening database object.
     This class holds some of the common API for StorageManager child classes. 
     Each child class will implement their own functions to write to and read from the database
@@ -107,6 +108,14 @@ class StorageManager(ABC):
         QueryBuilder: dialect of querybuilder
         _filtered_poses_has_ligand_id (bool): flag that optimizes handling of filtered poses for sqlite vs duckdb
     """
+
+    QueryBuilder = QueryBuilder
+
+    # Whether Filtered_poses carries a denormalized ligand_id column. SQLite sets
+    # this True so passing-ligand counts are a single-table COUNT(DISTINCT) instead
+    # of a costly JOIN into the row-store Results table. DuckDB leaves it False
+    # (its columnar count-JOIN is cheap) so existing DuckDB databases stay valid.
+    _filtered_poses_has_ligand_id: ClassVar[bool] = False
 
     dialect: ClassVar[str]
     # replay record of the public call currently creating bookmarks, see recording_call
@@ -151,7 +160,7 @@ class StorageManager(ABC):
 
         self.close_storage()
         if exc_type:
-            logger.error(str(exc_value))
+            logger.debug(str(exc_value))
             raise exc_value
         return self
 
@@ -222,6 +231,22 @@ class StorageManager(ABC):
         # insert receptor if database does not have already have a receptor entry
         if not receptors.get("recname"):
             self._insert_receptors(receptor_data)
+            return
+        # a receptor saved from its file has no box or flexible residue info yet
+        _, box_dim, box_center, grid_spacing, flexres, flexres_atomnames = receptor_data
+        self.db_query(
+            f"""UPDATE Receptors SET
+                box_dim = COALESCE(box_dim, ?),
+                box_center = COALESCE(box_center, ?),
+                grid_spacing = COALESCE(grid_spacing, ?),
+                flexible_residues = CASE WHEN COALESCE(flexible_residues, '{NO_FLEXRES_JSON}') = '{NO_FLEXRES_JSON}'
+                    THEN ? ELSE flexible_residues END,
+                flexres_atomnames = CASE WHEN COALESCE(flexres_atomnames, '{NO_FLEXRES_JSON}') = '{NO_FLEXRES_JSON}'
+                    THEN ? ELSE flexres_atomnames END
+            WHERE receptor_id = 1;""",
+            (box_dim, box_center, grid_spacing, flexres, flexres_atomnames),
+            commit=True,
+        )
 
     def filter_results(
         self,
@@ -246,8 +271,7 @@ class StorageManager(ABC):
         if not rt_version_same:
             raise StorageError(
                 f"Database schema version '{db_rt_version}' is not compatible with this "
-                f"Ringtail (schema {SCHEMA_VERSION}). Ask your package administrator for "
-                "the script rt_upgrade_from_v3alpha.py to upgrade the database."
+                f"Ringtail (schema {SCHEMA_VERSION}). {UPGRADE_HINT}"
             )
 
         # get the final filter query, has a {selection} place holder
@@ -292,6 +316,7 @@ class StorageManager(ABC):
             list: of bookmark names
         """
         if db_path:
+            db_name = db_name or "attached_db"
             self._attach_db(db_path, db_name)
         query = self.QueryBuilder()
         query.SELECT("name").FROM("Filters", db_name=db_name)
@@ -570,23 +595,6 @@ class StorageManager(ABC):
         self.conn.commit()
         logger.warning("All bookmarks, filters and clusterings have been deleted.")
 
-    def _delete_pose_screening_data(self, pose_ids) -> None:
-        """Delete status assignments and comments for the given poses, e.g. before
-        those poses are replaced by duplicate_handling="replace".
-
-        Args:
-            pose_ids (Iterable[int]): poses whose status and comment to delete
-        """
-        pose_ids = tuple(pose_ids)
-        if not pose_ids:
-            return
-        placeholders = ",".join("?" for _ in pose_ids)
-        for table in ("Accepted", "Maybe", "Rejected", POSE_COMMENTS_SCHEMA.name):
-            if self._is_table(table):
-                self.db_query(
-                    f"DELETE FROM {table} WHERE pose_id IN ({placeholders})", pose_ids
-                )
-
     def rename_bookmark(self, old_name: str, new_name: str) -> None:
         """Rename a bookmark, and repoint everything that refers to it by name.
 
@@ -622,7 +630,11 @@ class StorageManager(ABC):
         logger.info(f"Bookmark '{old_name}' renamed to '{new_name}'.")
 
     def get_maxmiss_union(
-        self, total_combinations: int, bookmark_name: str, all_filters=None
+        self,
+        total_combinations: int,
+        bookmark_name: str,
+        all_filters=None,
+        input_bookmark: str = None,
     ) -> tuple[int, str]:
         """
         Get results that are in union considering max miss
@@ -631,10 +643,11 @@ class StorageManager(ABC):
             total_combinations (int): numer of possible combinations
             bookmark_name (str): name of bookmark to store
             all_filters (dict, optional): All filters used. Defaults to None.
+            input_bookmark (str, optional): bookmark the combinations were filtered over. Defaults to None.
 
         Returns:
-            int: num passing poses
-            str: union bookmark name
+            int: num passing ligands
+            str: union bookmark name, None if nothing passed
         """
         all_filters = all_filters or {}
         enumerated_bookmarks = []
@@ -643,6 +656,8 @@ class StorageManager(ABC):
             bmn = bookmark_name + "_" + str(i)
             if bmn in existing_bookmarks:
                 enumerated_bookmarks.append(f"'{bmn}'")
+        if not enumerated_bookmarks:
+            return 0, None
 
         subq = self.QueryBuilder()
         subq.SELECT("filter_id").FROM("Filters").WHERE(
@@ -660,7 +675,10 @@ class StorageManager(ABC):
         bookmark_name = f"{bookmark_name}_union"
         logger.debug("Running interaction union query")
         self._populate_filter_tables(
-            name=bookmark_name, query=query.build()[0], filters=all_filters
+            name=bookmark_name,
+            query=query.build()[0],
+            filters=all_filters,
+            input_bookmark=input_bookmark,
         )
 
         count = self.get_passing_ligands_count(bookmark_name)
@@ -674,7 +692,6 @@ class StorageManager(ABC):
         wanted_dbs: list[tuple[str, Union[str, None]]] = None,
         unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
         bookmark_prefix: str = "crossref",
-        store_best_pose: bool = False,
         alternative_database_names: dict = None,
     ) -> tuple[int, dict, dict]:
         """
@@ -693,11 +710,13 @@ class StorageManager(ABC):
         the intersect/exclude be scoped by acceptance status as well as by bookmark.
 
         Args:
-            wanted_dbs (list[tuple[str, Union[str, None]]], optional): (database_path, scope) tuples, where scope is a bookmark or status table name. Defaults to None.
-            unwanted_dbs (list[tuple[str, Union[str, None]]], optional): (database_path, scope) tuples to exclude, where scope is a bookmark or status table name. Defaults to None.
-            bookmark_prefix (str, optional): _description_. Defaults to "crossref".
-            store_best_pose (bool, optional): To store just the best pose for a ligand vs all poses in the database. Defaults to False/storing all poses.
+            wanted_dbs (list[tuple[str, Union[str, None]]], optional): (database_path, scope) tuples, where scope is a bookmark, a status table, or None/"Results" for all results. Defaults to None.
+            unwanted_dbs (list[tuple[str, Union[str, None]]], optional): (database_path, scope) tuples to exclude, scoped the same way. Defaults to None.
+            bookmark_prefix (str, optional): prefix of the bookmark written in each database. Defaults to "crossref".
             alternative_database_names (dict, optional):  {path: alt name}. Defaults to None.
+
+        Raises:
+            OptionError: if a scope is not a bookmark or status table of its database
 
         Returns:
             int: number of passing crossref ligands
@@ -708,7 +727,7 @@ class StorageManager(ABC):
         # Aliases must be unique per attached database. The file stem alone is not:
         # screens are often all named output.db in separate folders, and DuckDB also
         # names the primary database after its own stem, so it is reserved as well.
-        used_aliases = {"main", db_alias_from_path(wanted_dbs[0][0]).lower()}
+        used_aliases = {"main", db_alias_from_path(self.db_file).lower()}
         used_aliases.update(name.lower() for name in alternative_database_names.values())
 
         def _unique_alias(path: str) -> str:
@@ -720,128 +739,100 @@ class StorageManager(ABC):
             used_aliases.add(alias.lower())
             return alias
 
-        processed_wanted = []
-        for index, database in enumerate(wanted_dbs):
-            if index == 0:
-                db_name = "main"
-                alternative_database_names[database[0]] = db_name
-            else:
-                if database[0] in alternative_database_names.keys():
-                    db_name = alternative_database_names[database[0]]
-                else:
-                    db_name = _unique_alias(database[0])
-                    alternative_database_names[database[0]] = db_name
-            processed_wanted.append(
-                (
-                    db_name,
-                    database[0],
-                    database[1],
-                )
-            )
-            if index > 0:
-                self._attach_db(database[0], db_name)
+        # one alias per database, the first wanted database is this one
+        aliases = {}
+        entries = []
+        for kind, databases in (("wanted", wanted_dbs), ("unwanted", unwanted_dbs or [])):
+            for path, scope in databases:
+                if not aliases:
+                    aliases[path] = "main"
+                elif path not in aliases:
+                    aliases[path] = alternative_database_names.get(path) or _unique_alias(path)
+                entries.append((kind, aliases[path], path, scope))
 
-        processed_unwanted = []
-        for index, database in enumerate(unwanted_dbs or []):
-            if database[0] in alternative_database_names.keys():
-                db_name = alternative_database_names[database[0]]
-            else:
-                db_name = _unique_alias(database[0])
-                alternative_database_names[database[0]] = db_name
-            processed_unwanted.append(
-                (
-                    db_name,
-                    database[0],
-                    database[1],
-                )
-            )
-            self._attach_db(database[0], db_name)
-        # make subqueries/common table expressions for each set of ligands
-        selection_query = """
-        {db_name} AS 
-            (SELECT ligname FROM {db_name}.Ligands 
-            INNER JOIN {db_name}.Results ON 
-                {db_name}.Results.ligand_id={db_name}.Ligands.ligand_id 
-                WHERE pose_id IN ({bookmark_poses}))"""
-        wanted_ctes = []
-        for db_name, _, bookmark in processed_wanted:
-            wanted_ctes.append(
+        attached = []
+        try:
+            for path, alias in aliases.items():
+                if alias != "main":
+                    self._attach_db(path, alias)
+                    attached.append(alias)
+            for _, alias, path, scope in entries:
+                if (
+                    scope is None
+                    or scope.lower() == "results"
+                    or self._is_statustable(scope)
+                    or self._is_candidates_table(scope)
+                ):
+                    continue
+                bookmarks = self.get_all_bookmark_names(None if alias == "main" else alias)
+                if scope.lower() not in bookmarks:
+                    raise OptionError(
+                        f"{path or self.db_file} has no bookmark or status table named {scope!r}."
+                    )
+
+            # one common table expression of ligand names per (database, scope)
+            selection_query = """
+            {name} AS
+                (SELECT ligname FROM {db_name}.Ligands
+                INNER JOIN {db_name}.Results ON
+                    {db_name}.Results.ligand_id={db_name}.Ligands.ligand_id
+                    WHERE pose_id IN ({scope_poses}))"""
+            names = [f"set_{i}" for i in range(len(entries))]
+            ctes = [
                 selection_query.format(
-                    db_name=db_name,
-                    bookmark_poses=self._get_scope_poses_query(bookmark, db_name),
+                    name=name,
+                    db_name=alias,
+                    scope_poses=self._get_scope_poses_query(scope, alias),
                 )
+                for name, (_, alias, _, scope) in zip(names, entries)
+            ]
+            wanted = [name for name, entry in zip(names, entries) if entry[0] == "wanted"]
+            unwanted = [name for name, entry in zip(names, entries) if entry[0] == "unwanted"]
+            wanted_joins = " ".join(
+                f"INNER JOIN {name} ON {wanted[0]}.ligname = {name}.ligname"
+                for name in wanted[1:]
             )
-
-        unwanted_ctes = []
-        for db_name, _, bookmark in processed_unwanted:
-            unwanted_ctes.append(
-                selection_query.format(
-                    db_name=db_name,
-                    bookmark_poses=self._get_scope_poses_query(bookmark, db_name),
-                )
-            )
-
-        all_ctes = "WITH\n" + ", ".join(wanted_ctes + unwanted_ctes)
-
-        wanted_joins = " ".join(
-            f"INNER JOIN {db[0]} ON {processed_wanted[0][0]}.ligname = {db[0]}.ligname"
-            for db in processed_wanted[1:]
-        )
-
-        # build exclusion union
-        exclude_union = " UNION ".join(
-            f"SELECT ligname FROM {db[0]}" for db in processed_unwanted
-        )
-
-        if unwanted_dbs:
-            unwanted_ctes = f""",
-                unwanted AS (
-                    {exclude_union}
-                )"""
-            unwanted_where = """WHERE i.ligname NOT IN (SELECT ligname FROM unwanted)"""
-        else:
-            unwanted_ctes = ""
+            unwanted_cte = ""
             unwanted_where = ""
-
-        query = f"""
-        {all_ctes},
-        wanted AS (
-            SELECT {processed_wanted[0][0]}.ligname
-            FROM {processed_wanted[0][0]} {wanted_joins}
-        ){unwanted_ctes}
-        SELECT DISTINCT i.ligname
-        FROM wanted i
-        {unwanted_where}
-        """
-
-        # make a bookmark in each database with the results
-        approved_ligand_names = [lig[0] for lig in self.db_query(query).fetchall()]
-        dbs_new_bookmark_names = {}
+            if unwanted:
+                exclude_union = " UNION ".join(f"SELECT ligname FROM {name}" for name in unwanted)
+                unwanted_cte = f", unwanted AS ({exclude_union})"
+                unwanted_where = "WHERE i.ligname NOT IN (SELECT ligname FROM unwanted)"
+            query = f"""
+            WITH {", ".join(ctes)},
+            wanted AS (
+                SELECT {wanted[0]}.ligname
+                FROM {wanted[0]} {wanted_joins}
+            ){unwanted_cte}
+            SELECT DISTINCT i.ligname
+            FROM wanted i
+            {unwanted_where}
+            """
+            approved_ligand_names = [lig[0] for lig in self.db_query(query).fetchall()]
+        finally:
+            for alias in attached:
+                self.detach_db(alias)
 
         # don't proceed if no approved ligands
-        if len(approved_ligand_names) < 1:
+        if not approved_ligand_names:
             return 0, {}, {}
 
         # write bookmarks in each of the databases
         filter_dict = {"wanted": wanted_dbs, "unwanted": unwanted_dbs}
-
-        for db_alias, path, bookmark in processed_wanted + processed_unwanted:
+        bookmark_query = self._crossref_bookmark_builder(approved_ligand_names)
+        dbs_new_bookmark_names = {}
+        for _, alias, path, scope in entries:
             # lowercase the suffix so the stored bookmark name stays SQLite-safe
             # and re-queryable when the scope is a (capitalized) status table.
-            new_bookmark_name = f"{bookmark_prefix}_{bookmark.lower()}"
-            if alternative_database_names[path].lower() in ["", "main"]:
+            new_bookmark_name = f"{bookmark_prefix}_{(scope or 'results').lower()}"
+            if alias == "main":
                 self._populate_filter_tables(
                     name=new_bookmark_name,
-                    query=self._crossref_bookmark_builder(
-                        approved_ligand_names, store_best_pose
-                    ),
+                    query=bookmark_query,
                     filters=filter_dict,
-                    input_bookmark=bookmark,
+                    input_bookmark=scope,
                 )
             else:
-                # detach
-                self.detach_db(db_alias)
-                # make storageman object
                 with type(self)(path) as db:
                     # same call, but call_id is numbered per database
                     if self._call_record is not None:
@@ -851,39 +842,38 @@ class StorageManager(ABC):
                         }
                     db._populate_filter_tables(
                         name=new_bookmark_name,
-                        query=self._crossref_bookmark_builder(
-                            approved_ligand_names, store_best_pose
-                        ),
+                        query=bookmark_query,
                         filters=filter_dict,
-                        input_bookmark=bookmark,
+                        input_bookmark=scope,
                     )
-
-        for _, file, bookmark in processed_wanted + processed_unwanted:
-            dbs_new_bookmark_names.update(
-                {file: f"{bookmark_prefix}_{bookmark.lower()}"}
-            )
+            dbs_new_bookmark_names[path] = new_bookmark_name
 
         return (len(approved_ligand_names), dbs_new_bookmark_names, filter_dict)
 
     def cluster_data(
         self,
         bookmark_name: Union[str, None],
-        cluster_type: str = "mfpt",
+        cluster_type: str = "mfp",
         cutoff: float = 0.5,
     ) -> tuple[str, int]:
         """
-        Clusters data in a given bookmark. Will create a new bookmark with the format
-        <bookmark_name>_<cluster-type>_clustered containing the representative poses
+        Clusters data in a given bookmark. Will create a new bookmark named
+        <bookmark_name>_<cluster_type>_<cutoff> containing the representative poses
         for the clusters
 
         Args:
             bookmark_name (str | None): bookmark name with poses to cluster, None clusters all results
-            cluster_type (str, optional): type of clustering. Defaults to "mfpt".
+            cluster_type (str, optional): "mfp" or "ifp". Defaults to "mfp".
             cutoff (float, optional): cutoff cluster distance. Defaults to 0.5.
 
         Returns:
             tuple (str, int): clustered bookmark name, number of clusters
+
+        Raises:
+            OptionError: if cluster_type is not "mfp" or "ifp"
         """
+        if cluster_type.lower() not in ("mfp", "ifp"):
+            raise OptionError(f"cluster_type must be 'mfp' or 'ifp', not {cluster_type!r}.")
         logger.debug("Preparing to cluster")
         time0 = time.perf_counter()
 
@@ -933,28 +923,22 @@ class StorageManager(ABC):
             str(cutoff),
             internal_name,
         )
-        if isinstance(cluster_bookmark_name, tuple):
-            logger.info("Clustering has been ran before, old bookmark will be used.")
-            num_clusters = cluster_bookmark_name[1]
-            cluster_bookmark_name = cluster_bookmark_name[0]
-        else:
+        clustered_cols = (
+            ["pose_id", "ligand_id"]
+            if self._filtered_poses_has_ligand_id
+            else ["pose_id"]
+        )
+        clustered_poses = self.QueryBuilder()
+        clustered_poses.SELECT(*clustered_cols).FROM("results").WHERE(
+            f"pose_id IN ({','.join(str(r) for r in representatives)})"
+        )
 
-            clustered_cols = (
-                ["pose_id", "ligand_id"]
-                if self._filtered_poses_has_ligand_id
-                else ["pose_id"]
-            )
-            clustered_poses = self.QueryBuilder()
-            clustered_poses.SELECT(*clustered_cols).FROM("results").WHERE(
-                f"pose_id IN ({','.join(str(r) for r in representatives)})"
-            )
-
-            self._populate_filter_tables(
-                cluster_bookmark_name,
-                clustered_poses.build()[0],
-                {"cluster_type": cluster_type, "cutoff": cutoff},
-                bookmark_name,
-            )
+        self._populate_filter_tables(
+            cluster_bookmark_name,
+            clustered_poses.build()[0],
+            {"cluster_type": cluster_type, "cutoff": cutoff},
+            bookmark_name,
+        )
 
         logger.info(f"Time to cluster data: {time.perf_counter() - time0:.2f} seconds")
 
@@ -991,63 +975,86 @@ class StorageManager(ABC):
                 f"{type(self).__name__}._attach_db did not return the alias it attached "
                 f"{merging_db} as, so the database could not be detached again."
             )
-        if not self._db_compatible_for_merge(merging_db_alias):
-            raise MergeError(
-                "Trying to merge two databases of incompatible or too old versions, cannot proceed."
-            )
-
-        # add to merging table the absolute path
-        mergedb_abspath = str(os.path.abspath(merging_db))
-        merge_id = self._get_merge_id(mergedb_abspath)
-
-        # receptor compatibility check
-        if self._merging_receptors_compatible():
+        try:
+            if not self._db_compatible_for_merge(merging_db_alias):
+                raise MergeError(
+                    "Trying to merge two databases of incompatible or too old versions, cannot proceed."
+                )
+            if not self._merging_receptors_compatible():
+                raise MergeError(
+                    f"The receptors in the merging databases are not the same. \nThese databases cannot be merged."
+                )
             logger.info(
                 "The two databases have compatible receptors. Merging will proceed."
             )
-        else:
-            raise MergeError(
-                f"The receptors in the merging databases are not the same. \nThese databases cannot be merged."
-            )
+            if not self.db_query(f"SELECT COUNT(*) FROM {merging_db_alias}.Results").fetchone()[0]:
+                raise MergeError(f"{merging_db} has no results to merge.")
 
-        # merge tables
-        try:
-            # merge db_properties table
-            self._merge_db_properties_table(merge_id)
-            self.conn.commit()
-            logger.info("The 'db_properties' table has been merged.")
+            # add to merging table the absolute path
+            mergedb_abspath = str(os.path.abspath(merging_db))
+            merge_id = self._get_merge_id(mergedb_abspath)
+            # ids above these were added by this merge, the rest were already here
+            last_ids = self.last_row_ids()
 
-            # merge Ligands and Results tables
-            self._merge_ligands_and_results_tables(merge_id)
-            self.conn.commit()
-            logger.info("The 'Ligands' and 'Results' tables have been merged.")
+            # merge tables
+            try:
+                # merge db_properties table
+                self._merge_db_properties_table(merge_id)
+                self.conn.commit()
+                logger.info("The 'db_properties' table has been merged.")
 
-            # merge Interactions and Interaction_indices tables
-            self._merge_interaction_tables(merge_id)
-            self.conn.commit()
-            logger.info(
-                "The 'Interaction_indices' and 'Interactions' tables have been merged."
-            )
-        except Exception as e:
-            self._rollback_merge(merge_id)
-            raise MergeError(f"Merging failed and was rolled back: {e}") from e
-        else:
-            self._sync_auto_increment_state()
-            logger.info(
-                f"The database {merging_db} has been successfully merged into {self.db_file}."
-            )
+                # merge Ligands and Results tables
+                self._merge_ligands_and_results_tables(merge_id)
+                self.conn.commit()
+                logger.info("The 'Ligands' and 'Results' tables have been merged.")
+
+                # merge Interactions and Interaction_indices tables
+                self._merge_interaction_tables(merge_id)
+                self.conn.commit()
+                logger.info(
+                    "The 'Interaction_indices' and 'Interactions' tables have been merged."
+                )
+            except Exception as e:
+                self._rollback_merge(merge_id, last_ids)
+                raise MergeError(f"Merging failed and was rolled back: {e}") from e
+            else:
+                self._sync_auto_increment_state()
+                logger.info(
+                    f"The database {merging_db} has been successfully merged into {self.db_file}."
+                )
         finally:
             self._cleanup_storage(merging_db_alias, vacuum=True, reindex=True)
             logger.info("The final database has been cleaned up, and indices rebuilt.")
 
+    def last_row_ids(self) -> dict:
+        """Largest id of each growing table, so delete_rows_after can undo a failed write."""
+        return {
+            column: self._max_id(table, column) if self._is_table(table) else 0
+            for column, table in ROW_ID_OWNERS.items()
+        }
+
+    def delete_rows_after(self, last_ids: dict) -> None:
+        """Rolls back, then deletes every row added after last_row_ids.
+
+        Args:
+            last_ids (dict): output of last_row_ids from before the write
+        """
+        self._rollback()
+        for table, column in ROW_ID_TABLES:
+            if self._is_table(table):
+                self.db_query(
+                    f"DELETE FROM {table} WHERE {column} > ?", (last_ids[column],)
+                )
+        self.conn.commit()
+
     def complete_merging(self):
         """
-        Completes the merging process by creating empty filter tables, as well
+        Completes the merging process by creating empty filter, status and comment tables, as well
         as resetting any auto incremented values for safety
         """
         # Rebuild indices dropped in prepare_for_merging()
         self._create_indices()
-        self._create_filtering_tables()
+        self._create_screening_tables()
         self._sync_auto_increment_state()
 
     def create_subset_database(self, bookmark_name: str, database_name: str):
@@ -1080,42 +1087,53 @@ class StorageManager(ABC):
         logger.debug(
             f"Database {database_name} attached to main database {self.db_file}."
         )
+        # a bookmark, status table, candidates or all results
+        scope_poses = self._get_scope_poses_query(bookmark_name, "main")
+
+        # columns by name, since an upgraded database can hold them in another order
+        def cols(schema) -> str:
+            return ", ".join(
+                name
+                for name, col in schema.columns.items()
+                if not (col.sqlite_only and self.dialect != "sqlite")
+            )
+
         # ligands
         ligands = f"""
-        INSERT INTO {alias}.Ligands
-        SELECT * FROM main.Ligands
+        INSERT INTO {alias}.Ligands ({cols(LIGANDS_SCHEMA)})
+        SELECT {cols(LIGANDS_SCHEMA)} FROM main.Ligands
         WHERE main.Ligands.ligand_id IN (
             SELECT ligand_id from main.Results
-            WHERE pose_id IN ({self.QueryBuilder.bookmark_query(bookmark_name, "main")}));"""
+            WHERE pose_id IN ({scope_poses}));"""
         self.db_query(ligands)
         logger.debug("Ligands have been copied into the new subset database.")
         # receptor
         receptor = f"""
-        INSERT INTO {alias}.Receptors
-        SELECT * FROM main.Receptors;
+        INSERT INTO {alias}.Receptors ({cols(RECEPTORS_SCHEMA)})
+        SELECT {cols(RECEPTORS_SCHEMA)} FROM main.Receptors;
         """
         self.db_query(receptor)
         logger.debug("The receptor have been copied into the new subset database.")
         # results
         poses = f"""
-        INSERT INTO {alias}.Results
-        SELECT * FROM main.Results
-        WHERE main.Results.pose_id IN ({self.QueryBuilder.bookmark_query(bookmark_name, "main")});"""
+        INSERT INTO {alias}.Results ({cols(RESULTS_SCHEMA)})
+        SELECT {cols(RESULTS_SCHEMA)} FROM main.Results
+        WHERE main.Results.pose_id IN ({scope_poses});"""
         self.db_query(poses)
         logger.debug("Results have been copied into the new subset database.")
         # interaction_indices
         interaction_indices = f"""
-        INSERT INTO {alias}.Interaction_indices
-        SELECT * FROM main.Interaction_indices
+        INSERT INTO {alias}.Interaction_indices ({cols(INTERACTION_INDICES_SCHEMA)})
+        SELECT {cols(INTERACTION_INDICES_SCHEMA)} FROM main.Interaction_indices
         WHERE main.Interaction_indices.interaction_id IN (
             SELECT interaction_id FROM main.Interactions
-            WHERE pose_id IN ({self.QueryBuilder.bookmark_query(bookmark_name, "main")}));"""
+            WHERE pose_id IN ({scope_poses}));"""
         self.db_query(interaction_indices)
         # interactions
         interactions = f"""
-        INSERT INTO {alias}.Interactions
-        SELECT * FROM main.Interactions
-        WHERE main.Interactions.pose_id IN ({self.QueryBuilder.bookmark_query(bookmark_name, "main")});"""
+        INSERT INTO {alias}.Interactions ({cols(INTERACTIONS_SCHEMA)})
+        SELECT {cols(INTERACTIONS_SCHEMA)} FROM main.Interactions
+        WHERE main.Interactions.pose_id IN ({scope_poses});"""
         self.db_query(interactions)
         logger.debug("Interactions have been copied into the new subset database.")
         # pose statuses and comments — hand curation from visual inspection, and the
@@ -1125,22 +1143,22 @@ class StorageManager(ABC):
                 continue  # older database predating the status tables
             self.db_query(
                 f"""
-        INSERT INTO {alias}.{status_table}
-        SELECT * FROM main.{status_table}
-        WHERE main.{status_table}.pose_id IN ({self.QueryBuilder.bookmark_query(bookmark_name, "main")});"""
+        INSERT INTO {alias}.{status_table} ({cols(STATUS_TABLE_SCHEMA)})
+        SELECT {cols(STATUS_TABLE_SCHEMA)} FROM main.{status_table}
+        WHERE main.{status_table}.pose_id IN ({scope_poses});"""
             )
         logger.debug("Pose statuses have been copied into the new subset database.")
         if has_comments:
             comments = f"""
-        INSERT INTO {alias}.{POSE_COMMENTS_SCHEMA.name}
-        SELECT * FROM main.{POSE_COMMENTS_SCHEMA.name}
-        WHERE main.{POSE_COMMENTS_SCHEMA.name}.pose_id IN ({self.QueryBuilder.bookmark_query(bookmark_name, "main")});"""
+        INSERT INTO {alias}.{POSE_COMMENTS_SCHEMA.name} ({cols(POSE_COMMENTS_SCHEMA)})
+        SELECT {cols(POSE_COMMENTS_SCHEMA)} FROM main.{POSE_COMMENTS_SCHEMA.name}
+        WHERE main.{POSE_COMMENTS_SCHEMA.name}.pose_id IN ({scope_poses});"""
             self.db_query(comments)
             logger.debug("Pose comments have been copied into the new subset database.")
         # receptor
         dbprop = f"""
-        INSERT INTO {alias}.db_properties
-        SELECT * FROM main.db_properties;
+        INSERT INTO {alias}.db_properties ({cols(DB_PROPERTIES_SCHEMA)})
+        SELECT {cols(DB_PROPERTIES_SCHEMA)} FROM main.db_properties;
         """
         self.db_query(dbprop)
         logger.debug("The db_properties have been copied into the new subset database.")
@@ -1150,6 +1168,9 @@ class StorageManager(ABC):
             raise StorageError(f"Problems while creating a subset database: {e}") from e
 
         self.detach_db(alias)
+        # rows were copied with their ids, so id sequences must catch up
+        with new_db:
+            new_db._sync_auto_increment_state()
         logger.info(f"Subset database {database_name} has been successfully created.")
 
     def fetch_pose_interactions(self, pose_ids) -> Union[list, dict]:
@@ -1225,7 +1246,7 @@ class StorageManager(ABC):
         # select stuff from results where pose id in filter poses join ligands for extra fields
         query.SELECT(*outfields_list).FROM("Results", "R").JOIN(
             "Ligands", "L", "ligand_id"
-        ).WHERE(f"R.pose_id IN ({self._get_bookmark_poses_query(bookmark_name)})")
+        ).WHERE(f"R.pose_id IN ({self._get_scope_poses_query(bookmark_name)})")
         if group_by:
             query.WHERE(self._get_best_pose_per_ligand_condition(bookmark_name))
         if order_results:
@@ -1246,12 +1267,13 @@ class StorageManager(ABC):
         """
         if table:
             query = self.QueryBuilder()
-            if self.is_bookmark(requested_data):
+            if (
+                self.is_bookmark(requested_data)
+                or self._is_statustable(requested_data)
+                or self._is_candidates_table(requested_data)
+            ):
                 query.SELECT("*").FROM("Results")
-                query.IN_BOOKMARK(requested_data)
-            elif self._is_statustable(requested_data):
-                query.SELECT("*").FROM("Results")
-                query.WHERE(f"pose_id in {requested_data}")
+                self._apply_table_filter(query, requested_data)
             else:
                 query.SELECT("*").FROM(requested_data)
             return self._execute_to_df(query.build()[0])
@@ -1414,14 +1436,7 @@ class StorageManager(ABC):
             "MIN(R.leff)",
             "MAX(R.leff)",
         ).FROM("Results", "R")
-        if self.is_bookmark(table):
-            query.JOIN("Filtered_poses", "fp", "pose_id").JOIN(
-                "Filters", "f", "filter_id", to="Filtered_poses"
-            ).WHERE("f.name = ?", table)
-        elif self._is_statustable(table):
-            query.JOIN(table, "T", "pose_id")
-        elif self._is_candidates_table(table):
-            query.JOIN(CANDIDATES_SUBQ, "T", "pose_id")
+        self._apply_table_filter(query, table)
 
         return self.db_query(*query.build()).fetchall()[0]
 
@@ -1449,8 +1464,9 @@ class StorageManager(ABC):
             raise OptionError(
                 f"Requested column {column} is not a numeric Results column, percentiles cannot be calculated."
             )
+        aggregate = "MIN" if column in MINIMIZED_COLUMNS else "MAX"
         query = self.QueryBuilder()
-        query.SELECT(f"{column}").FROM("Results")
+        query.SELECT(f"{aggregate}({column})").FROM("Results")
         self._apply_table_filter(query, table)
         query.GROUP_BY("ligand_id")
         values = [val[0] for val in self.db_query(query.build()[0]).fetchall()]
@@ -1514,7 +1530,13 @@ class StorageManager(ABC):
         # sit exactly on the filter threshold and so share the max value.
         # CASE, not LEAST/MIN(a, b): those differ across SQLite and DuckDB.
         last_bin = num_bins - 1
-        raw_bin = f"CAST(({column} - {min_val}) / {bin_width} AS INTEGER)"
+        # in double precision the minimum gives exactly 0, float32 columns on DuckDB would not
+        position = f"(CAST({column} AS DOUBLE) - {min_val}) / {bin_width}"
+        # position is never negative, so SQLite's truncating CAST floors it; DuckDB's CAST rounds
+        if self.dialect == "duckdb":
+            raw_bin = f"CAST(FLOOR({position}) AS INTEGER)"
+        else:
+            raw_bin = f"CAST({position} AS INTEGER)"
         bin_sql = f"""
             SELECT
                 CASE WHEN {raw_bin} > {last_bin} THEN {last_bin} ELSE {raw_bin} END AS bin_idx,
@@ -1553,7 +1575,7 @@ class StorageManager(ABC):
             outfields, ligands_alias="L", results_alias="R"
         )
 
-        bookmark_selection = self._get_bookmark_poses_query(bookmark_name)
+        bookmark_selection = self._get_scope_poses_query(bookmark_name)
 
         query = self.QueryBuilder()
         query.SELECT(*outfields_list).FROM("Results", "R").WHERE(
@@ -1601,6 +1623,7 @@ class StorageManager(ABC):
             ).fetchone()
             columns = ["recname", "receptor_object", "polymer"]
         except Exception:
+            query = self.QueryBuilder()
             row = self.db_query(
                 *query.SELECT("recname", "receptor_object").FROM("Receptors").build()
             ).fetchone()
@@ -1638,35 +1661,6 @@ class StorageManager(ABC):
                 "names, or the reverse. No flexible residue mols can be built from it."
             )
         return residues, atomnames
-
-    @staticmethod
-    def _decode_flexres_column(value) -> list:
-        """One stored flexres column as a list."""
-        if not value:  # SQL NULL (row written by insert_receptor_blob/_polymer), ""
-            return []
-        if isinstance(value, (str, bytes, bytearray)):
-            value = json.loads(value)  # "null" -> None, "[]" -> []
-        return list(value) if value else []
-
-    @staticmethod
-    def _serialize_pose_coordinates(coords):
-        """Serialize a list of [x, y, z] floats for storage in the pose_coordinates
-        column. Base/DuckDB store the native nested list (DuckDB FLOAT[][]), SQLite
-        overrides this to pack a float32 BLOB. Returns the value unchanged here.
-        """
-        return coords
-
-    @staticmethod
-    def _deserialize_pose_coordinates(stored):
-        """Inverse of _serialize_pose_coordinates: return a list of [x, y, z] floats.
-        Tolerates legacy JSON-text values from databases written before the native
-        coordinate format (so un-migrated DuckDB databases still read).
-        """
-        if stored is None:
-            return None
-        if isinstance(stored, str):
-            return json.loads(stored)
-        return [list(atom) for atom in stored]
 
     def fetch_rdkit_pose_properties(
         self,
@@ -1865,7 +1859,8 @@ class StorageManager(ABC):
         self, table: str, length: int, starting_rowid: int = 0, reverse=False
     ) -> dict[list[str], list]:
         """
-        Makes a selection of columns and includes the status of the pose
+        Makes a selection of columns and includes the status of the pose, paged by rowid
+        (for a SQLite bookmark by pose_id, its Filtered_poses has no rowid)
 
         Returns:
             dict[list[str], list]: dict of headers and data
@@ -1902,7 +1897,8 @@ class StorageManager(ABC):
             query.JOIN("filtered_poses", "fp", "pose_id").JOIN(
                 "filters", "f", "filter_id", "filtered_poses"
             ).WHERE("f.name = ?", table)
-            rowid = "fp.rowid"
+            # SQLite's Filtered_poses is WITHOUT ROWID, pose_id is unique within a bookmark
+            rowid = "fp.rowid" if self.dialect == "duckdb" else "fp.pose_id"
 
         else:
             raise ValueError(
@@ -1918,7 +1914,7 @@ class StorageManager(ABC):
         R.cluster_rmsd, R.num_hb, R.receptor, R.run_number,
         R.delta, R.num_interactions, R.unbound_energy,
         R.reference_RMSD, R.energies_inter, R.energies_vdw,
-        R.energies_electro, R.energies_flexLig, R.energies_flexLR,
+        R.energies_electro, R.energies_flexlig, R.energies_flexlr,
         R.energies_intra, R.energies_torsional, {rowid}"""
 
         query.SELECT(ordered_columns)
@@ -1955,17 +1951,7 @@ class StorageManager(ABC):
         )
         # narrow it by selection table/bookmark
         if selection is not None:
-            if self.is_bookmark(selection):
-                query.IN_BOOKMARK(selection)
-            elif selection.lower() in statuses.values():
-                query.WHERE(f"R.pose_id IN {selection}")
-            elif self._is_candidates_table(selection):
-                query.JOIN(CANDIDATES_SUBQ, "T", "pose_id")
-            else:
-                logger.error(
-                    f"-{selection}- is not a valid selection for this method. Please provide a bookmark_name or a status table."
-                )
-                return
+            self._apply_table_filter(query, selection)
         # narrow to pose id(s)
         if pose_ids is not None:
             placeholders = ", ".join("?" * len(pose_ids))
@@ -1992,8 +1978,9 @@ class StorageManager(ABC):
         Returns:
             pd.DataFrame: interactions presented as a dataframe
         """
+        self._require_scope(bookmark_name)
         query = f"""
-        SELECT DISTINCT 
+        SELECT DISTINCT
             II.interaction_type,
             II.rec_chain,
             II.rec_resname,
@@ -2001,7 +1988,7 @@ class StorageManager(ABC):
             II.rec_atom
         FROM Interaction_indices AS II
         JOIN Interactions AS I ON I.interaction_id=II.interaction_id
-        WHERE I.pose_id IN ({self.QueryBuilder.bookmark_query(bookmark_name)});"""
+        WHERE I.pose_id IN ({self._get_scope_poses_query(bookmark_name)});"""
         # iterable of tuples
         interactions = self.db_query(query).fetchall()
         interactions_df = pd.DataFrame(
@@ -2178,19 +2165,7 @@ class StorageManager(ABC):
                 "Interactions",
             )
 
-        if bookmark is None or bookmark.lower() == "results":
-            pass
-        elif self.is_bookmark(bookmark):
-            query.IN_BOOKMARK(bookmark)
-        elif self._is_statustable(bookmark):
-            query.JOIN(bookmark, bookmark, "pose_id")
-        elif self._is_candidates_table(bookmark):
-            query.JOIN(CANDIDATES_SUBQ, "T", "pose_id")
-        else:
-            raise OptionError(
-                f"Requested selection {bookmark!r} is not a bookmark, status table, "
-                f"or {CANDIDATES_NAME!r}. Pass None or 'Results' to export all results."
-            )
+        self._apply_table_filter(query, bookmark)
 
         return query.build()[0]
 
@@ -2231,58 +2206,6 @@ class StorageManager(ABC):
             self.db_query(sql)
         self.conn.commit()
 
-    # endregion
-
-    # region virtual public api
-    @abstractmethod
-    def close_storage(self, attached_db=None, vacuum=False):
-        """Close connection to database
-
-        Args:
-            attached_db (str, optional): name of attached DB (not including file extension)
-            vacuum (bool, optional): indicates that database should be vacuumed before closing
-        """
-        ...
-
-    def _stamp_schema_version(self, schema_version: str = SCHEMA_VERSION):
-        """Append a row to ringtail_schema_version recording the schema version and
-        the ringtail package version that wrote it."""
-        query = self.QueryBuilder()
-        query.INSERT_INTO(
-            SCHEMA_VERSION_SCHEMA.name, "schema_version", "ringtail_version"
-        )
-        self.db_query(
-            query.build()[0],
-            (schema_version, version("ringtail")),
-            commit=True,
-        )
-
-    def _read_schema_version(self, db_alias: str = None) -> str:
-        """Latest stamped schema version of the current database (db_alias=None) or
-        an attached one. Returns the version string, or None if the table exists but
-        is empty. Raises DatabaseQueryError if the table is absent (unversioned db).
-        Built via QueryBuilder so the optional db-qualification and ORDER BY/LIMIT are
-        rendered for the active dialect.
-        """
-        query = self.QueryBuilder()
-        query.SELECT("schema_version").FROM(
-            SCHEMA_VERSION_SCHEMA.name, db_name=db_alias
-        ).ORDER_BY("id").DESC(True).LIMIT(1)
-        row = self.db_query(query.build()[0]).fetchone()
-        return row[0] if row and row[0] else None
-
-    def _has_results_table(self) -> bool:
-        """Whether the database holds Ringtail content (a Results table). Used to
-        tell a brand-new/empty database from a pre-versioning one when the schema
-        version table is absent."""
-        query = self.QueryBuilder()
-        query.SELECT("1").FROM(RESULTS_SCHEMA.name).LIMIT(1)
-        try:
-            self.db_query(query.build()[0])
-        except DatabaseQueryError:
-            return False
-        return True
-
     def check_ringtaildb_version(self) -> tuple[bool, str]:
         """Check the database schema version and whether this code can use it.
 
@@ -2299,17 +2222,13 @@ class StorageManager(ABC):
             db_version = self._read_schema_version()
         except DatabaseQueryError:
             logger.warning(
-                "Database has no schema version, it predates versioning and must be "
-                "upgraded. Ask your package administrator for the script "
-                "rt_upgrade_from_v3alpha.py."
+                f"Database has no schema version, it predates versioning and must be "
+                f"upgraded. {UPGRADE_HINT}"
             )
             return False, "unversioned"
 
         if not db_version:
-            logger.warning(
-                "Database schema version is unset, ask your package administrator "
-                "for the script rt_upgrade_from_v3alpha.py."
-            )
+            logger.warning(f"Database schema version is unset. {UPGRADE_HINT}")
             return False, "unversioned"
 
         db_v = Version(db_version)
@@ -2340,29 +2259,18 @@ class StorageManager(ABC):
         """
         self._upsert_receptor_column("polymer", receptor, rec_name)
 
-    def _upsert_receptor_column(self, column: str, value, rec_name: str) -> None:
-        """Write one column of the single receptor row, creating the row if absent.
+    # endregion
 
-        A new row gets empty flexres arrays explicitly rather than leaving them to the
-        column default, so databases created before that default also stay decodable.
+    # region virtual public api
+    @abstractmethod
+    def close_storage(self, attached_db=None, vacuum=False):
+        """Close connection to database
 
         Args:
-            column (str): receptor column to write, e.g. "polymer"
-            value: value for that column
-            rec_name (str): receptor name
+            attached_db (str, optional): name of attached DB (not including file extension)
+            vacuum (bool, optional): indicates that database should be vacuumed before closing
         """
-        if self.table_length("Receptors") == 0:
-            query = (
-                f"INSERT INTO Receptors (recname, {column}, "
-                "flexible_residues, flexres_atomnames) VALUES (?,?,?,?);"
-            )
-            params = (rec_name, value, NO_FLEXRES_JSON, NO_FLEXRES_JSON)
-        else:
-            query = (
-                f"UPDATE Receptors SET recname = ?, {column} = ? WHERE receptor_id = 1;"
-            )
-            params = (rec_name, value)
-        self.db_query(query, params, commit=True)
+        ...
 
     @abstractmethod
     def clone(self, backup_name: str = None) -> str:
@@ -2388,13 +2296,19 @@ class StorageManager(ABC):
         ...
 
     def update_database_version(self, new_version: str, backup=False):
-        """Updates database schema from older versions to new_version.
+        """Only SQLite databases from Ringtail 1.x/2.x can be upgraded, others are only checked to be current.
 
         Args:
             new_version (str): target version string, e.g. "3.0.0"
-            backup (bool, optional): clone database before upgrading. Defaults to False.
+            backup (bool, optional): unused
+
+        Raises:
+            VersionError: if the schema is not current, e.g. a pre-release 3.0 database
         """
-        raise NotImplementedError
+        # opening the database checks its schema version
+        with self:
+            pass
+        logger.info(f"{self.db_file} is at the current schema version, nothing to upgrade.")
 
     @abstractmethod
     def db_query(self, query: str, params: tuple = ()) -> Any:
@@ -2553,6 +2467,11 @@ class StorageManager(ABC):
         Raises:
             StorageError
         """
+        ...
+
+    @abstractmethod
+    def convert_pose_coordinates_to_native(self):
+        """Convert pose_coordinates stored as JSON text to the backend's native format, a no-op if already converted."""
         ...
 
     # endregion
@@ -2744,8 +2663,7 @@ class StorageManager(ABC):
             cluster = list(cluster)
             representative_pose = poseid_list[group_index]
             cluster_groups.append([cluster_id, group_index, representative_pose])
-            # make sure we add the representative pose
-            cluster.append(representative_pose)
+            # the representative is picked from the cluster's own members
             for pose in cluster:
                 pose_rows.append([cluster_id, group_index, pose])
 
@@ -2753,47 +2671,6 @@ class StorageManager(ABC):
         self.conn.commit()
 
         return cluster_bookmark
-
-    def _open_storage(self):
-        """Create connection to db. Then, check if db needs to be created.
-
-        Raises:
-            StorageError
-            VersionError
-        """
-        try:
-            # check to see if file exist, and if it does, check that version is matching
-            if os.path.isfile(self.db_file) and os.path.getsize(self.db_file) > 0:
-                self.conn = self._create_connection()
-                # Only an initialized database (one with a Results table) needs a
-                # version check. An empty/uninitialized file — e.g. DuckDB writes a
-                # header on connect, so it is >0 bytes but has no tables — is treated
-                # like a brand-new database and created into.
-                if self._has_results_table():
-                    compatible, db_version = self.check_ringtaildb_version()
-                    if not compatible:
-                        raise VersionError(
-                            f"Database schema version '{db_version}' is not compatible "
-                            f"with this Ringtail (schema {SCHEMA_VERSION}). Ask your "
-                            "package administrator for the script "
-                            "rt_upgrade_from_v3alpha.py to upgrade the database."
-                        )
-                else:
-                    logger.info("Creating a new database file.")
-            else:
-                logger.info("Creating a new database file.")
-                self.conn = self._create_connection()
-            if self.keyboard_interrupt_allowed:
-                signal(
-                    SIGINT, self._sigint_handler
-                )  # signal handler to catch keyboard interupts
-            logger.debug(
-                f"Ringtail connected to database {self.db_file} with connection: {self.conn}"
-            )
-        except VersionError as e:
-            raise
-        except Exception as e:
-            raise StorageError(f"Error while creating or connecting to database: {e}.")
 
     def _is_table(self, table: str) -> bool:
         """
@@ -2811,25 +2688,18 @@ class StorageManager(ABC):
             return False
 
     def _drop_existing_tables(self):
-        """Drops existing tables, in order of foreign key dependency"""
-        # first, delete tables with foreign keys
-        self._delete_table(MERGED_TABLES_SCHEMA.name)
-        self._delete_table(PK_CONVERSIONS_SCHEMA.name)
-        self._delete_table(POSE_CLUSTERS_SCHEMA.name)
-        self._delete_table(CLUSTER_GROUPS_SCHEMA.name)
-        self._delete_table(CLUSTERS_SCHEMA.name)
-        self._delete_table(FILTERED_POSES_SCHEMA.name)
-        self._delete_table(FILTERS_SCHEMA.name)
-        self._delete_table(INTERACTIONS_SCHEMA.name)
-        self._delete_table(INTERACTION_INDICES_SCHEMA.name)
-        for status in statuses.values():
-            if status:
-                self._delete_table(status.capitalize())
-        self._delete_table(RESULTS_SCHEMA.name)
-        # then, fetch remaining tables
+        """Drops all tables, retrying those still referenced by a foreign key"""
         tables = self.tables_in_db()
-        for table in tables:
-            self._delete_table(table)
+        while tables:
+            remaining = []
+            for table in tables:
+                try:
+                    self._delete_table(table)
+                except DatabaseQueryError:
+                    remaining.append(table)
+            if len(remaining) == len(tables):
+                raise StorageError(f"Could not drop tables {remaining}.")
+            tables = remaining
         # check if has sequences
         self._delete_nontables()
         self.conn.commit()
@@ -2881,22 +2751,24 @@ class StorageManager(ABC):
         return list(TABLE_SCHEMAS[table.lower()].columns)
 
     def _apply_table_filter(self, query: QueryBuilder, table: str) -> QueryBuilder:
-        """Apply the appropriate pose filter for bookmark, status table, or candidates table.
+        """Restricts a query on Results to the poses of a bookmark, status table or candidates.
 
         Args:
             query (QueryBuilder): query to modify in-place
-            table (str): bookmark name, status table name, or candidates table name
+            table (str): bookmark, status table, candidates, or None/"Results" for all results
+
+        Raises:
+            OptionError: if table is none of these
 
         Returns:
             QueryBuilder: the same query, modified
         """
-        if self.is_bookmark(table):
-            query.IN_BOOKMARK(table)
-        elif self._is_statustable(table):
-            query.JOIN(table, "T", "pose_id")
-        elif self._is_candidates_table(table):
-            query.JOIN(CANDIDATES_SUBQ, "T", "pose_id")
-        return query
+        self._require_scope(table)
+        if table is None or table.lower() == "results":
+            return query
+        return query.WHERE(
+            f"{query.aliased('Results')}.pose_id IN ({self._get_scope_poses_query(table)})"
+        )
 
     def _is_statustable(self, table: str) -> bool:
         """
@@ -2988,20 +2860,8 @@ class StorageManager(ABC):
                 raise OptionError(
                     "Cannot use 'score_percentile' or 'le_percentile' with 'input_bookmark'."
                 )
-            if self.is_bookmark(input_bookmark):
-                filtering_window = f"(SELECT * FROM Results WHERE pose_id IN ({self.QueryBuilder.bookmark_query(input_bookmark)}))"
-            elif self._is_statustable(input_bookmark):
-                filtering_window = f"(SELECT * FROM Results WHERE pose_id IN (SELECT pose_id FROM {input_bookmark}))"
-            elif self._is_candidates_table(input_bookmark):
-                filtering_window = (
-                    f"(SELECT * FROM Results WHERE pose_id IN {CANDIDATES_SUBQ})"
-                )
-            else:
-                raise OptionError(
-                    f"'input_bookmark' {input_bookmark!r} is not a bookmark, a status "
-                    f"table, or {CANDIDATES_NAME!r} in this database. Pass None or "
-                    "'Results' to filter over all results."
-                )
+            self._require_scope(input_bookmark)
+            filtering_window = f"(SELECT * FROM Results WHERE pose_id IN ({self._get_scope_poses_query(input_bookmark)}))"
 
         if filters.is_flat():
             # a lone leaf is the user's whole query, so a missing interaction is an error
@@ -3463,18 +3323,6 @@ class StorageManager(ABC):
 
         return filtered_ligands
 
-    def _get_bookmark_poses_query(self, bookmark_name: str, alias: str = "") -> str:
-        """
-        Creates a query that retrieves all poses from a bookmark, that can be used in other queries
-
-        Args:
-            bookmark_name (str): bookmark for which to create the query
-
-        Returns:
-            str: query representing the poses in a bookmark
-        """
-        return self.QueryBuilder.bookmark_query(bookmark_name, alias)
-
     def _get_best_pose_per_ligand_condition(
         self, bookmark_name: str, results_alias: str = "R"
     ) -> str:
@@ -3484,7 +3332,7 @@ class StorageManager(ABC):
         docking score. The correlated subquery is supported by both storage
         backends and avoids selecting arbitrary rows with ``GROUP BY``.
         """
-        bookmark_poses = self._get_bookmark_poses_query(bookmark_name)
+        bookmark_poses = self._get_scope_poses_query(bookmark_name)
         return f"""
             {results_alias}.pose_id = (
                 SELECT best.pose_id
@@ -3496,19 +3344,37 @@ class StorageManager(ABC):
             )
         """
 
+    def _require_scope(self, scope_name: str) -> None:
+        """Raises OptionError unless scope_name is Results, candidates, a status table or a bookmark."""
+        if (
+            scope_name is None
+            or scope_name.lower() in ("results", CANDIDATES_NAME)
+            or self._is_statustable(scope_name)
+            or self.is_bookmark(scope_name)
+        ):
+            return
+        raise OptionError(
+            f"{scope_name!r} is not a bookmark, status table, {CANDIDATES_NAME} or Results in this database."
+        )
+
     def _get_scope_poses_query(self, scope_name: str, alias: str = "") -> str:
         """
-        Returns a pose_id-selecting subquery for either a bookmark OR a status
-        table (Accepted/Maybe/Rejected). Lets crossref scope a database by
-        acceptance status as well as by bookmark.
+        Returns the pose_id-selecting subquery for a selection name, in any case:
+        a bookmark, a status table (Accepted/Maybe/Rejected), candidates, or Results.
 
         Args:
-            scope_name (str): bookmark name or status table name
+            scope_name (str | None): bookmark name, status table name, or None/"Results" for all results
             alias (str): attached-database alias to qualify the table with
 
         Returns:
             str: query selecting the pose_ids in that scope
         """
+        if scope_name is None or scope_name.lower() == "results":
+            prefix = f"{alias}." if alias else ""
+            return f"SELECT pose_id FROM {prefix}Results"
+        if self._is_candidates_table(scope_name):
+            prefix = f"{alias}." if alias else ""
+            return f"SELECT pose_id FROM {prefix}Accepted UNION SELECT pose_id FROM {prefix}Maybe"
         if self._is_statustable(scope_name):
             # _is_statustable only returns True for the three known
             # statuses.values(), so the interpolation below is injection-safe.
@@ -3516,7 +3382,7 @@ class StorageManager(ABC):
             # lowercased status value back to the real table name.
             prefix = f"{alias}." if alias else ""
             return f"SELECT pose_id FROM {prefix}{scope_name.capitalize()}"
-        return self._get_bookmark_poses_query(scope_name.lower(), alias)
+        return self.QueryBuilder.bookmark_query(scope_name.lower(), alias)
 
     def _generate_interaction_bitvectors(self, pose_ids: tuple[str]) -> dict:
         """
@@ -3600,8 +3466,9 @@ class StorageManager(ABC):
             if interaction_indices == []:
                 if interaction == ["R", "", "", "", "", True]:
                     logger.warning(
-                        "Given 'react_any' filter, no reactive interactions found. Excluded from filtering."
+                        "Given 'react_any' filter, but the database has no reactive interactions, so no pose passes it."
                     )
+                    include_interactions.append([])
                     continue  # ends this iteration of the for loop
                 # create string representation of ecah interaction not found
                 interaction_not_found.append(":".join(interaction[:4]))
@@ -3732,14 +3599,14 @@ class StorageManager(ABC):
             name (str): name of new bookmark
             query (str): query that defines what poses to insert
             filters (dict, optional): filters or restrictions used
-            input_bookmark (str, optional): If filters were performed across an existing obokmark. Defaults to None.
+            input_bookmark (str, optional): If filters were performed across an existing bookmark. Defaults to None.
 
         Raises:
             StorageError
             OptionError
 
         Returns:
-            int: number of passing poses
+            int: 1 if the bookmark was written, 0 if no poses passed (and no bookmark is kept)
         """
         # make sure bookmark name is not a table name
         if name.lower() in self.tables_in_db():
@@ -3747,8 +3614,7 @@ class StorageManager(ABC):
                 f"Bookmark name {name} is the same as an existing table in the database, and cannot be used."
             )
 
-        # Capture the old filter_id now so we can delete it only AFTER confirming
-        # the new filter has results — prevents losing the old bookmark on empty filters.
+        # the old bookmark is replaced, also when nothing passes the new filter
         old_filter_id = None
         if self.is_bookmark(name):
             logger.warning(
@@ -3762,6 +3628,7 @@ class StorageManager(ABC):
         if not self._filters_columns_checked:
             self.ensure_filters_columns()
 
+        last_ids = self.last_row_ids()
         self._begin_transaction()
         new_filter_id = self.conn.execute(
             "SELECT COALESCE(MAX(filter_id), 0) + 1 FROM Filters"
@@ -3825,7 +3692,12 @@ class StorageManager(ABC):
                 INSERT INTO Filtered_poses(filter_id, pose_id)
                 SELECT {filter_id}, pose_id FROM results_poses;
                 """
-        self.conn.execute(insert_poses)
+        try:
+            self.conn.execute(insert_poses)
+        except Exception:
+            # DuckDB has already committed the new bookmark's Filters row
+            self.delete_rows_after(last_ids)
+            raise
 
         # O(1) existence check — works for both SQLite and DuckDB
         row = self.conn.execute(
@@ -3916,148 +3788,98 @@ class StorageManager(ABC):
         """
         return pd.read_sql_query(sql, self.conn)
 
-    # endregion
-
-    # region virtual private methods
-    def _create_connection(self):
-        """Creates database connection to self.db_file
-
-        Returns:
-            <db type>conn: Connection object to self.db_file
-
-        Raises:
-            DatabaseConnectionError
-        """
-        raise NotImplementedError
-
-    def _begin_transaction(self):
-        """
-        Begin a transaction
-        """
-        raise NotImplementedError
-
-    def _rollback(self):
-        """
-        Roll back transaction
-        """
-        raise NotImplementedError
-
-    def _insert_db_properties(self, docking_mode: str, number_of_poses: str):
-        """Insert db properties into database properties table
+    def _delete_pose_screening_data(self, pose_ids) -> None:
+        """Delete status assignments and comments for the given poses, e.g. before
+        those poses are replaced by duplicate_handling="replace".
 
         Args:
-            docking_mode (str): docking mode for the current dataset being written
-            number_of_poses (str): number of poses written to database in current session, either "all" or specified max_poses
+            pose_ids (Iterable[int]): poses whose status and comment to delete
         """
-        raise NotImplementedError
+        pose_ids = tuple(pose_ids)
+        if not pose_ids:
+            return
+        placeholders = ",".join("?" for _ in pose_ids)
+        for table in ("Accepted", "Maybe", "Rejected", POSE_COMMENTS_SCHEMA.name):
+            if self._is_table(table):
+                self.db_query(
+                    f"DELETE FROM {table} WHERE pose_id IN ({placeholders})", pose_ids
+                )
 
-    def _create_temporary_results_tables(self):
-        """
-        Creates temporary tables for results and interactions, which will be
-        used for staging incoming data.
-        """
-        raise NotImplementedError
+    def _max_id(self, table: str, column: str) -> int:
+        """Returns the largest id in a table column, 0 if the table is empty."""
+        return self.db_query(f"SELECT COALESCE(MAX({column}), 0) FROM {table}").fetchone()[0]
 
-    def _insert_results_in_temp_tables(
-        self, results_array: list, interactions_array: list
-    ):
+    @staticmethod
+    def _decode_flexres_column(value) -> list:
+        """One stored flexres column as a list."""
+        if not value:  # SQL NULL (row written by insert_receptor_blob/_polymer), ""
+            return []
+        if isinstance(value, (str, bytes, bytearray)):
+            value = json.loads(value)  # "null" -> None, "[]" -> []
+        return list(value) if value else []
+
+    def _stamp_schema_version(self, schema_version: str = SCHEMA_VERSION):
+        """Append a row to ringtail_schema_version recording the schema version and
+        the ringtail package version that wrote it."""
+        query = self.QueryBuilder()
+        query.INSERT_INTO(
+            SCHEMA_VERSION_SCHEMA.name, "schema_version", "ringtail_version"
+        )
+        self.db_query(
+            query.build()[0],
+            (schema_version, __version__),
+            commit=True,
+        )
+
+    def _read_schema_version(self, db_alias: str = None) -> str:
+        """Latest stamped schema version of the current database (db_alias=None) or
+        an attached one. Returns the version string, or None if the table exists but
+        is empty. Raises DatabaseQueryError if the table is absent (unversioned db).
+        Built via QueryBuilder so the optional db-qualification and ORDER BY/LIMIT are
+        rendered for the active dialect.
         """
-        Inserts docking results and interactions into their respective
-        temporary tables
+        query = self.QueryBuilder()
+        query.SELECT("schema_version").FROM(
+            SCHEMA_VERSION_SCHEMA.name, db_name=db_alias
+        ).ORDER_BY("id").DESC(True).LIMIT(1)
+        row = self.db_query(query.build()[0]).fetchone()
+        return row[0] if row and row[0] else None
+
+    def _has_results_table(self) -> bool:
+        """Whether the database holds Ringtail content (a Results table). Used to
+        tell a brand-new/empty database from a pre-versioning one when the schema
+        version table is absent."""
+        query = self.QueryBuilder()
+        query.SELECT("1").FROM(RESULTS_SCHEMA.name).LIMIT(1)
+        try:
+            self.db_query(query.build()[0])
+        except DatabaseQueryError:
+            return False
+        return True
+
+    def _upsert_receptor_column(self, column: str, value, rec_name: str) -> None:
+        """Write one column of the single receptor row, creating the row if absent.
+
+        A new row gets empty flexres arrays explicitly rather than leaving them to the
+        column default, so databases created before that default also stay decodable.
 
         Args:
-            results_array (list): list of result rows
-            interactions_array (list): list of interaction rows
+            column (str): receptor column to write, e.g. "polymer"
+            value: value for that column
+            rec_name (str): receptor name
         """
-        raise NotImplementedError
-
-    def _move_tempresults_to_database(self):
-        """Inserts data from the temporary results tables to their permanent
-        database equivalents"""
-        raise NotImplementedError
-
-    def _delete_new_duplicate_results(self):
-        """Checks if a pose is uniquely represented in the Results table,
-        and deletes it from the staged incoming data if duplicated.
-        Based on the following columns:
-        ligname,
-        receptor,
-        """
-        raise NotImplementedError
-
-    def _delete_old_duplicate_results(self):
-        """Checks if a pose is uniquely represented in the Results table,
-        and deletes it from Results if duplicated.
-        Based on the following columns:
-        ligname,
-        receptor,
-        pose_coordinates,
-        flexible_res_coordinates
-        """
-        raise NotImplementedError
-
-    def _insert_interactions(self, interactions: list[tuple]):
-        """
-        Inserts interaction tuples with pose_id s (IMPORTANT) into the interaction table.
-
-        Args:
-            interactions (list[tuple]): _description_
-        """
-        raise NotImplementedError
-
-    def _update_interaction_counts(self, data: list[dict]):
-        """
-        Data is a dict that is expected to contain pose_id, num_int, and num_hb as keys.
-
-        Args:
-            data (list[dict]): _description_
-        """
-
-    def _insert_completed_poses(self, pose_ids: list[tuple], tracking_table: str):
-        """
-        Inserts processed poses into process tracking table
-
-        Args:
-            pose_ids (list[int]): _description_
-        """
-        raise NotImplementedError
-
-    def _set_ringtail_db_schema_version(self, db_version: str = "3.0.0"):
-        """
-        Will check current storage manager db schema version and only set if it
-        is compatible with the code base version (i.e., version(ringtail)).
-
-        Args:
-            db_version (str, optional): _description_. Defaults to "3.0.0".
-
-        Raises:
-            StorageError: _description_
-        """
-        pass
-
-    def _insert_ligands(self, ligands: list):
-        """Takes array of ligand rows, inserts into Ligands table.
-
-        Args:
-            ligand_array (list[list]): list of lists containing formatted ligand rows
-
-        """
-        raise NotImplementedError
-
-    def _create_indices(self):
-        """
-        Creates specific indices on tables for those databases that use indices
-        """
-        pass
-
-    def _insert_receptors(self, receptor_array: list):
-        """Takes array of receptor rows, inserts into Receptors table
-
-        Args:
-            receptor_array (list): List of lists
-                containing formatted receptor rows
-        """
-        raise NotImplementedError
+        if self.table_length("Receptors") == 0:
+            query = (
+                f"INSERT INTO Receptors (recname, {column}, "
+                "flexible_residues, flexres_atomnames) VALUES (?,?,?,?);"
+            )
+            params = (rec_name, value, NO_FLEXRES_JSON, NO_FLEXRES_JSON)
+        else:
+            query = (
+                f"UPDATE Receptors SET recname = ?, {column} = ? WHERE receptor_id = 1;"
+            )
+            params = (rec_name, value)
+        self.db_query(query, params, commit=True)
 
     @staticmethod
     def _interaction_index_fields(r) -> tuple:
@@ -4072,80 +3894,6 @@ class StorageManager(ABC):
                 r["recid"],
             )
         return (r.type, r.chain, r.residue, r.resid, r.recname, r.recid)
-
-    def _insert_interaction_index_rows(self, interactions: list):
-        """
-        Writes unique interactions to database
-
-        Args:
-            interactions (list): list of InteractionRecord or dicts with interaction description fields
-        """
-        raise NotImplementedError
-
-    def _delete_nontables(self):
-        """
-        Deletes objects in the database that are not tables
-        """
-        pass
-
-    def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
-        """Return the discrete per-ligand cutoff for a percentile.
-
-        The historical filter retained ``floor(percentile * ligand_count)``
-        ligands. The cutoff is therefore the last accepted per-ligand value. If
-        that count is zero, the best value is returned so the filtering caller
-        can use an exclusive comparison and retain no ligands.
-
-        Args:
-            percentile (float): cutoff percentile
-            column (str, optional): string indicating column for percentile to be calculated over
-
-        Returns:
-            float: effective cutoff value of results based on percentile
-        """
-        column_spec = RESULTS_SCHEMA.columns.get(column)
-        if column_spec is None or column_spec.sql_type not in NUMERIC_TYPES:
-            raise OptionError(
-                f"Requested column {column} is not a numeric Results column, "
-                "percentiles cannot be calculated."
-            )
-
-        row = self.db_query(
-            "SELECT COUNT(*) FROM (SELECT ligand_id FROM Results GROUP BY ligand_id)"
-        ).fetchone()
-        ligand_count = int(row[0])
-        if ligand_count == 0:
-            raise StorageError("Cannot calculate a percentile for an empty database.")
-
-        accepted_count = int((percentile / 100) * ligand_count)
-        offset = max(accepted_count - 1, 0)
-        minimized_columns = {
-            "docking_score",
-            "leff",
-            "energies_inter",
-            "energies_vdw",
-            "energies_electro",
-            "energies_flexLig",
-            "energies_flexLR",
-            "energies_intra",
-            "energies_torsional",
-            "unbound_energy",
-        }
-        aggregate = "MIN" if column in minimized_columns else "MAX"
-        direction = "ASC" if aggregate == "MIN" else "DESC"
-        query = f"""
-            SELECT best_value
-            FROM (
-                SELECT {aggregate}({column}) AS best_value
-                FROM Results
-                GROUP BY ligand_id
-            ) per_ligand
-            ORDER BY best_value {direction}
-            LIMIT 1 OFFSET ?
-        """
-        cutoff = self.db_query(query, (offset,)).fetchone()[0]
-        logger.debug(f"{column} percentile cutoff is {cutoff}")
-        return cutoff
 
     def _calc_percentile_filter(
         self, percentile: float, column: str = "docking_score"
@@ -4162,63 +3910,8 @@ class StorageManager(ABC):
             ).fetchone()[0]
         )
         cutoff = self._calc_percentile_cutoff(percentile, column)
-        accepted_count = int((percentile / 100) * ligand_count)
+        accepted_count = int(percentile * ligand_count / 100)
         return cutoff, "<=" if accepted_count > 0 else "<"
-
-    def _cluster_exists(
-        self, cluster_name: str, cluster_window: str
-    ) -> Union[int, None]:
-        """
-        Checks if a cluster already exists, based on what window was clustered over,
-        and the standardized cluster name. Method will not work if cluster name starts
-        to be non-standardized
-
-        Args:
-            cluster_name (str):
-            cluster_window (str):
-
-        Returns:
-            int: number of clusters in that cluster if any, else None
-        """
-        raise NotImplementedError
-
-    def _insert_new_cluster_info(
-        self, name: str, description: str, cluster_window: str, length: int
-    ) -> int:
-        """
-        Inserts the basic info about a clustering exercise, but not the clustered data itself
-
-        Args:
-            name (str): name of cluster (standardized)
-            description (str): placeholder for if/when more info is needed about clusters
-            cluster_window (str): what was clustered over, bookmark or all results
-            length (int): number of clusters
-
-        Returns:
-            int: cluster id of the new inserted cluster
-        """
-        raise NotImplementedError
-
-    def _insert_clusters(self, cluster_groups: list, pose_rows: list):
-        """
-        Inserts all cluster data, including each grouping and its representative
-        pose, and all poses involved and which clusters they belong to
-
-        Args:
-            cluster_groups (list): each cluster from the clustering exercise
-            pose_rows (list): pose and cluster id and group id
-        """
-        raise NotImplementedError
-
-    def _delete_cluster(self, cluster_id: int):
-        """
-        Deletes all data associated with a cluster: Pose_clusters,
-        Cluster_groups, and Clusters rows for the given cluster_id.
-
-        Args:
-            cluster_id (int): cluster id to delete
-        """
-        raise NotImplementedError
 
     def _format_output_fields(
         self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
@@ -4263,16 +3956,6 @@ class StorageManager(ABC):
             for outfield in table_formatted_outfields
         ]
 
-    def _attach_db(self, new_db: str, new_db_alias: str = "attached_db") -> str:
-        """Attaches new database file to current database
-
-        Args:
-            new_db (str): file name for database to attach
-            new_db_name (str): name of new database
-
-        """
-        raise NotImplementedError
-
     def _db_compatible_for_merge(self, merging_db_alias: str) -> bool:
         """Whether the database being merged in is compatible with this one.
 
@@ -4293,9 +3976,8 @@ class StorageManager(ABC):
             merging_version = self._read_schema_version(merging_db_alias)
         except DatabaseQueryError:
             logger.error(
-                "One of the databases has no schema version (it predates versioning) "
-                "and must be upgraded before merging. Ask your package administrator "
-                "for the script rt_upgrade_from_v3alpha.py."
+                f"One of the databases has no schema version (it predates versioning) "
+                f"and must be upgraded before merging. {UPGRADE_HINT}"
             )
             return False
 
@@ -4311,6 +3993,314 @@ class StorageManager(ABC):
             return False
         return True
 
+    def _rollback_merge(self, merge_id: int, last_ids: dict):
+        """
+        Remove all data inserted by a specific merge session
+
+        Args:
+            merge_id (int): Merge session for which to delete associated data
+            last_ids (dict): output of last_row_ids from before the merge
+        """
+        self.delete_rows_after(last_ids)
+        self.db_query("DELETE FROM PK_conversions WHERE merge_id = ?", (merge_id,))
+        self.db_query("DELETE FROM merged_tables WHERE merge_id = ?", (merge_id,))
+        self.conn.commit()
+        self._sync_auto_increment_state()
+
+    # endregion
+
+    # region virtual private methods
+    @abstractmethod
+    def _create_connection(self):
+        """Creates database connection to self.db_file
+
+        Returns:
+            <db type>conn: Connection object to self.db_file
+
+        Raises:
+            DatabaseConnectionError
+        """
+        ...
+
+    @abstractmethod
+    def _begin_transaction(self):
+        """
+        Begin a transaction
+        """
+        ...
+
+    @abstractmethod
+    def _rollback(self):
+        """
+        Roll back transaction
+        """
+        ...
+
+    @abstractmethod
+    def _insert_db_properties(self, docking_mode: str, number_of_poses: str):
+        """Insert db properties into database properties table
+
+        Args:
+            docking_mode (str): docking mode for the current dataset being written
+            number_of_poses (str): number of poses written to database in current session, either "all" or specified max_poses
+        """
+        ...
+
+    @abstractmethod
+    def _create_temporary_results_tables(self):
+        """
+        Creates temporary tables for results and interactions, which will be
+        used for staging incoming data.
+        """
+        ...
+
+    @abstractmethod
+    def _insert_results_in_temp_tables(
+        self, results_array: list, interactions_array: list
+    ):
+        """
+        Inserts docking results and interactions into their respective
+        temporary tables
+
+        Args:
+            results_array (list): list of result rows
+            interactions_array (list): list of interaction rows
+        """
+        ...
+
+    @abstractmethod
+    def _move_tempresults_to_database(self):
+        """Inserts data from the temporary results tables to their permanent
+        database equivalents"""
+        ...
+
+    @abstractmethod
+    def _delete_new_duplicate_results(self):
+        """Checks if a pose is uniquely represented in the Results table,
+        and deletes it from the staged incoming data if duplicated.
+        Based on the following columns:
+        ligname,
+        receptor,
+        """
+        ...
+
+    @abstractmethod
+    def _delete_old_duplicate_results(self):
+        """Checks if a pose is uniquely represented in the Results table,
+        and deletes it from Results if duplicated.
+        Based on the following columns:
+        ligname,
+        receptor,
+        pose_coordinates,
+        flexible_res_coordinates
+        """
+        ...
+
+    @abstractmethod
+    def _insert_interactions(self, interactions: list[tuple]):
+        """
+        Inserts interaction tuples with pose_id s (IMPORTANT) into the interaction table.
+
+        Args:
+            interactions (list[tuple]): _description_
+        """
+        ...
+
+    def _update_interaction_counts(self, data: list[dict]):
+        """
+        Data is a dict that is expected to contain pose_id, num_int, and num_hb as keys.
+
+        Args:
+            data (list[dict]): _description_
+        """
+
+    @abstractmethod
+    def _insert_completed_poses(self, pose_ids: list[tuple], tracking_table: str):
+        """
+        Inserts processed poses into process tracking table
+
+        Args:
+            pose_ids (list[int]): _description_
+        """
+        ...
+
+    def _set_ringtail_db_schema_version(self, db_version: str = "3.0.0"):
+        """
+        Will check current storage manager db schema version and only set if it
+        is compatible with the code base version (i.e., version(ringtail)).
+
+        Args:
+            db_version (str, optional): _description_. Defaults to "3.0.0".
+
+        Raises:
+            StorageError: _description_
+        """
+        pass
+
+    @abstractmethod
+    def _insert_ligands(self, ligands: list):
+        """Takes array of ligand rows, inserts into Ligands table.
+
+        Args:
+            ligand_array (list[list]): list of lists containing formatted ligand rows
+
+        """
+        ...
+
+    def _create_indices(self):
+        """
+        Creates specific indices on tables for those databases that use indices
+        """
+        pass
+
+    @abstractmethod
+    def _insert_receptors(self, receptor_array: list):
+        """Takes array of receptor rows, inserts into Receptors table
+
+        Args:
+            receptor_array (list): List of lists
+                containing formatted receptor rows
+        """
+        ...
+
+    @abstractmethod
+    def _insert_interaction_index_rows(self, interactions: list):
+        """
+        Writes unique interactions to database
+
+        Args:
+            interactions (list): list of InteractionRecord or dicts with interaction description fields
+        """
+        ...
+
+    def _delete_nontables(self):
+        """
+        Deletes objects in the database that are not tables
+        """
+        pass
+
+    def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
+        """Return the discrete per-ligand cutoff for a percentile.
+
+        The historical filter retained ``floor(percentile * ligand_count)``
+        ligands. The cutoff is therefore the last accepted per-ligand value. If
+        that count is zero, the best value is returned so the filtering caller
+        can use an exclusive comparison and retain no ligands.
+
+        Args:
+            percentile (float): cutoff percentile
+            column (str, optional): string indicating column for percentile to be calculated over
+
+        Returns:
+            float: effective cutoff value of results based on percentile
+        """
+        column_spec = RESULTS_SCHEMA.columns.get(column)
+        if column_spec is None or column_spec.sql_type not in NUMERIC_TYPES:
+            raise OptionError(
+                f"Requested column {column} is not a numeric Results column, "
+                "percentiles cannot be calculated."
+            )
+
+        row = self.db_query(
+            "SELECT COUNT(*) FROM (SELECT ligand_id FROM Results GROUP BY ligand_id)"
+        ).fetchone()
+        ligand_count = int(row[0])
+        if ligand_count == 0:
+            raise StorageError("Cannot calculate a percentile for an empty database.")
+
+        accepted_count = int(percentile * ligand_count / 100)
+        offset = max(accepted_count - 1, 0)
+        aggregate = "MIN" if column in MINIMIZED_COLUMNS else "MAX"
+        direction = "ASC" if aggregate == "MIN" else "DESC"
+        query = f"""
+            SELECT best_value
+            FROM (
+                SELECT {aggregate}({column}) AS best_value
+                FROM Results
+                GROUP BY ligand_id
+            ) per_ligand
+            ORDER BY best_value {direction}
+            LIMIT 1 OFFSET ?
+        """
+        cutoff = self.db_query(query, (offset,)).fetchone()[0]
+        if self.dialect == "duckdb":
+            # DuckDB stores FLOAT in 4 bytes, so -6.66 reads back as -6.659999847412109,
+            # which DuckDB compares wrongly, while the 4-byte value's shortest form compares exactly
+            cutoff = float(str(np.float32(cutoff)))
+        logger.debug(f"{column} percentile cutoff is {cutoff}")
+        return cutoff
+
+    @abstractmethod
+    def _cluster_exists(
+        self, cluster_name: str, cluster_window: str
+    ) -> Union[int, None]:
+        """
+        Checks if a cluster already exists, based on what window was clustered over,
+        and the standardized cluster name. Method will not work if cluster name starts
+        to be non-standardized
+
+        Args:
+            cluster_name (str):
+            cluster_window (str):
+
+        Returns:
+            int: number of clusters in that cluster if any, else None
+        """
+        ...
+
+    @abstractmethod
+    def _insert_new_cluster_info(
+        self, name: str, description: str, cluster_window: str, length: int
+    ) -> int:
+        """
+        Inserts the basic info about a clustering exercise, but not the clustered data itself
+
+        Args:
+            name (str): name of cluster (standardized)
+            description (str): placeholder for if/when more info is needed about clusters
+            cluster_window (str): what was clustered over, bookmark or all results
+            length (int): number of clusters
+
+        Returns:
+            int: cluster id of the new inserted cluster
+        """
+        ...
+
+    @abstractmethod
+    def _insert_clusters(self, cluster_groups: list, pose_rows: list):
+        """
+        Inserts all cluster data, including each grouping and its representative
+        pose, and all poses involved and which clusters they belong to
+
+        Args:
+            cluster_groups (list): each cluster from the clustering exercise
+            pose_rows (list): pose and cluster id and group id
+        """
+        ...
+
+    @abstractmethod
+    def _delete_cluster(self, cluster_id: int):
+        """
+        Deletes all data associated with a cluster: Pose_clusters,
+        Cluster_groups, and Clusters rows for the given cluster_id.
+
+        Args:
+            cluster_id (int): cluster id to delete
+        """
+        ...
+
+    @abstractmethod
+    def _attach_db(self, new_db: str, new_db_alias: str = "attached_db") -> str:
+        """Attaches new database file to current database
+
+        Args:
+            new_db (str): file name for database to attach
+            new_db_name (str): name of new database
+
+        """
+        ...
+
+    @abstractmethod
     def _get_merge_id(self, mergingdb_path: str) -> int:
         """
         Gets the merge id for the databse in given path
@@ -4321,8 +4311,9 @@ class StorageManager(ABC):
         Returns:
             int: merge id returend by database
         """
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def _merging_receptors_compatible(self) -> str:
         """
         Checks if the receptor names in the two databases are a mathc
@@ -4330,8 +4321,9 @@ class StorageManager(ABC):
         Returns:
             str: returns True or False string
         """
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def _merge_db_properties_table(self, merge_id: int):
         """
         Merges database properties table, but importantly will not check for property compatibility
@@ -4342,8 +4334,9 @@ class StorageManager(ABC):
         Raises:
             MergeError
         """
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def _merge_ligands_and_results_tables(self, merge_id: int):
         """
         Merges first the Ligands table, then the Results table, maintaining ligand_id and pose_id as primary keys,
@@ -4356,8 +4349,9 @@ class StorageManager(ABC):
         Raises:
             MergeError
         """
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def _merge_interaction_tables(self, merge_id: int):
         """
         Merges the interaction tables. Interaction definitions are unique and independent of the Results table, so we only
@@ -4369,21 +4363,14 @@ class StorageManager(ABC):
         Raises:
             MergeError
         """
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def _sync_auto_increment_state(self):
         """Reset any auto incremented sequences or counts according to last successful merge"""
-        raise NotImplementedError
+        ...
 
-    def _rollback_merge(self, merge_id: int):
-        """
-        Remove all data inserted by a specific merge session
-
-        Args:
-            merge_id (int): Merge session for which to delete associated data
-        """
-        raise NotImplementedError
-
+    @abstractmethod
     def _cleanup_storage(
         self, attached_db_alias: str = None, vacuum: bool = None, reindex=False
     ):
@@ -4398,27 +4385,84 @@ class StorageManager(ABC):
             reindex (bool, optional): deletes and reruns all indixes. Defaults to False.
 
         """
-        raise NotImplementedError
+        ...
 
-    def _crossref_bookmark_builder(
-        self, ligand_list: list[str], store_best_pose: bool
-    ) -> str:
+    @abstractmethod
+    def _crossref_bookmark_builder(self, ligand_list: list[str]) -> str:
         """
-        creates formatted sql for building the crossreferencing bookmark
+        creates formatted sql selecting all poses of the given ligands, for the crossreferencing bookmark
 
         Args:
             ligand_list (list[str]): list of ligand names to be considered
-            store_best_pose (bool): whether to get best pose or all poses
 
         Returns:
             str: formatted sql
         """
-        raise NotImplementedError
+        ...
 
     @abstractmethod
     def _remove_screening_tables(self): ...
 
     @abstractmethod
     def _create_screening_tables(self): ...
+
+    @staticmethod
+    def _serialize_pose_coordinates(coords):
+        """Serialize a list of [x, y, z] floats for storage in the pose_coordinates
+        column. Base/DuckDB store the native nested list (DuckDB FLOAT[][]), SQLite
+        overrides this to pack a float32 BLOB. Returns the value unchanged here.
+        """
+        return coords
+
+    @staticmethod
+    def _deserialize_pose_coordinates(stored):
+        """Inverse of _serialize_pose_coordinates: return a list of [x, y, z] floats.
+        Tolerates legacy JSON-text values from databases written before the native
+        coordinate format (so un-migrated DuckDB databases still read).
+        """
+        if stored is None:
+            return None
+        if isinstance(stored, str):
+            return json.loads(stored)
+        return [list(atom) for atom in stored]
+
+    def _open_storage(self):
+        """Create connection to db. Then, check if db needs to be created.
+
+        Raises:
+            StorageError
+            VersionError
+        """
+        try:
+            # check to see if file exist, and if it does, check that version is matching
+            if os.path.isfile(self.db_file) and os.path.getsize(self.db_file) > 0:
+                self.conn = self._create_connection()
+                # Only an initialized database (one with a Results table) needs a
+                # version check. An empty/uninitialized file — e.g. DuckDB writes a
+                # header on connect, so it is >0 bytes but has no tables — is treated
+                # like a brand-new database and created into.
+                if self._has_results_table():
+                    compatible, db_version = self.check_ringtaildb_version()
+                    if not compatible:
+                        raise VersionError(
+                            f"Database schema version '{db_version}' is not compatible "
+                            f"with this Ringtail (schema {SCHEMA_VERSION}). {UPGRADE_HINT}"
+                        )
+                else:
+                    logger.info("Creating a new database file.")
+            else:
+                logger.info("Creating a new database file.")
+                self.conn = self._create_connection()
+            if self.keyboard_interrupt_allowed:
+                signal(
+                    SIGINT, self._sigint_handler
+                )  # signal handler to catch keyboard interupts
+            logger.debug(
+                f"Ringtail connected to database {self.db_file} with connection: {self.conn}"
+            )
+        except VersionError as e:
+            raise
+        except Exception as e:
+            raise StorageError(f"Error while creating or connecting to database: {e}.")
 
     # endregion

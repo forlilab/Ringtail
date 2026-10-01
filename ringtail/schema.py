@@ -47,6 +47,8 @@ class TableSchema:
     # unique PK index is maintained per row and FK validation reads the parent
     # table off disk. Use for tables Ringtail populates itself, where referential
     # integrity is guaranteed by construction. SQLite ignores this flag.
+    undo_on_failed_write: bool = False
+    # Rows added by a failed write are deleted again (StorageManager.delete_rows_after).
 
 
 # ---------------------------------------------------------------------------
@@ -91,6 +93,7 @@ SCHEMA_VERSION = "3.0.0"
 
 LIGANDS_SCHEMA = TableSchema(
     name="Ligands",
+    undo_on_failed_write=True,
     columns={
         "ligand_id": Column(
             "INTEGER",
@@ -114,6 +117,7 @@ LIGANDS_SCHEMA = TableSchema(
 
 RESULTS_SCHEMA = TableSchema(
     name="Results",
+    undo_on_failed_write=True,
     columns={
         "pose_id": Column(
             "INTEGER",
@@ -158,6 +162,22 @@ RESULTS_SCHEMA = TableSchema(
 #: writers use this rather than NULL or JSON null.
 NO_FLEXRES_JSON = "[]"
 
+# Results columns where lower is better, so a ligand's best pose has the minimum
+MINIMIZED_COLUMNS = frozenset(
+    {
+        "docking_score",
+        "leff",
+        "energies_inter",
+        "energies_vdw",
+        "energies_electro",
+        "energies_flexlig",
+        "energies_flexlr",
+        "energies_intra",
+        "energies_torsional",
+        "unbound_energy",
+    }
+)
+
 RECEPTORS_SCHEMA = TableSchema(
     name="Receptors",
     columns={
@@ -192,6 +212,7 @@ RECEPTORS_SCHEMA = TableSchema(
 
 DB_PROPERTIES_SCHEMA = TableSchema(
     name="db_properties",
+    undo_on_failed_write=True,
     columns={
         "db_write_session": Column(
             "INTEGER",
@@ -230,6 +251,7 @@ SCHEMA_VERSION_SCHEMA = TableSchema(
 
 INTERACTION_INDICES_SCHEMA = TableSchema(
     name="Interaction_indices",
+    undo_on_failed_write=True,
     columns={
         "interaction_id": Column(
             "INTEGER",
@@ -260,6 +282,7 @@ INTERACTION_INDICES_SCHEMA = TableSchema(
 
 INTERACTIONS_SCHEMA = TableSchema(
     name="Interactions",
+    undo_on_failed_write=True,
     columns={
         "interaction_pose_id": Column(
             "INTEGER",
@@ -281,6 +304,7 @@ INTERACTIONS_SCHEMA = TableSchema(
 
 FILTERS_SCHEMA = TableSchema(
     name="Filters",
+    undo_on_failed_write=True,
     columns={
         "filter_id": Column(
             "INTEGER",
@@ -310,6 +334,7 @@ FILTERS_SCHEMA = TableSchema(
 
 FILTERED_POSES_SCHEMA = TableSchema(
     name="Filtered_poses",
+    undo_on_failed_write=True,
     columns={
         "filter_id": Column(
             "INTEGER",
@@ -458,6 +483,28 @@ for _status in ("accepted", "maybe", "rejected"):
     TABLE_SCHEMAS[_status] = STATUS_TABLE_SCHEMA
 
 ALL_TABLE_NAMES = frozenset(TABLE_SCHEMAS)
+
+_UNDO_SCHEMAS = [s for s in TABLE_SCHEMAS.values() if s.undo_on_failed_write]
+#: growing id column of each table a failed write is undone in, and the table that owns it
+ROW_ID_OWNERS = {
+    name: s.name for s in _UNDO_SCHEMAS for name, col in s.columns.items() if col.autoincrement
+}
+
+
+def _undo_key(schema: TableSchema) -> str:
+    """A table's own growing id, else its first foreign key to one of the ROW_ID_OWNERS ids."""
+    own = [name for name, col in schema.columns.items() if col.autoincrement]
+    if own:
+        return own[0]
+    return next(
+        name
+        for name, col in schema.columns.items()
+        if col.foreign_key and col.foreign_key.split(".")[1] in ROW_ID_OWNERS
+    )
+
+
+#: (table, id column) to delete a failed write's rows by, children before parents
+ROW_ID_TABLES = tuple((s.name, _undo_key(s)) for s in reversed(_UNDO_SCHEMAS))
 
 # ---------------------------------------------------------------------------
 # Derived schemas for outfields and order_results

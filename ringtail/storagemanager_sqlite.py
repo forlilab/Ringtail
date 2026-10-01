@@ -7,12 +7,13 @@
 from .logutils import get_logger
 
 logger = get_logger(__name__)
-import sys
+import os
+import shutil
 import json
 import numpy as np
+from packaging.version import Version
 from rdkit import Chem
 from typing import Union
-from importlib.metadata import version
 from .exceptions import (
     StorageError,
     DatabaseInsertionError,
@@ -59,24 +60,6 @@ class StorageManagerSQLite(StorageManager):
     # SQLite denormalizes ligand_id into Filtered_poses to avoid a 22.7GB row-store
     # JOIN when counting passing ligands. See StorageManager._filtered_poses_has_ligand_id.
     _filtered_poses_has_ligand_id = True
-
-    @staticmethod
-    def _serialize_pose_coordinates(coords):
-        """SQLite has no array type, so pack the [x, y, z] floats into a float32 BLOB
-        (~5x smaller and ~65x faster to read than the old JSON text)."""
-        if coords is None:
-            return None
-        return np.asarray(coords, dtype=np.float32).tobytes()
-
-    @staticmethod
-    def _deserialize_pose_coordinates(stored):
-        """Unpack a float32 BLOB into a list of [x, y, z] floats. Tolerates legacy
-        JSON-text values from databases written before the BLOB format."""
-        if stored is None:
-            return None
-        if isinstance(stored, (bytes, bytearray)):
-            return np.frombuffer(stored, dtype=np.float32).reshape(-1, 3).tolist()
-        return json.loads(stored)
 
     QueryBuilder = QueryBuilderSQLite
 
@@ -133,8 +116,8 @@ class StorageManagerSQLite(StorageManager):
             energies_inter      FLOAT,
             energies_vdw        FLOAT,
             energies_electro    FLOAT,
-            energies_flexLig    FLOAT,
-            energies_flexLR     FLOAT,
+            energies_flexlig    FLOAT,
+            energies_flexlr     FLOAT,
             energies_intra      FLOAT,
             energies_torsional  FLOAT,
             unbound_energy      FLOAT,
@@ -192,8 +175,8 @@ class StorageManagerSQLite(StorageManager):
                 energies_inter,
                 energies_vdw,
                 energies_electro,
-                energies_flexLig,
-                energies_flexLR,
+                energies_flexlig,
+                energies_flexlr,
                 energies_intra,
                 energies_torsional,
                 unbound_energy,
@@ -248,8 +231,8 @@ class StorageManagerSQLite(StorageManager):
                 energies_inter,
                 energies_vdw,
                 energies_electro,
-                energies_flexLig,
-                energies_flexLR,
+                energies_flexlig,
+                energies_flexlr,
                 energies_intra,
                 energies_torsional,
                 unbound_energy,
@@ -272,8 +255,8 @@ class StorageManagerSQLite(StorageManager):
                 T.energies_inter,
                 T.energies_vdw,
                 T.energies_electro,
-                T.energies_flexLig,
-                T.energies_flexLR,
+                T.energies_flexlig,
+                T.energies_flexlr,
                 T.energies_intra,
                 T.energies_torsional,
                 T.unbound_energy,
@@ -661,6 +644,43 @@ class StorageManagerSQLite(StorageManager):
             (cluster_id,),
         )
 
+    def _create_indices(self):
+        """Create alternate-key indices ('ak_*') for queryable tables."""
+        logger.debug("Creating columns indices...")
+        for table, schema in [
+            (RESULTS_SCHEMA.name, RESULTS_SCHEMA),
+            (INTERACTIONS_SCHEMA.name, INTERACTIONS_SCHEMA),
+            (INTERACTION_INDICES_SCHEMA.name, INTERACTION_INDICES_SCHEMA),
+            (FILTERED_POSES_SCHEMA.name, FILTERED_POSES_SCHEMA),
+        ]:
+            for sql in build_create_indices(table, schema):
+                self.db_query(sql)
+        self.db_query("ANALYZE;")
+        self.conn.commit()
+        logger.info(
+            "Indices created for Results, Interactions, and Interaction_indices."
+        )
+
+    def _remove_screening_tables(self):
+        # TODO add pose comment table, status tables
+        self._delete_table(POSE_CLUSTERS_SCHEMA.name)
+        self._delete_table(CLUSTER_GROUPS_SCHEMA.name)
+        self._delete_table(CLUSTERS_SCHEMA.name)
+        self._delete_table(FILTERED_POSES_SCHEMA.name)
+        self._delete_table(FILTERS_SCHEMA.name)
+        self._delete_table("Accepted")
+        self._delete_table("Maybe")
+        self._delete_table("Rejected")
+        self._delete_table("Pose_comments")
+
+    def _create_screening_tables(self):
+        """
+        Create the filtering, status and GUI tables a screening session needs.
+        """
+        self._create_filtering_tables()
+        self._create_status_tables()
+        self.ensure_gui_tables()
+
     # endregion
 
     # region merge databases
@@ -736,7 +756,7 @@ class StorageManagerSQLite(StorageManager):
             ):
                 cur.execute(sql)
             cur.execute(
-                "CREATE INDEX IF NOT EXISTS ak_merge ON PK_conversions(merge_id, original_PK)"
+                "CREATE INDEX IF NOT EXISTS ak_merge ON PK_conversions(merge_id, original_pk)"
             )
         except Exception as e:
             raise StorageError(e) from e
@@ -756,8 +776,8 @@ class StorageManagerSQLite(StorageManager):
             convert_dbprop_sql = """INSERT INTO PK_conversions (
                 merge_id,
                 table_name,
-                original_PK,
-                merged_PK) SELECT 
+                original_pk,
+                merged_pk) SELECT 
                 ?,
                 'db_properties', 
                 DB_write_session,
@@ -773,7 +793,7 @@ class StorageManagerSQLite(StorageManager):
                 docking_mode,
                 number_of_poses)
                 SELECT 
-                    (SELECT merged_PK FROM PK_conversions WHERE original_PK = DB_write_session and merge_id = ? and table_name = 'db_properties'),
+                    (SELECT merged_pk FROM PK_conversions WHERE original_pk = DB_write_session and merge_id = ? and table_name = 'db_properties'),
                     docking_mode,
                     number_of_poses
                 FROM merging.db_properties;"""
@@ -799,8 +819,8 @@ class StorageManagerSQLite(StorageManager):
         convert_ligand_ids_sql = """INSERT INTO PK_conversions (
         merge_id,
         table_name,
-        original_PK,
-        merged_PK) SELECT 
+        original_pk,
+        merged_pk) SELECT 
         ?,
         'Ligands', 
         ligand_id,
@@ -828,7 +848,7 @@ class StorageManagerSQLite(StorageManager):
         ligand_smile,
         rdmol)
         SELECT 
-            (SELECT merged_PK FROM PK_conversions WHERE original_PK = ligand_id and merge_id = ? AND table_name = 'Ligands') new_id,
+            (SELECT merged_pk FROM PK_conversions WHERE original_pk = ligand_id and merge_id = ? AND table_name = 'Ligands') new_id,
             ligname,
             ligand_smile,
             rdmol
@@ -839,8 +859,8 @@ class StorageManagerSQLite(StorageManager):
         convert_poseid_sql = """INSERT INTO PK_conversions (
         merge_id,
         table_name,
-        original_PK,
-        merged_PK) SELECT 
+        original_pk,
+        merged_pk) SELECT 
         ?,
         'Results', 
         pose_id,
@@ -863,8 +883,8 @@ class StorageManagerSQLite(StorageManager):
             energies_inter,
             energies_vdw,
             energies_electro,
-            energies_flexLig,
-            energies_flexLR,
+            energies_flexlig,
+            energies_flexlr,
             energies_intra,
             energies_torsional,
             unbound_energy,
@@ -873,8 +893,8 @@ class StorageManagerSQLite(StorageManager):
             pose_coordinates,
             flexible_res_coordinates) 
         SELECT 
-            pose.merged_PK as pose_id,
-            ligand.merged_PK as ligand_id,
+            pose.merged_pk as pose_id,
+            ligand.merged_pk as ligand_id,
             mr.receptor,
             mr.pose_rank,
             mr.run_number,
@@ -887,8 +907,8 @@ class StorageManagerSQLite(StorageManager):
             mr.energies_inter,
             mr.energies_vdw,
             mr.energies_electro,
-            mr.energies_flexLig,
-            mr.energies_flexLR,
+            mr.energies_flexlig,
+            mr.energies_flexlr,
             mr.energies_intra,
             mr.energies_torsional,
             mr.unbound_energy,
@@ -898,19 +918,19 @@ class StorageManagerSQLite(StorageManager):
             mr.flexible_res_coordinates
         FROM merging.Results mr
         LEFT JOIN (
-            SELECT original_PK, merged_PK 
+            SELECT original_pk, merged_pk 
             FROM PK_conversions 
             WHERE table_name = 'Results' 
             AND merge_id = ?
             ) pose 
-        ON pose.original_PK = mr.pose_id
+        ON pose.original_pk = mr.pose_id
         LEFT JOIN (
-            SELECT original_PK, merged_PK 
+            SELECT original_pk, merged_pk 
             FROM PK_conversions 
             WHERE table_name = 'Ligands' 
             AND merge_id = ?
             ) ligand
-        ON (mr.ligand_id = ligand.original_PK);"""
+        ON (mr.ligand_id = ligand.original_pk);"""
 
         try:
             cur = self.conn.cursor()
@@ -949,13 +969,11 @@ class StorageManagerSQLite(StorageManager):
         Raises:
             Exception
         """
-        if not self.table_length("Interactions") > 0:
-            return
         convert_ii_sql = """INSERT INTO PK_conversions (
         merge_id,
         table_name,
-        original_PK,
-        merged_PK) SELECT 
+        original_pk,
+        merged_pk) SELECT 
         ?,
         'Interaction_indices', 
         interaction_id,
@@ -982,7 +1000,7 @@ class StorageManagerSQLite(StorageManager):
                         AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
                         AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
                     )
-                ELSE merging.Interaction_indices.interaction_id + (SELECT MAX(interaction_id) FROM Interaction_indices)
+                ELSE merging.Interaction_indices.interaction_id + (SELECT COALESCE(MAX(interaction_id), 0) FROM Interaction_indices)
             END AS new_interaction_id
         FROM merging.Interaction_indices;"""
 
@@ -996,14 +1014,14 @@ class StorageManagerSQLite(StorageManager):
         rec_atom,
         rec_atomid)
         SELECT 
-            (SELECT merged_PK FROM PK_conversions WHERE original_PK = interaction_id and merge_id = ? AND table_name = 'Interaction_indices') new_id,
+            (SELECT merged_pk FROM PK_conversions WHERE original_pk = interaction_id and merge_id = ? AND table_name = 'Interaction_indices') new_id,
             interaction_type,
             rec_chain,
             rec_resname,
             rec_resid,
             rec_atom,
             rec_atomid
-        FROM merging.Interaction_indices WHERE new_id > (SELECT MAX(interaction_id) FROM Interaction_indices);
+        FROM merging.Interaction_indices WHERE new_id > (SELECT COALESCE(MAX(interaction_id), 0) FROM Interaction_indices);
         """
 
         # Adding new data to Interactions table with (updated) pose_id and interaction_id
@@ -1013,14 +1031,14 @@ class StorageManagerSQLite(StorageManager):
         interaction_id
         )    SELECT P.merged_pk as pose_id, II.merged_pk as interaction_id
                 FROM merging.Interactions I
-                LEFT JOIN (SELECT original_PK, merged_pk
+                LEFT JOIN (SELECT original_pk, merged_pk
                 FROM PK_conversions
                 WHERE table_name = 'Results' 
-                AND merge_id = ?) P ON (I.pose_id = P.original_PK)
-            LEFT JOIN (SELECT original_PK, merged_pk
+                AND merge_id = ?) P ON (I.pose_id = P.original_pk)
+            LEFT JOIN (SELECT original_pk, merged_pk
                 FROM PK_conversions
                 WHERE table_name = 'Interaction_indices' 
-                AND merge_id = ?)  II ON (I.interaction_id = II.original_PK);"""
+                AND merge_id = ?)  II ON (I.interaction_id = II.original_pk);"""
 
         try:
             cur = self.conn.cursor()
@@ -1045,71 +1063,6 @@ class StorageManagerSQLite(StorageManager):
         """Reset all sequences to current MAX values in their tables"""
         pass
 
-    def _rollback_merge(self, merge_id: int):
-        """
-        Remove all data inserted by a specific merge session
-
-        Args:
-            merge_id (int): Merge session for which to delete associated data
-        """
-
-        # delete from Interactions where pose_id was added by this merge
-        self.conn.execute(
-            """
-            DELETE FROM Interactions WHERE pose_id IN (
-                SELECT merged_PK FROM PK_conversions 
-                WHERE merge_id = ? AND table_name = 'Results')""",
-            (merge_id,),
-        )
-
-        # delete from Interaction_indices
-        self.conn.execute(
-            """
-            DELETE FROM Interaction_indices WHERE interaction_id IN (
-                SELECT merged_PK FROM PK_conversions 
-                WHERE merge_id = ? AND table_name = 'Interaction_indices'
-                AND merged_PK != original_PK)""",
-            (merge_id,),
-        )
-
-        # delete from Results
-        self.conn.execute(
-            """
-            DELETE FROM Results WHERE pose_id IN (
-                SELECT merged_PK FROM PK_conversions 
-                WHERE merge_id = ? AND table_name = 'Results')""",
-            (merge_id,),
-        )
-
-        # delete from Ligands (only newly added, not deduplicated ones)
-        self.conn.execute(
-            """
-            DELETE FROM Ligands WHERE ligand_id IN (
-                SELECT merged_PK FROM PK_conversions 
-                WHERE merge_id = ? AND table_name = 'Ligands'
-                AND merged_PK != original_PK)""",
-            (merge_id,),
-        )
-
-        # delete from db_properties
-        self.conn.execute(
-            """
-            DELETE FROM db_properties WHERE DB_write_session IN (
-                SELECT merged_PK FROM PK_conversions 
-                WHERE merge_id = ? AND table_name = 'db_properties')""",
-            (merge_id,),
-        )
-
-        # clean up tracking
-        self.conn.execute("DELETE FROM PK_conversions WHERE merge_id = ?", (merge_id,))
-        self.conn.execute("DELETE FROM merged_tables WHERE merge_id = ?", (merge_id,))
-
-        # commit
-        self.conn.commit()
-
-        # reset sequences to current max values
-        self._sync_auto_increment_state()
-
     # endregion
 
     # region Methods for dealing with bookmarks and filtering
@@ -1130,38 +1083,18 @@ class StorageManagerSQLite(StorageManager):
             self.db_query("CREATE TEMP TABLE tmp_lignames (ligandname TEXT)")
             self.db_update("INSERT INTO tmp_lignames VALUES (?)", [(n,) for n in names])
 
-    def _crossref_bookmark_builder(
-        self, ligand_list: list[str], store_best_pose: bool
-    ) -> str:
+    def _crossref_bookmark_builder(self, ligand_list: list[str]) -> str:
         """
-        creates formatted sql for building the crossreferencing bookmark
+        creates formatted sql selecting all poses of the given ligands, for the crossreferencing bookmark
 
         Args:
             ligand_list (list[str]): list of ligand names to be considered
-            store_best_pose (bool): whether to get best pose or all poses
 
         Returns:
             str: formatted sql
         """
-        ligand_sql_string = ", ".join(f"'{l}'" for l in ligand_list)
-        # construct the query
-        if store_best_pose:
-            return f"""
-            SELECT R.pose_id, R.ligand_id FROM Results AS R
-            JOIN (
-                SELECT ligand_id, MIN(pose_rank) as best_pose
-                FROM Results
-                GROUP BY ligand_id
-                ) AS sel
-            ON R.ligand_id = sel.ligand_id
-            AND R.pose_rank = sel.best_pose
-            JOIN Ligands AS L
-            ON R.ligand_id = L.ligand_id
-            WHERE L.ligname
-            IN ({ligand_sql_string})
-            """
-        else:
-            return f"""
+        ligand_sql_string = ", ".join("'" + l.replace("'", "''") + "'" for l in ligand_list)
+        return f"""
             SELECT pose_id, ligand_id FROM Results
             WHERE ligand_id IN (
                 SELECT ligand_id FROM Ligands
@@ -1219,7 +1152,6 @@ class StorageManagerSQLite(StorageManager):
                 logger.warning(
                     f"Requested column {col} not found in Results table and will not be used for the summary. Allowed columns: {allowed_columns}"
                 )
-                columns.pop(col)
                 continue
             data = self.db_query(
                 f"SELECT MIN({col}), MAX({col}) FROM Results"
@@ -1310,6 +1242,24 @@ class StorageManagerSQLite(StorageManager):
     def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
         return super()._calc_percentile_cutoff(percentile, column)
 
+    @staticmethod
+    def _serialize_pose_coordinates(coords):
+        """SQLite has no array type, so pack the [x, y, z] floats into a float32 BLOB
+        (~5x smaller and ~65x faster to read than the old JSON text)."""
+        if coords is None:
+            return None
+        return np.asarray(coords, dtype=np.float32).tobytes()
+
+    @staticmethod
+    def _deserialize_pose_coordinates(stored):
+        """Unpack a float32 BLOB into a list of [x, y, z] floats. Tolerates legacy
+        JSON-text values from databases written before the BLOB format."""
+        if stored is None:
+            return None
+        if isinstance(stored, (bytes, bytearray)):
+            return np.frombuffer(stored, dtype=np.float32).reshape(-1, 3).tolist()
+        return json.loads(stored)
+
     # endregion
 
     # region general database operations
@@ -1322,9 +1272,9 @@ class StorageManagerSQLite(StorageManager):
 
     def _rollback(self):
         """
-        Roll back transaction
+        Roll back transaction, if one is open
         """
-        self.conn.execute("ROLLBACK;")
+        self.conn.rollback()
 
     def tables_in_db(self) -> list:
         """
@@ -1349,23 +1299,6 @@ class StorageManagerSQLite(StorageManager):
         # if self.tables_in_db():
         #     self._create_indices()
 
-    def _create_indices(self):
-        """Create alternate-key indices ('ak_*') for queryable tables."""
-        logger.debug("Creating columns indices...")
-        for table, schema in [
-            (RESULTS_SCHEMA.name, RESULTS_SCHEMA),
-            (INTERACTIONS_SCHEMA.name, INTERACTIONS_SCHEMA),
-            (INTERACTION_INDICES_SCHEMA.name, INTERACTION_INDICES_SCHEMA),
-            (FILTERED_POSES_SCHEMA.name, FILTERED_POSES_SCHEMA),
-        ]:
-            for sql in build_create_indices(table, schema):
-                self.db_query(sql)
-        self.db_query("ANALYZE;")
-        self.conn.commit()
-        logger.info(
-            "Indices created for Results, Interactions, and Interaction_indices."
-        )
-
     def clone(self, backup_name: str = None) -> str:
         """Creates a copy of the db
 
@@ -1382,6 +1315,7 @@ class StorageManagerSQLite(StorageManager):
             self.conn.backup(bck, pages=1)
         bck.close()
         logger.info(f"Database {self.db_file} was backed up to {backup_name}.")
+        return backup_name
 
     def _set_ringtail_db_schema_version(self, db_version: str = "3.0.0"):
         """Stamp PRAGMA user_version. Only the intermediate steps of the v1/v2
@@ -1390,31 +1324,30 @@ class StorageManagerSQLite(StorageManager):
         self.conn.execute(f"PRAGMA user_version = {db_version.replace('.', '')}")
 
     def _legacy_pragma_version(self) -> str:
-        """Read the legacy PRAGMA user_version of a pre-versioning SQLite database.
+        """Dotted version of a Ringtail 1.x/2.x database from PRAGMA user_version, e.g. '1.0.0'.
 
-        Used only by the 1.x/2.x -> 3.0 in-package upgrade chain to determine where
-        to start. Official (versioned) databases use check_ringtaildb_version in the
-        base class instead. Returns a dotted version string, e.g. '1.0.0'. Ringtail
-        1.0.0 never set user_version (reports '0'); a populated such database is
-        treated as the original 1.0.0 schema.
+        Raises:
+            StorageError: if the database is not a Ringtail 1.x/2.x database
         """
         cur = self.conn.cursor()
         db_version = str(cur.execute("PRAGMA user_version").fetchone()[0])
         if db_version == "0":
-            cur.execute(
-                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='Results');"
-            )
-            if cur.fetchone()[0] != 0:
+            # 1.0.0 never set user_version
+            results_cols = {
+                row[1].lower()
+                for row in cur.execute("PRAGMA table_info(Results)").fetchall()
+            }
+            if "energies_binding" in results_cols:
                 db_version = "100"
             else:
                 cur.close()
                 raise StorageError(
-                    f"The database requested {self.db_file} does not exist or does not have any tables. Check for spelling errors, else the database may be corrupt (delete the file before using the same name again)"
+                    f"{self.db_file} is not a Ringtail 1.x or 2.x database, so it cannot be upgraded."
                 )
         cur.close()
         return ".".join([*db_version])
 
-    def convert_pose_coordinates_to_native(self, chunk_size: int = 100000):
+    def convert_pose_coordinates_to_native(self, chunk_size: int = 10000):
         """Upgrade an existing database whose pose_coordinates is stored as JSON text
         (VARCHAR) to a packed float32 BLOB (~5x smaller, ~65x faster to read).
         Idempotent: a no-op if the column is already a BLOB. Processed in chunks so a
@@ -1458,40 +1391,55 @@ class StorageManagerSQLite(StorageManager):
         logger.info("pose_coordinates converted. Run VACUUM to reclaim space.")
 
     def update_database_version(self, new_version, backup=False):
-        """Updates sqlite database schema 1.0.0 through 3.0.0.
-        Upgrades step-by-step through each major version, e.g. 1.0.0 -> 1.1.0 -> 2.0.0 -> 3.0.0.
+        """Upgrades a Ringtail 1.x/2.x database step by step to new_version, restoring it if a step fails.
 
         Args:
-            new_version (str): target version string
-            backup (bool, optional): clone database before upgrading. Defaults to False.
+            new_version (str): target version, "1.1.0", "2.0.0" or "3.0.0"
+            backup (bool, optional): keep the copy taken before upgrading. Defaults to False.
         """
+        steps = [
+            ("1.0.0", "1.1.0", self._update_db_100_to_110),
+            ("1.1.0", "2.0.0", self._update_db_110_to_200),
+            ("2.0.0", "3.0.0", self._update_db_200_to_300),
+        ]
         self.conn = self._create_connection()
-        if backup:
-            self.clone()
+        try:
+            try:
+                current = self._read_schema_version()
+            except DatabaseQueryError:
+                current = None
+            if current:
+                logger.info(
+                    f"{self.db_file} is already at schema version {current}, nothing to upgrade."
+                )
+                return
 
-        original_version = self._legacy_pragma_version()
-        logger.info(
-            f"Upgrading {self.db_file} of version {original_version} to version {new_version}:"
-        )
-
-        # upgrade to 1.1.0
-        if original_version in ["1.0.0", "1.1.0"]:
-            logger.warning(
-                "If you created the database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as the pose_id was not used as an explicit foreign key in db v1.0.0 and v1.1.0."
+            version = self._legacy_pragma_version()
+            logger.info(
+                f"Upgrading {self.db_file} of version {version} to version {new_version}:"
             )
-            if original_version == "1.0.0":
-                self._update_db_100_to_110()
-                logger.info("\n\nSuccessfully upgraded to 1.1.0!\n\n")
-
-            # upgrade to 2.0.0
-            if new_version in ["2.0.0", "3.0.0"]:
-                self._update_db_110_to_200()
-                logger.info("\n\nSuccessfully upgraded to 2.0.0!\n\n")
-
-        # upgrade to 3.0.0
-        if new_version == "3.0.0" and original_version == "2.0.0":
-            self._update_db_200_to_300()
-            logger.info("\n\nSuccessfully upgraded to 3.0.0!\n\n")
+            if version in ["1.0.0", "1.1.0"]:
+                logger.warning(
+                    "If you created the database with the duplicate handling option, there is a chance of inconsistent behavior of anything involving interactions as the pose_id was not used as an explicit foreign key in db v1.0.0 and v1.1.0."
+                )
+            backup_file = self.clone()
+            try:
+                for start, end, step in steps:
+                    if version == start and Version(end) <= Version(new_version):
+                        step()
+                        version = end
+                        logger.info(f"Successfully upgraded to {end}.")
+            except Exception as e:
+                self.conn.close()
+                shutil.copy(backup_file, self.db_file)
+                raise StorageError(
+                    f"Upgrading {self.db_file} failed, it was restored to its original version: {e}"
+                ) from e
+            finally:
+                if not backup:
+                    os.remove(backup_file)
+        finally:
+            self.conn.close()
 
     def _update_db_100_to_110(self):
         """
@@ -1510,7 +1458,7 @@ class StorageManagerSQLite(StorageManager):
         )
         cur.execute("ALTER TABLE Bookmarks ADD COLUMN filters")
         cur.execute(
-            "CREATE INDEX IF NOT EXISTS ak_results ON Results(ligand_id, docking_score, leff, delta, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, num_interactions, run_number, pose_rank, num_hb)"
+            "CREATE INDEX IF NOT EXISTS ak_results ON Results(LigName, docking_score, leff, deltas, reference_rmsd, energies_inter, energies_vdw, energies_electro, energies_intra, nr_interactions, run_number, pose_rank, num_hb)"
         )
         cur.execute(
             "CREATE INDEX IF NOT EXISTS ak_intind ON Interaction_indices(interaction_type, rec_chain, rec_resname, rec_resid, rec_atom, rec_atomid)"
@@ -1563,8 +1511,9 @@ class StorageManagerSQLite(StorageManager):
             )
             # drop old bitvector table
             cur.execute("""DROP TABLE IF EXISTS Interaction_bitvectors;""")
-            # index certain tables
-            self._create_indices()
+            # only Interactions is indexable yet, the 3.0.0 step indexes the rest
+            for sql in build_create_indices(INTERACTIONS_SCHEMA.name, INTERACTIONS_SCHEMA):
+                cur.execute(sql)
             self._set_ringtail_db_schema_version("2.0.0")  # set explicit version
             self.conn.commit()
         except sqlite3.OperationalError as e:
@@ -1790,8 +1739,8 @@ class StorageManagerSQLite(StorageManager):
                         energies_inter,
                         energies_vdw,
                         energies_electro,
-                        energies_flexLig,
-                        energies_flexLR,
+                        energies_flexlig,
+                        energies_flexlr,
                         energies_intra,
                         energies_torsional,
                         unbound_energy,
@@ -1814,8 +1763,8 @@ class StorageManagerSQLite(StorageManager):
                         energies_inter,
                         energies_vdw,
                         energies_electro,
-                        energies_flexLig,
-                        energies_flexLR,
+                        energies_flexlig,
+                        energies_flexlr,
                         energies_intra,
                         energies_torsional,
                         unbound_energy,
@@ -1838,6 +1787,33 @@ class StorageManagerSQLite(StorageManager):
         self._delete_table("Results")
         # rename new table
         self.db_query("ALTER TABLE Results_new RENAME TO Results;")
+        # coordinates were copied as JSON text
+        self.convert_pose_coordinates_to_native()
+
+        # v1 has no db_properties, v2 stored number_of_poses as text ('all' for every pose)
+        # and, before 2.3.0, the docking mode alias the user typed
+        if "db_properties" in self.tables_in_db():
+            self.db_query("ALTER TABLE db_properties RENAME TO db_properties_v2")
+            self._create_db_properties_table()
+            self.db_query(
+                "INSERT INTO db_properties (db_write_session, docking_mode, number_of_poses) "
+                "SELECT DB_write_session, "
+                "CASE LOWER(docking_mode) WHEN 'dlg' THEN 'adgpu' WHEN 'gpu' THEN 'adgpu' "
+                "WHEN 'pdbqt' THEN 'vina' ELSE LOWER(docking_mode) END, "
+                "CASE WHEN number_of_poses = 'all' THEN -1 ELSE CAST(number_of_poses AS INTEGER) END "
+                "FROM db_properties_v2"
+            )
+            self._delete_table("db_properties_v2")
+        else:
+            self._create_db_properties_table()
+        # columns that v1/v2 Receptors lack
+        receptor_cols = {
+            row[1].lower()
+            for row in self.db_query("PRAGMA table_info(Receptors)").fetchall()
+        }
+        for col in ("flexres_atomnames", "polymer"):
+            if col not in receptor_cols:
+                self.db_query(f"ALTER TABLE Receptors ADD COLUMN {col} VARCHAR")
 
         # build new indices if you got this far successfully
         self._create_indices()
@@ -1853,7 +1829,7 @@ class StorageManagerSQLite(StorageManager):
         Args:
             db_alias (str, optional): if needing to drop views from a connected, aliased database. Defaults to None.
         """
-        if "Bookmarks" not in self.tables_in_db():
+        if "bookmarks" not in self.tables_in_db():
             return
         if db_alias:
             alias_string = db_alias + "."
@@ -1946,13 +1922,9 @@ class StorageManagerSQLite(StorageManager):
             pose_ids = f"SELECT pose_id FROM {table}"
             rows = f"SELECT COUNT(*) FROM {table};"
             params = ()
-        elif self.is_bookmark(table):
-            pose_ids = "SELECT pose_id FROM Filtered_poses WHERE filter_id = (SELECT filter_id FROM Filters WHERE name = ?)"
+        elif self.is_bookmark(table) or self._is_candidates_table(table):
+            pose_ids = self._get_scope_poses_query(table)
             rows = f"SELECT COUNT(*) FROM ({pose_ids});"
-            params = (table,)
-        elif self._is_candidates_table(table):
-            pose_ids = f"SELECT pose_id FROM {CANDIDATES_SUBQ} AS _c"
-            rows = f"SELECT COUNT(*) FROM {CANDIDATES_SUBQ} AS _c;"
             params = ()
         else:
             logger.error(f"Table -{table}- does not exist in the database.")
@@ -2082,33 +2054,13 @@ class StorageManagerSQLite(StorageManager):
         except sqlite3.OperationalError as e:
             raise DatabaseInsertionError(f"Error while committing insert query") from e
 
-    def _remove_screening_tables(self):
-        # TODO add pose comment table, status tables
-        self._delete_table(POSE_CLUSTERS_SCHEMA.name)
-        self._delete_table(CLUSTER_GROUPS_SCHEMA.name)
-        self._delete_table(CLUSTERS_SCHEMA.name)
-        self._delete_table(FILTERED_POSES_SCHEMA.name)
-        self._delete_table(FILTERS_SCHEMA.name)
-        self._delete_table("Accepted")
-        self._delete_table("Maybe")
-        self._delete_table("Rejected")
-        self._delete_table("Pose_comments")
-
-    def _create_screening_tables(self):
-        """
-        Create the filtering, status and GUI tables a screening session needs.
-        """
-        self._create_filtering_tables()
-        self._create_status_tables()
-        self.ensure_gui_tables()
-
     # endregion
 
     # region GUI specific API
 
     def pose_row_in_table(self, table: str, pose_id: int) -> Union[None, int]:
         """
-        Find the row id of a pose in a given table
+        Find the row id of a pose in a given table, for a bookmark its pose_id (Filtered_poses has no rowid)
 
         Args:
             table (str)
@@ -2118,15 +2070,15 @@ class StorageManagerSQLite(StorageManager):
             Union[None, int]: rowid if any
         """
         query = self.QueryBuilder()
-        query.SELECT("rowid")
         if self.is_bookmark(table):
-            query.FROM("Filtered_poses").WHERE(
+            # Filtered_poses is WITHOUT ROWID, pose_id is unique within a bookmark
+            query.SELECT("pose_id").FROM("Filtered_poses").WHERE(
                 "filter_id = (SELECT filter_id from Filters WHERE name = ?)", table
             )
         elif self._is_candidates_table(table):
-            query.FROM("Results").WHERE(f"pose_id IN {CANDIDATES_SUBQ}")
+            query.SELECT("rowid").FROM("Results").WHERE(f"pose_id IN {CANDIDATES_SUBQ}")
         else:
-            query.FROM(table)
+            query.SELECT("rowid").FROM(table)
         query.WHERE("pose_id = ?", pose_id)
         row = self.db_query(*query.build()).fetchone()
         if row:
@@ -2136,8 +2088,7 @@ class StorageManagerSQLite(StorageManager):
 
     def get_starting_rowid(self, table: str) -> int:
         """
-        Starting row id for a table, will be 1 for regular tables, and 1 or non-1 for bookmarks
-        (whose rows are inside Filtered_poses)
+        Lowest row id of a table, for a bookmark its lowest pose_id (Filtered_poses has no rowid)
 
         Args:
             table (str): table or bookmark name
@@ -2146,16 +2097,16 @@ class StorageManagerSQLite(StorageManager):
             int: first row id belonging to that selection
         """
         query = self.QueryBuilder()
-        query.SELECT("MIN(rowid)")
 
         if self._is_table(table):
-            query.FROM(table)
+            query.SELECT("MIN(rowid)").FROM(table)
         elif self.is_bookmark(table):
-            query.FROM("Filtered_poses").WHERE(
+            # bookmarks are paged by pose_id
+            query.SELECT("MIN(pose_id)").FROM("Filtered_poses").WHERE(
                 "filter_id = (SELECT filter_id FROM Filters WHERE name = ?)", table
             )
         elif self._is_candidates_table(table):
-            query.FROM("Results").WHERE(f"pose_id IN {CANDIDATES_SUBQ}")
+            query.SELECT("MIN(rowid)").FROM("Results").WHERE(f"pose_id IN {CANDIDATES_SUBQ}")
         else:
             logger.error(f"Table -{table}- does not exist in the database.")
             return None

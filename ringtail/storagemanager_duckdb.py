@@ -4,6 +4,7 @@
 # Ringtail storage adapter for DuckDB
 #
 
+import re
 import pandas as pd
 from .logutils import get_logger
 
@@ -63,9 +64,6 @@ class StorageManagerDuckDB(StorageManager):
         self.conn: duckdb.DuckDBPyConnection
         self.dialect = "duckdb"
 
-    def _execute_to_df(self, sql: str) -> pd.DataFrame:
-        return self.conn.execute(sql).df()
-
     # region Methods for creating and inserting into tables the database
 
     def _insert_ligands(self, ligands: list):
@@ -120,8 +118,8 @@ class StorageManagerDuckDB(StorageManager):
             energies_inter      FLOAT,
             energies_vdw        FLOAT,
             energies_electro    FLOAT,
-            energies_flexLig    FLOAT,
-            energies_flexLR     FLOAT,
+            energies_flexlig    FLOAT,
+            energies_flexlr     FLOAT,
             energies_intra      FLOAT,
             energies_torsional  FLOAT,
             unbound_energy      FLOAT,
@@ -176,8 +174,8 @@ class StorageManagerDuckDB(StorageManager):
                     energies_inter,
                     energies_vdw,
                     energies_electro,
-                    energies_flexLig,
-                    energies_flexLR,
+                    energies_flexlig,
+                    energies_flexlr,
                     energies_intra,
                     energies_torsional,
                     unbound_energy,
@@ -198,8 +196,8 @@ class StorageManagerDuckDB(StorageManager):
                     energies_inter,
                     energies_vdw,
                     energies_electro,
-                    energies_flexLig,
-                    energies_flexLR,
+                    energies_flexlig,
+                    energies_flexlr,
                     energies_intra,
                     energies_torsional,
                     unbound_energy,
@@ -252,8 +250,8 @@ class StorageManagerDuckDB(StorageManager):
                 energies_inter,
                 energies_vdw,
                 energies_electro,
-                energies_flexLig,
-                energies_flexLR,
+                energies_flexlig,
+                energies_flexlr,
                 energies_intra,
                 energies_torsional,
                 unbound_energy,
@@ -276,8 +274,8 @@ class StorageManagerDuckDB(StorageManager):
                 T.energies_inter,
                 T.energies_vdw,
                 T.energies_electro,
-                T.energies_flexLig,
-                T.energies_flexLR,
+                T.energies_flexlig,
+                T.energies_flexlr,
                 T.energies_intra,
                 T.energies_torsional,
                 T.unbound_energy,
@@ -682,6 +680,36 @@ class StorageManagerDuckDB(StorageManager):
             (cluster_id,),
         )
 
+    def _delete_nontables(self):
+        """
+        Deletes objects in the database that are not tables (handled separately)
+        """
+        sequences = self.db_query("""SELECT sequence_name FROM duckdb_sequences();""")
+        if sequences:
+            for sequence in sequences.fetchall():
+                self.db_query(f"DROP SEQUENCE {sequence[0]};")
+
+    def _remove_screening_tables(self):
+        self._delete_table(POSE_CLUSTERS_SCHEMA.name)
+        self._delete_table(CLUSTER_GROUPS_SCHEMA.name)
+        self._delete_table(CLUSTERS_SCHEMA.name)
+        self.db_query("DROP SEQUENCE IF EXISTS seq_clusters_cluster_id;")
+        self._delete_table(FILTERED_POSES_SCHEMA.name)
+        self._delete_table(FILTERS_SCHEMA.name)
+        self.db_query("DROP SEQUENCE IF EXISTS seq_filters_filter_id;")
+        self._delete_table("Accepted")
+        self._delete_table("Maybe")
+        self._delete_table("Rejected")
+        self._delete_table("Pose_comments")
+
+    def _create_screening_tables(self):
+        """
+        Create the filtering, status and GUI tables a screening session needs.
+        """
+        self._create_filtering_tables()
+        self._create_status_tables()
+        self.ensure_gui_tables()
+
     # endregion
 
     # region merge databases
@@ -778,8 +806,8 @@ class StorageManagerDuckDB(StorageManager):
             convert_dbprop_sql = """INSERT INTO PK_conversions (
                 merge_id,
                 table_name,
-                original_PK,
-                merged_PK) SELECT 
+                original_pk,
+                merged_pk) SELECT 
                 ?,
                 'db_properties', 
                 DB_write_session,
@@ -794,7 +822,7 @@ class StorageManagerDuckDB(StorageManager):
                 docking_mode,
                 number_of_poses)
                 SELECT 
-                    (SELECT merged_PK FROM PK_conversions WHERE original_PK = DB_write_session and merge_id = ? and table_name = 'db_properties'),
+                    (SELECT merged_pk FROM PK_conversions WHERE original_pk = DB_write_session and merge_id = ? and table_name = 'db_properties'),
                     docking_mode,
                     number_of_poses
                 FROM merging.db_properties;"""
@@ -821,8 +849,8 @@ class StorageManagerDuckDB(StorageManager):
         convert_ligand_ids_sql = """INSERT INTO PK_conversions (
         merge_id,
         table_name,
-        original_PK,
-        merged_PK) SELECT
+        original_pk,
+        merged_pk) SELECT
         ?,
         'Ligands',
         ligand_id,
@@ -850,7 +878,7 @@ class StorageManagerDuckDB(StorageManager):
         ligand_smile,
         rdmol)
         SELECT 
-            (SELECT merged_PK FROM PK_conversions WHERE original_PK = ligand_id and merge_id = ? AND table_name = 'Ligands') new_id,
+            (SELECT merged_pk FROM PK_conversions WHERE original_pk = ligand_id and merge_id = ? AND table_name = 'Ligands') new_id,
             ligname,
             ligand_smile,
             rdmol
@@ -861,8 +889,8 @@ class StorageManagerDuckDB(StorageManager):
         convert_poseid_sql = """INSERT INTO PK_conversions (
         merge_id,
         table_name,
-        original_PK,
-        merged_PK) SELECT 
+        original_pk,
+        merged_pk) SELECT 
         ?,
         'Results', 
         pose_id,
@@ -885,8 +913,8 @@ class StorageManagerDuckDB(StorageManager):
             energies_inter,
             energies_vdw,
             energies_electro,
-            energies_flexLig,
-            energies_flexLR,
+            energies_flexlig,
+            energies_flexlr,
             energies_intra,
             energies_torsional,
             unbound_energy,
@@ -895,8 +923,8 @@ class StorageManagerDuckDB(StorageManager):
             pose_coordinates,
             flexible_res_coordinates) 
         SELECT 
-            pose.merged_PK as pose_id,
-            ligand.merged_PK as ligand_id,
+            pose.merged_pk as pose_id,
+            ligand.merged_pk as ligand_id,
             mr.receptor,
             mr.pose_rank,
             mr.run_number,
@@ -909,8 +937,8 @@ class StorageManagerDuckDB(StorageManager):
             mr.energies_inter,
             mr.energies_vdw,
             mr.energies_electro,
-            mr.energies_flexLig,
-            mr.energies_flexLR,
+            mr.energies_flexlig,
+            mr.energies_flexlr,
             mr.energies_intra,
             mr.energies_torsional,
             mr.unbound_energy,
@@ -920,19 +948,19 @@ class StorageManagerDuckDB(StorageManager):
             mr.flexible_res_coordinates
         FROM merging.Results mr
         LEFT JOIN (
-            SELECT original_PK, merged_PK 
+            SELECT original_pk, merged_pk 
             FROM PK_conversions 
             WHERE table_name = 'Results' 
             AND merge_id = ?
             ) pose 
-        ON pose.original_PK = mr.pose_id
+        ON pose.original_pk = mr.pose_id
         LEFT JOIN (
-            SELECT original_PK, merged_PK 
+            SELECT original_pk, merged_pk 
             FROM PK_conversions 
             WHERE table_name = 'Ligands' 
             AND merge_id = ?
             ) ligand
-        ON (mr.ligand_id = ligand.original_PK);"""
+        ON (mr.ligand_id = ligand.original_pk);"""
 
         try:
             cur = self.conn.cursor()
@@ -972,15 +1000,11 @@ class StorageManagerDuckDB(StorageManager):
         Raises:
             MergeError
         """
-        # If main database does not have interactions, it will be incompatible to
-        # merge in interactions from other databases
-        if not self.table_length("Interactions") > 0:
-            return
         convert_ii_sql = """INSERT INTO PK_conversions (
         merge_id,
         table_name,
-        original_PK,
-        merged_PK) SELECT 
+        original_pk,
+        merged_pk) SELECT 
         ?,
         'Interaction_indices', 
         interaction_id,
@@ -1007,7 +1031,7 @@ class StorageManagerDuckDB(StorageManager):
                         AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
                         AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
                     )
-                ELSE merging.Interaction_indices.interaction_id + (SELECT MAX(interaction_id) FROM Interaction_indices)
+                ELSE merging.Interaction_indices.interaction_id + (SELECT COALESCE(MAX(interaction_id), 0) FROM Interaction_indices)
             END AS new_interaction_id
         FROM merging.Interaction_indices;"""
 
@@ -1021,14 +1045,14 @@ class StorageManagerDuckDB(StorageManager):
         rec_atom,
         rec_atomid)
         SELECT 
-            (SELECT merged_PK FROM PK_conversions WHERE original_PK = interaction_id and merge_id = ? AND table_name = 'Interaction_indices') new_id,
+            (SELECT merged_pk FROM PK_conversions WHERE original_pk = interaction_id and merge_id = ? AND table_name = 'Interaction_indices') new_id,
             interaction_type,
             rec_chain,
             rec_resname,
             rec_resid,
             rec_atom,
             rec_atomid
-        FROM merging.Interaction_indices WHERE new_id > (SELECT MAX(interaction_id) FROM Interaction_indices);
+        FROM merging.Interaction_indices WHERE new_id > (SELECT COALESCE(MAX(interaction_id), 0) FROM Interaction_indices);
         """
 
         # Adding new data to Interactions table with (updated) pose_id and interaction_id
@@ -1038,14 +1062,14 @@ class StorageManagerDuckDB(StorageManager):
         interaction_id
         )    SELECT P.merged_pk as pose_id, II.merged_pk as interaction_id
                 FROM merging.Interactions I
-                LEFT JOIN (SELECT original_PK, merged_pk
+                LEFT JOIN (SELECT original_pk, merged_pk
                 FROM PK_conversions
                 WHERE table_name = 'Results' 
-                AND merge_id = ?) P ON (I.pose_id = P.original_PK)
-            LEFT JOIN (SELECT original_PK, merged_pk
+                AND merge_id = ?) P ON (I.pose_id = P.original_pk)
+            LEFT JOIN (SELECT original_pk, merged_pk
                 FROM PK_conversions
                 WHERE table_name = 'Interaction_indices' 
-                AND merge_id = ?) II ON (I.interaction_id = II.original_PK);"""
+                AND merge_id = ?) II ON (I.interaction_id = II.original_pk);"""
 
         try:
             cur = self.conn.cursor()
@@ -1077,101 +1101,28 @@ class StorageManagerDuckDB(StorageManager):
             (INTERACTION_INDICES_SCHEMA.name, "interaction_id"),
             (INTERACTIONS_SCHEMA.name, "interaction_pose_id"),
         ):
-            seq_name = f"seq_{table.lower()}_{column.lower()}"
+            default = self.conn.execute(
+                "SELECT column_default FROM information_schema.columns "
+                "WHERE lower(table_name) = lower(?) AND lower(column_name) = lower(?)",
+                (table, column),
+            ).fetchone()
+            match = re.search(r"nextval\('([^']+)'\)", (default or [""])[0] or "")
+            if not match:
+                continue
+            seq_name = match.group(1)
             max_val = self.conn.execute(
                 f"SELECT COALESCE(MAX({column}), 0) FROM {table}"
             ).fetchone()[0]
-            row = self.conn.execute(
-                "SELECT last_value, start_value FROM duckdb_sequences() "
-                "WHERE sequence_name = ?",
-                (seq_name,),
-            ).fetchone()
-            if row is None:
-                continue
-            last_value, start_value = row
-            current = last_value if last_value is not None else start_value - 1
-            if current >= max_val:
-                continue
-            # duckdb cannot restart a sequence a column default references
-            replacement = f"{seq_name}_sync{max_val}"
-            try:
+            self.conn.execute("BEGIN TRANSACTION")
+            next_val = self.conn.execute(f"SELECT nextval('{seq_name}')").fetchone()[0]
+            # a sequence in use by a column default cannot be restarted, only advanced
+            if next_val < max_val:
                 self.conn.execute(
-                    f"CREATE SEQUENCE IF NOT EXISTS {replacement} START {max_val + 1};"
+                    f"SELECT MAX(nextval('{seq_name}')) FROM range({max_val - next_val})"
                 )
-                self.conn.execute(
-                    f"ALTER TABLE {table} ALTER COLUMN {column} "
-                    f"SET DEFAULT nextval('{replacement}');"
-                )
-            except duckdb.Error as e:
-                logger.warning(
-                    f"Could not resync {seq_name} (at {current}, max {max_val}): {e}. "
-                    f"Merge into a freshly created database instead."
-                )
-
-    def _rollback_merge(self, merge_id: int):
-        """
-        Remove all data inserted by a specific merge session
-
-        Args:
-            merge_id (int): Merge session for which to delete associated data
-        """
-
-        # delete from Interactions where pose_id was added by this merge
-        self.conn.execute(
-            """
-            DELETE FROM Interactions WHERE pose_id IN (
-                SELECT merged_PK FROM PK_conversions 
-                WHERE merge_id = ? AND table_name = 'Results')""",
-            (merge_id,),
-        )
-
-        # delete from Interaction_indices
-        self.conn.execute(
-            """
-            DELETE FROM Interaction_indices WHERE interaction_id IN (
-                SELECT merged_PK FROM PK_conversions 
-                WHERE merge_id = ? AND table_name = 'Interaction_indices'
-                AND merged_PK != original_PK)""",
-            (merge_id,),
-        )
-
-        # delete from Results
-        self.conn.execute(
-            """
-            DELETE FROM Results WHERE pose_id IN (
-                SELECT merged_PK FROM PK_conversions 
-                WHERE merge_id = ? AND table_name = 'Results')""",
-            (merge_id,),
-        )
-
-        # delete from Ligands (only newly added, not deduplicated ones)
-        self.conn.execute(
-            """
-            DELETE FROM Ligands WHERE ligand_id IN (
-                SELECT merged_PK FROM PK_conversions 
-                WHERE merge_id = ? AND table_name = 'Ligands'
-                AND merged_PK != original_PK)""",
-            (merge_id,),
-        )
-
-        # delete from db_properties
-        self.conn.execute(
-            """
-            DELETE FROM db_properties WHERE DB_write_session IN (
-                SELECT merged_PK FROM PK_conversions 
-                WHERE merge_id = ? AND table_name = 'db_properties')""",
-            (merge_id,),
-        )
-
-        # clean up tracking
-        self.conn.execute("DELETE FROM PK_conversions WHERE merge_id = ?", (merge_id,))
-        self.conn.execute("DELETE FROM merged_tables WHERE merge_id = ?", (merge_id,))
-
-        # commit
-        self.conn.commit()
-
-        # reset sequences to current max values
-        self._sync_auto_increment_state()
+            # nextval is only persisted by a transaction that also writes
+            self.conn.execute(f"COMMENT ON SEQUENCE {seq_name} IS NULL")
+            self.conn.execute("COMMIT")
 
     # endregion
 
@@ -1191,39 +1142,18 @@ class StorageManagerDuckDB(StorageManager):
             f"SELECT CAST(column0 AS VARCHAR) AS ligandname FROM read_csv('{csv_path}', header=false)"
         )
 
-    def _crossref_bookmark_builder(
-        self, ligand_list: list[str], store_best_pose: bool
-    ) -> str:
+    def _crossref_bookmark_builder(self, ligand_list: list[str]) -> str:
         """
-        creates formatted sql for building the crossreferencing bookmark
+        creates formatted sql selecting all poses of the given ligands, for the crossreferencing bookmark
 
         Args:
             ligand_list (list[str]): list of ligand names to be considered
-            store_best_pose (bool): whether to get best pose or all poses
 
         Returns:
             str: formatted sql
         """
-
-        ligand_sql_string = ", ".join(f"'{l}'" for l in ligand_list)
-        # construct the query
-        if store_best_pose:
-            return f"""
-            SELECT R.pose_id FROM Results AS R
-            JOIN (
-                SELECT ligand_id, MIN(pose_rank) as best_pose
-                FROM Results
-                GROUP BY ligand_id
-                ) AS sel
-            ON R.ligand_id = sel.ligand_id
-            AND R.pose_rank = sel.best_pose
-            JOIN Ligands AS L
-            ON R.ligand_id = L.ligand_id
-            WHERE L.ligname
-            IN ({ligand_sql_string})
-            """
-        else:
-            return f"""
+        ligand_sql_string = ", ".join("'" + l.replace("'", "''") + "'" for l in ligand_list)
+        return f"""
             SELECT pose_id FROM Results
             WHERE ligand_id IN (
                 SELECT ligand_id FROM Ligands
@@ -1281,7 +1211,6 @@ class StorageManagerDuckDB(StorageManager):
                 logger.warning(
                     f"Requested column {col} not found in Results table and will not be used for the summary. Allowed columns: {allowed_columns}"
                 )
-                columns.pop(col)
                 continue
             data = self.db_query(
                 f"SELECT MIN({col}), MAX({col}) FROM Results"
@@ -1373,6 +1302,9 @@ class StorageManagerDuckDB(StorageManager):
     def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
         return super()._calc_percentile_cutoff(percentile, column)
 
+    def _execute_to_df(self, sql: str) -> pd.DataFrame:
+        return self.conn.execute(sql).df()
+
     # endregion
 
     # region general database operations
@@ -1387,9 +1319,9 @@ class StorageManagerDuckDB(StorageManager):
 
     def _rollback(self):
         """
-        Roll back transaction
+        No-op, since _begin_transaction does not open a transaction
         """
-        self.conn.execute("ROLLBACK;")
+        pass
 
     def tables_in_db(self) -> list:
         """
@@ -1400,26 +1332,17 @@ class StorageManagerDuckDB(StorageManager):
         """
         return [row[0].lower() for row in self.db_query("SHOW TABLES").fetchall()]
 
-    def _delete_nontables(self):
-        """
-        Deletes objects in the database that are not tables (handled separately)
-        """
-        sequences = self.db_query("""SELECT sequence_name FROM duckdb_sequences();""")
-        if sequences:
-            for sequence in sequences.fetchall():
-                self.db_query(f"DROP SEQUENCE {sequence[0]};")
-
     def clone(self, backup_name: str = None) -> str:
-        import shutil
-
         """Creates a copy of the db
 
         Args:
             backup_name (str, optional): name of the cloned database
-        
+
         Returns:
             str: path of backed up database
         """
+        import shutil
+
         if backup_name is None:
             backup_name = self.db_file + ".bk"
         shutil.copy(self.db_file, backup_name)
@@ -1512,13 +1435,9 @@ class StorageManagerDuckDB(StorageManager):
             pose_ids = f"SELECT pose_id FROM {table}"
             rows = f"SELECT COUNT(*) FROM {table};"
             params = ()
-        elif self.is_bookmark(table):
-            pose_ids = "SELECT pose_id FROM Filtered_poses WHERE filter_id = (SELECT filter_id FROM Filters WHERE name = ?)"
+        elif self.is_bookmark(table) or self._is_candidates_table(table):
+            pose_ids = self._get_scope_poses_query(table)
             rows = f"SELECT COUNT(*) FROM ({pose_ids});"
-            params = (table,)
-        elif self._is_candidates_table(table):
-            pose_ids = f"SELECT pose_id FROM {CANDIDATES_SUBQ} AS _c"
-            rows = f"SELECT COUNT(*) FROM {CANDIDATES_SUBQ} AS _c;"
             params = ()
         else:
             logger.error(f"Table -{table}- does not exist in the database.")
@@ -1612,34 +1531,13 @@ class StorageManagerDuckDB(StorageManager):
         except duckdb.OperationalError as e:
             raise DatabaseInsertionError(f"Error while committing insert query") from e
 
-    def _remove_screening_tables(self):
-        self._delete_table(POSE_CLUSTERS_SCHEMA.name)
-        self._delete_table(CLUSTER_GROUPS_SCHEMA.name)
-        self._delete_table(CLUSTERS_SCHEMA.name)
-        self.db_query("DROP SEQUENCE IF EXISTS seq_clusters_cluster_id;")
-        self._delete_table(FILTERED_POSES_SCHEMA.name)
-        self._delete_table(FILTERS_SCHEMA.name)
-        self.db_query("DROP SEQUENCE IF EXISTS seq_filters_filter_id;")
-        self._delete_table("Accepted")
-        self._delete_table("Maybe")
-        self._delete_table("Rejected")
-        self._delete_table("Pose_comments")
-
-    def _create_screening_tables(self):
-        """
-        Create the filtering, status and GUI tables a screening session needs.
-        """
-        self._create_filtering_tables()
-        self._create_status_tables()
-        self.ensure_gui_tables()
-
     # endregion
 
     # region GUI specific API
 
     def pose_row_in_table(self, table: str, pose_id: int) -> Union[None, int]:
         """
-        Find the row id of a pose in a given table
+        Find the row id of a pose in a given table, for a bookmark its rowid in Filtered_poses
 
         Args:
             table (str)
@@ -1667,8 +1565,7 @@ class StorageManagerDuckDB(StorageManager):
 
     def get_starting_rowid(self, table: str) -> int:
         """
-        Starting row id for a table, will be 1 for regular tables, and 1 or non-1 for bookmarks
-        (whose rows are inside Filtered_poses)
+        Lowest row id of a table, for a bookmark the lowest rowid of its rows in Filtered_poses
 
         Args:
             table (str): table or bookmark name
