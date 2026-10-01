@@ -1,6 +1,6 @@
 .. _installation:
 
-Installing ringtail
+Installing Ringtail
 ###################
 There are three different alternatives to installing Ringtail: through :ref:`conda-forge <condaforge>` which will install all dependencies, through the Python package manager :ref:`PyPi <pypi>` where all dependencies need to be installed separately, and directly from :ref:`source code <sourcecode>` for advanced users looking to make their own code changes. It is necessary to use an environment manager like conda or mamba to organize your Ringtail :ref:`environment <envsetup>` as some of the dependencies can only be installed in a managed environment. The installation instructions uses conda as an example, but you are free to use any python environment manager. Ringtail 3.0 requires Python ≥3.10 and is tested on Linux, macOS, and Windows.
 
@@ -59,7 +59,7 @@ The conda-forge installation will handle all dependencies, so no other installat
 Installation from source code
 ******************************
 To install Ringtail from source code you will need the same dependencies as for the :ref:`PyPi installation <pypi>`. 
-After activating the environment, navigate to the main Ringtail ringtail directory and run:
+After activating the environment, navigate to the main Ringtail directory and run:
 
 .. code-block:: bash
 
@@ -77,7 +77,7 @@ If you wish to make the code for Ringtail **editable** without having to re-run 
 
 Test installation
 *******************
-If you would like to test your installation of Ringtail, or after you make changes to the code, a set of automated tests are included with the source code. This test will take a while if ran using the entire test harness. To begin, you must install pytest in the Ringtail environment:
+If you would like to test your installation of Ringtail, or after you make changes to the code, a set of automated tests are included with the source code. This test will take a while if run using the entire test harness. To begin, you must install pytest in the Ringtail environment:
 
 .. code-block:: bash    
 
@@ -88,8 +88,9 @@ Next, navigate to the ``test`` subdirectory within the cloned Ringtail directory
 .. code-block:: bash
 
     $ pytest                                    # run the full suite
+    $ pytest -m "not slow"                      # quick run, DuckDB only and no command-line tests
     $ pytest -v                                 # verbose: list each test
-    $ pytest -k duckdb                          # only the DuckDB backend (use 'sqlite' for SQLite)
+    $ pytest -k duckdb                          # only DuckDB unit tests (use 'sqlite' for SQLite)
     $ pytest test_units.py                      # one module/file
     $ pytest test_units.py::TestFiltering       # one test class
     $ pytest test_units.py::TestFiltering::test_filter   # one specific test method

@@ -7,28 +7,18 @@ The script ``rt_compare`` is designed to be used with databases already made and
 
 Programmatically, the ``rt_compare`` script is used to select ligands which are shared between the given filter bookmark(s) of some virtual screenings (``--wanted``) or exclusive to some screenings and not others (``--unwanted``). The script uses a subset of commands similar to ``rt_process_vs``.
 
-The basic process is illustrated by a target, ``kinase1``, its related proteins
-``kinase1a`` and ``kinase1b``, and an unrelated protein, ``protein2``:
+The basic process is illustrated by a target, ``kinase1``, its related proteins ``kinase1a`` and ``kinase1b``, and an unrelated protein, ``protein2``:
 
 #. Create one database for each target.
-#. Filter each database and note the bookmark used for each selection. Filters may
-   differ between targets, for example to select analogous receptor interactions.
-#. Use ``rt_compare`` to find ligands that pass the wanted bookmarks and exclude
-   those that pass unwanted bookmarks. Supply every database/bookmark pair with a
-   separate ``--wanted`` or ``--unwanted`` option.
+#. Filter each database and note the bookmark used for each selection. Filters may differ between targets, for example to select analogous receptor interactions.
+#. Use ``rt_compare`` to find ligands that pass the wanted bookmarks and exclude those that pass unwanted bookmarks. Supply every database/bookmark pair with a separate ``--wanted`` or ``--unwanted`` option. Up to 10 databases (wanted and unwanted together) can be compared in one run.
 #. Choose any required outputs:
 
-   * ``-l`` or ``-l comparison.txt`` writes text results in the same format as
-     ``rt_process_vs`` filter output, one file per database, written next to that
-     database and named ``<database name>_<log name>``
-     (``<database name>_crossref_results.txt`` when ``-l`` is used without a filename).
-   * ``-xs`` / ``--export_sdf`` writes the selected ligands and poses to one SDF per
-     database, ``<database name>_<bookmark>.sdf``, in the current working directory.
-   * ``-xd`` / ``--export_db`` exports each cross-referenced bookmark as a database,
-     ``<database name>_<bookmark>.db``, next to the source database.
+   * ``-l`` or ``-l comparison.txt`` writes text results in the same format as ``rt_process_vs`` filter output, one file per database, written next to that database and named ``<database name>_<log name>`` (``<database name>_crossref_results.txt`` when ``-l`` is used without a filename). If the log name includes a folder, the files are written in that folder instead.
+   * ``-xs`` / ``--export_sdf`` writes the selected ligands and poses to one SDF per database, ``<database name>_<bookmark>.sdf``, in the folder given after the flag, or in ``crossref/`` when no folder is given.
+   * ``-xd`` / ``--export_db`` exports each cross-referenced bookmark as a database, ``<database name>_<bookmark>.db``, next to the source database.
 
-The comparison creates a bookmark in each participating database. Its name combines
-the ``--save_bookmark`` prefix (``crossref`` by default) with the source bookmark name.
+The comparison creates a bookmark in each wanted database. Its name combines the ``--save_bookmark`` prefix (``crossref`` by default) with the source bookmark name.
 
 .. code-block:: bash
 
@@ -73,8 +63,8 @@ Select ligands found in "filter1" bookmarks of vs1 but not "passing_results" of 
 
     $ rt_compare -w vs1.db filter1 -uw vs2.db passing_results
 
-Save bookmark of ligands found in "filter1" bookmarks of vs1 and vs2 but not vs3 or vs4 as "selective_bookmark_filter1" in all databases
-========================================================================================================================================
+Save bookmark of ligands found in "filter1" bookmarks of vs1 and vs2 but not vs3 or vs4 as "selective_bookmark_filter1" in the wanted databases
+===============================================================================================================================================
 
 .. code-block:: bash
 
@@ -102,14 +92,14 @@ Supported arguments for the comparison script
    :header: "Argument", "Short", "Description", "Default"
    :widths: 20, 8, 52, 20
 
-   ``--config``, ``-c``, "JSON configuration file; command-line values take precedence", "none"
+   ``--config``, ``-c``, "JSON configuration file, command-line values take precedence", "none"
    ``--wanted``, ``-w``, "Database and bookmark to include", "none"
    ``--unwanted``, ``-uw``, "Database and bookmark to exclude", "none"
    ``--store_best_pose``, ``-bp``, "Write only the best-ranked pose per ligand to the text results log", ``False``
-   ``--output_log``, ``-l``, "Write text results; optionally supply a filename", "none"
+   ``--output_log``, ``-l``, "Write text results, optionally to a given filename", "none"
    ``--save_bookmark``, ``-s``, "Prefix for bookmarks created by the comparison", ``crossref``
    ``--export_db``, ``-xd``, "Export each compared bookmark as a database", "disabled"
-   ``--export_sdf``, ``-xs``, "Export each compared bookmark as SDF (a value given after the flag is ignored)", "disabled"
+   ``--export_sdf``, ``-xs``, "Export each compared bookmark as SDF, optionally into the given folder", "disabled"
    ``--verbose``, ``-v``, "Set log level to INFO", "disabled"
    ``--debug``, ``-d``, "Set log level to DEBUG", "disabled"
    ``--logfile``, "", "Write logger output to a file", "none"

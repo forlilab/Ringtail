@@ -52,21 +52,16 @@ Very large screens are often docked in batches (e.g. one HPC job per chunk of th
     combined = RingtailCore("batch1_hits.db")
     combined.merge_databases(["batch2_hits.db", "batch3_hits.db"])
 
-The same merge is available from the command line with ``rt_merge``, which merges one or more secondary databases into a primary one (the primary is backed up first unless ``--dont_backup_db1`` is given):
+Merging deletes the bookmarks, filters, clusterings, pose statuses and pose comments of the primary database, so filter the merged database again afterwards. The same merge is available from the command line with ``rt_merge``, which merges one or more secondary databases into a primary one (the primary is backed up first unless ``--dont_backup_db1`` is given):
 
 .. code-block:: bash
 
     $ rt_merge --primary_db batch1_hits.db --secondary_db batch2_hits.db batch3_hits.db
 
 .. warning::
-   **Relative filters do not compose across batched databases.** Percentile filters
-   (``score_percentile`` / ``le_percentile``) are computed *per database*, so filtering each
-   batch by percentile and then merging is **not** the same as ranking the whole screen. When
-   you plan to merge batched databases, filter with **absolute** cutoffs (``eworst`` /
-   ``leworst``). If you need true screen-wide percentiles, append everything into one database
-   first and filter once.
+   **Relative filters do not compose across batched databases.** Percentile filters (``score_percentile`` / ``le_percentile``) are computed *per database*, so filtering each batch by percentile and then merging is **not** the same as ranking the whole screen. When you plan to merge batched databases, filter with **absolute** cutoffs (``eworst`` / ``leworst``). If you need true screen-wide percentiles, append everything into one database first and filter once.
 
 Is "filter then merge" the right approach?
 ==========================================
 
-Yes — *when the screen is already split into separate databases*. It keeps every step small (no single multi-GB database to filter or move) and yields one tidy database of hits. If you can instead combine all batches into **one** database as you dock, the simpler path is to filter that once and ``export_bookmark_db`` the result; merging is only needed when the data started out in batches.
+Yes — *when the screen is already split into separate databases*. It keeps every step small (no single multi-GB database to filter or move) and yields one tidy database of hits. If you can instead combine all batches into **one** database as you dock, the simpler path is to filter that once and ``export_bookmark_db`` the result. Merging is only needed when the data started out in batches.

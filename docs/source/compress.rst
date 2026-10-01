@@ -32,10 +32,10 @@ From the command line
 * ``-e`` / ``--eworst`` — highest/worst docking score to keep 
 * ``-le`` / ``--leworst`` — worst ligand efficiency to keep
 * ``--compressor`` — ``zstd`` (default), ``gzip``, or ``xz`` (``zstd`` falls back to ``gzip`` if the binary is missing).
-* ``--level`` — compression level (default 18; ``zstd`` 1–22, ``gzip`` 1–9, ``xz`` 0–9).
+* ``--level`` — compression level (default 18, ``zstd`` 1–19, ``gzip`` 1–9, ``xz`` 0–9).
 * ``--keep-db`` — keep the intermediate uncompressed filtered database.
 
-``rt_decompress_db`` only needs the path to the compressed database (``-i``); the method is read from the
+``rt_decompress_db`` only needs the path to the compressed database (``-i``). The method is read from the
 ``.zst`` / ``.gz`` / ``.xz`` extension, and ``-o`` optionally sets the output path.
 
 From the API
@@ -53,7 +53,7 @@ The same compression is available as ``ringtail.util.compress_file`` and ``decom
     rtc.filter(eworst=-9.0, leworst=-0.4, output_bookmark="hits")
     rtc.export_bookmark_db(bookmark_name="hits", db_filepath="hits.db")
 
-    # compress (original left intact); returns the compressed db path actually written
+    # compress (original left intact), returns the compressed db path actually written
     artifact = compress_file("hits.db", method="zstd", level=18)   # -> "hits.db.zst"
 
     # ...transfer the compressed db, then on the other side:
@@ -68,6 +68,6 @@ Example compression of two ~2-million-ligand databases (zstd level 18, Apple M3 
    "SQLite","14 GB","4.16 GB","3.68×"
 
 .. note::
-   ``zstd`` (the default) is a fast, multithreaded compressor; if the ``zstd`` binary is not on the ``PATH``, Ringtail automatically falls back to ``gzip``. The source file is never modified, moved, or deleted.
+   ``zstd`` (the default) is a fast, multithreaded compressor. If the ``zstd`` binary is not on the ``PATH``, Ringtail automatically falls back to ``gzip``. The source file is never modified, moved, or deleted.
 
 See :ref:`big_data` for how compression fits into a broader strategy for large screens.

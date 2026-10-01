@@ -6,7 +6,6 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath("../../ringtail/"))
 sys.path.insert(0, os.path.abspath("../.."))  # repo root, so `import ringtail` resolves
 from ringtail.ringtailoptions import ringtail_defaults
 from ringtail.filters import Filter
@@ -35,7 +34,7 @@ rst_prolog = "\n".join(
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "ringtail"
-copyright = "2024, Forli lab"
+copyright = "2026, Forli lab"
 author = "Forli lab"
 _version_file = os.path.join(
     os.path.dirname(__file__), "..", "..", "ringtail", "_version.py"
@@ -91,10 +90,8 @@ html_theme_options = {
 }
 
 autodoc_mock_imports = [
-    "matplotlib",
     "meeko",
     "pandas",
     "rdkit",
     "numpy",
-    "multiprocess",
 ]

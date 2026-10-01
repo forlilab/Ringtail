@@ -53,13 +53,13 @@ Let's then further refine the set of molecules by applying an interaction filter
 
 .. code-block:: bash
 
-    $ rt_process_vs read --input_db output.db --input_bookmark e14 --vdw_interactions A:VAL:243: --bookmark_name e14_vdwV243
+    $ rt_process_vs read --input_db output.db --input_bookmark e14 --vdw_interactions A:VAL:243: --bookmark_name e14_vdwv243
 
 Once you are happy with the number of passing ligands, you can for example produce an SDF file with all passing ligands and their poses:
 
 .. code-block:: bash
 
-    $ rt_process_vs read --input_db output.db --bookmark_name e14_vdwV243 -sdf /path/to/sdf_folder/
+    $ rt_process_vs read --input_db output.db --bookmark_name e14_vdwv243 -sdf /path/to/sdf_folder/
 
 Ringtail offers a large number of properties on which to filter and screen the docking data, and many formats for exports suitable for collaboration and further screening. Explore e.g., the command line page for more options (:ref:`cmdline`). 
 
