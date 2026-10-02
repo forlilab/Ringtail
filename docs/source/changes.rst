@@ -138,6 +138,47 @@ Bug fixes
 * Since v1.1, ligand efficiency (``leff``) for AutoDock-GPU results counted all atoms including polar hydrogens, and for vina results it also counted the special docking atoms (for macrocycles and waters). It is now calculated from the number of heavy atoms as counted by RDKit, so ligand efficiency values will be larger and filtering on ligand efficiency may give different results.
 * Percentile filters (``score_percentile`` and ``le_percentile``) could keep one ligand too few, e.g., 29% of 100 ligands would keep 28, due to a rounding error when converting the percentile to a number of ligands. This has been the case since v1.1 and is now fixed, so filtering using percentiles may include one more ligand than in previous versions.
 
+Changes in 2.3.3: hydrogen bond count filter fix
+*************************************************
+Bug fixes
+=========
+* The ``hb_count`` filter was not inclusive, so ``hb_count=5`` returned poses with six or more hydrogen bonds rather than five or more. The negative "no more than" direction was already inclusive. Filtering results involving ``hb_count`` may differ from previous versions.
+
+Changes in 2.3.0: New merge database functionality and bug fixes
+*****************************************************************
+Enhancements
+============
+* New CLI (`rt_merge`) and API for merge two or more databases, for example if creating multiple databases per receptor in parallell and wanting to combine them to one
+* Create new database from bookmark data subset has been sped up significantly
+* Crossrefering databases has been sped up significantly, as well as some added functionality like various export options
+
+Bug fixes
+=========
+* Checks for poses in bookmark before attempting to export bookmark/subset database
+* Only writes an output log file if requested
+* `--export_bookmark_csv` can now be used as a flag if exporting the bookmark filtered in the same command, otherwise as before by specifying bookmark/table after the tag
+
+Changes in 2.2.0: new API method for flex res receptor export and bug fixes
+***************************************************************************
+Enhancements
+============
+* New method added to enable exporting receptor pdb with flexible residues given ligand (currently for API only)
+* During results writing: check to ensure files provided with `file` option, and directories provided with `file_path` option
+* Multiprocess removed from clustering methods, speeding up the process significantly
+* Minor sqlite query updates for enhanced query speed, such as replacing `LIKE` with `=` where possible when matching text
+
+Bug fixes
+==========
+* Initializing ringtail with full path to a database could result in issues exporting SDFs to specified folder, this has been fixed
+* Clustering without filtering could result in error, this has been fixed
+
+Changes in 2.1.2: bug fixes
+****************************
+* Removing of union operand that made Ringtail incompatible with python=3.9
+* Pymol now displays receptor if present in database
+* Proper handling in preparing rdkit Mols in absence of flexible residues
+* Enhanced error messages and docs related to plotting and pymol
+
 Changes in 2.1.1: bug fixes and result plot enhancements
 ********************************************************
 Enhancements
