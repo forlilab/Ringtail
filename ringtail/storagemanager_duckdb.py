@@ -1345,7 +1345,12 @@ class StorageManagerDuckDB(StorageManager):
 
         if backup_name is None:
             backup_name = self.db_file + ".bk"
-        shutil.copy(self.db_file, backup_name)
+        # Windows refuses to read an open DuckDB file, and closing writes the WAL into it
+        self.conn.close()
+        try:
+            shutil.copy(self.db_file, backup_name)
+        finally:
+            self.conn = self._create_connection()
 
         logger.info(f"Database {self.db_file} was backed up to {backup_name}.")
         return backup_name

@@ -2478,7 +2478,8 @@ class RingtailCore:
         Returns:
             bool: whether or not compatible
         """
-        return detect_db_type(self.db_file) == detect_db_type(database_path)
+        # the own database is open, and Windows refuses to read an open DuckDB file
+        return self.storageman.dialect == detect_db_type(database_path)
 
     @staticmethod
     def defaults() -> dict:
