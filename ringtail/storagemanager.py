@@ -96,7 +96,7 @@ class PoseData(NamedTuple):
 
 class StorageManager(ABC):
     """Base class for a generic virtual screening database object.
-    This class holds some of the common API for StorageManager child classes. 
+    This class holds some of the common API for StorageManager child classes.
     Each child class will implement their own functions to write to and read from the database
 
     The current schema version lives in schema.SCHEMA_VERSION and is stamped into
@@ -728,7 +728,9 @@ class StorageManager(ABC):
         # screens are often all named output.db in separate folders, and DuckDB also
         # names the primary database after its own stem, so it is reserved as well.
         used_aliases = {"main", db_alias_from_path(self.db_file).lower()}
-        used_aliases.update(name.lower() for name in alternative_database_names.values())
+        used_aliases.update(
+            name.lower() for name in alternative_database_names.values()
+        )
 
         def _unique_alias(path: str) -> str:
             base = f"xref_{db_alias_from_path(path)}"
@@ -742,12 +744,17 @@ class StorageManager(ABC):
         # one alias per database, the first wanted database is this one
         aliases = {}
         entries = []
-        for kind, databases in (("wanted", wanted_dbs), ("unwanted", unwanted_dbs or [])):
+        for kind, databases in (
+            ("wanted", wanted_dbs),
+            ("unwanted", unwanted_dbs or []),
+        ):
             for path, scope in databases:
                 if not aliases:
                     aliases[path] = "main"
                 elif path not in aliases:
-                    aliases[path] = alternative_database_names.get(path) or _unique_alias(path)
+                    aliases[path] = alternative_database_names.get(
+                        path
+                    ) or _unique_alias(path)
                 entries.append((kind, aliases[path], path, scope))
 
         attached = []
@@ -764,7 +771,9 @@ class StorageManager(ABC):
                     or self._is_candidates_table(scope)
                 ):
                     continue
-                bookmarks = self.get_all_bookmark_names(None if alias == "main" else alias)
+                bookmarks = self.get_all_bookmark_names(
+                    None if alias == "main" else alias
+                )
                 if scope.lower() not in bookmarks:
                     raise OptionError(
                         f"{path or self.db_file} has no bookmark or status table named {scope!r}."
@@ -786,8 +795,12 @@ class StorageManager(ABC):
                 )
                 for name, (_, alias, _, scope) in zip(names, entries)
             ]
-            wanted = [name for name, entry in zip(names, entries) if entry[0] == "wanted"]
-            unwanted = [name for name, entry in zip(names, entries) if entry[0] == "unwanted"]
+            wanted = [
+                name for name, entry in zip(names, entries) if entry[0] == "wanted"
+            ]
+            unwanted = [
+                name for name, entry in zip(names, entries) if entry[0] == "unwanted"
+            ]
             wanted_joins = " ".join(
                 f"INNER JOIN {name} ON {wanted[0]}.ligname = {name}.ligname"
                 for name in wanted[1:]
@@ -795,7 +808,9 @@ class StorageManager(ABC):
             unwanted_cte = ""
             unwanted_where = ""
             if unwanted:
-                exclude_union = " UNION ".join(f"SELECT ligname FROM {name}" for name in unwanted)
+                exclude_union = " UNION ".join(
+                    f"SELECT ligname FROM {name}" for name in unwanted
+                )
                 unwanted_cte = f", unwanted AS ({exclude_union})"
                 unwanted_where = "WHERE i.ligname NOT IN (SELECT ligname FROM unwanted)"
             query = f"""
@@ -876,7 +891,9 @@ class StorageManager(ABC):
             OptionError: if cluster_type is not "mfp" or "ifp"
         """
         if cluster_type.lower() not in ("mfp", "ifp"):
-            raise OptionError(f"cluster_type must be 'mfp' or 'ifp', not {cluster_type!r}.")
+            raise OptionError(
+                f"cluster_type must be 'mfp' or 'ifp', not {cluster_type!r}."
+            )
         logger.debug("Preparing to cluster")
         time0 = time.perf_counter()
 
@@ -990,7 +1007,9 @@ class StorageManager(ABC):
             logger.info(
                 "The two databases have compatible receptors. Merging will proceed."
             )
-            if not self.db_query(f"SELECT COUNT(*) FROM {merging_db_alias}.Results").fetchone()[0]:
+            if not self.db_query(
+                f"SELECT COUNT(*) FROM {merging_db_alias}.Results"
+            ).fetchone()[0]:
                 raise MergeError(f"{merging_db} has no results to merge.")
 
             # add to merging table the absolute path
@@ -1144,12 +1163,10 @@ class StorageManager(ABC):
         for status_table in ("Accepted", "Maybe", "Rejected"):
             if not self._is_table(status_table):
                 continue  # older database predating the status tables
-            self.db_query(
-                f"""
+            self.db_query(f"""
         INSERT INTO {alias}.{status_table} ({cols(STATUS_TABLE_SCHEMA)})
         SELECT {cols(STATUS_TABLE_SCHEMA)} FROM main.{status_table}
-        WHERE main.{status_table}.pose_id IN ({scope_poses});"""
-            )
+        WHERE main.{status_table}.pose_id IN ({scope_poses});""")
         logger.debug("Pose statuses have been copied into the new subset database.")
         if has_comments:
             comments = f"""
@@ -2125,7 +2142,9 @@ class StorageManager(ABC):
         """
         # Accept either form, so callers that do not rename anything can pass a list
         headers = (
-            dict(columns) if isinstance(columns, dict) else {col: None for col in columns}
+            dict(columns)
+            if isinstance(columns, dict)
+            else {col: None for col in columns}
         )
 
         # Build a flat map of column_name -> table from all queryable tables
@@ -2311,7 +2330,9 @@ class StorageManager(ABC):
         # opening the database checks its schema version
         with self:
             pass
-        logger.info(f"{self.db_file} is at the current schema version, nothing to upgrade.")
+        logger.info(
+            f"{self.db_file} is at the current schema version, nothing to upgrade."
+        )
 
     @abstractmethod
     def db_query(self, query: str, params: tuple = ()) -> Any:
@@ -3810,7 +3831,9 @@ class StorageManager(ABC):
 
     def _max_id(self, table: str, column: str) -> int:
         """Returns the largest id in a table column, 0 if the table is empty."""
-        return self.db_query(f"SELECT COALESCE(MAX({column}), 0) FROM {table}").fetchone()[0]
+        return self.db_query(
+            f"SELECT COALESCE(MAX({column}), 0) FROM {table}"
+        ).fetchone()[0]
 
     @staticmethod
     def _decode_flexres_column(value) -> list:

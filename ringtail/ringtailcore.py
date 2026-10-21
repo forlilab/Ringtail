@@ -50,7 +50,7 @@ from .exceptions import (
     RingtailError,
 )
 from .mpmanager import MPManager
-from . import receptormanager as RM 
+from . import receptormanager as RM
 from .outputmanager import OutputManager
 from .storagemanager import StorageManager
 from .storagemanager_duckdb import StorageManagerDuckDB, HAS_DUCK
@@ -73,6 +73,15 @@ class PoseMol(NamedTuple):
     ligname: str
     flexres_mols: list
     properties: dict
+
+
+class PoseDetails(NamedTuple):
+    pose_id: int
+    mol: object
+    ligname: str
+    properties: dict
+    comment: str | None
+    interactions: list[tuple]
 
 
 class LigandMol(NamedTuple):
@@ -148,7 +157,8 @@ def _absolute_crossref_paths(recorded: dict) -> dict:
         if recorded.get(key):
             # "" names this database, it has no path to make absolute
             recorded[key] = [
-                (os.path.abspath(db) if db else db, scope) for db, scope in recorded[key]
+                (os.path.abspath(db) if db else db, scope)
+                for db, scope in recorded[key]
             ]
     return recorded
 
@@ -323,7 +333,9 @@ class RingtailCore:
             if results.receptor_file_path:
                 # parse the receptor string for interaction calculation
                 # make receptor string
-                suffixes = [s.lower() for s in Path(results.receptor_file_path).suffixes]
+                suffixes = [
+                    s.lower() for s in Path(results.receptor_file_path).suffixes
+                ]
                 if ".pdbqt" in suffixes:
                     logger.debug(
                         "Building receptor string from .pdbqt file for interaction calculation"
@@ -345,7 +357,9 @@ class RingtailCore:
                         f"Receptor file {results.receptor_file_path} must be a .pdbqt or a meeko Polymer .json."
                     )
             # overwrite deletes the stored receptor, and a new database has no Receptors table yet
-            elif not overwrite and "receptors" in [t.lower() for t in self.all_database_tables()]:
+            elif not overwrite and "receptors" in [
+                t.lower() for t in self.all_database_tables()
+            ]:
                 logger.debug(
                     "No receptor file path provided, attempting to load receptor string from database"
                 )
@@ -356,7 +370,10 @@ class RingtailCore:
                     "save a receptor to the database first, or set calculate_interactions=False."
                 )
             # readers log nowhere under spawn, so check the receptor here
-            if make_interaction_finder(results.receptor_string, interaction_cutoffs) is None:
+            if (
+                make_interaction_finder(results.receptor_string, interaction_cutoffs)
+                is None
+            ):
                 logger.warning(
                     "The receptor could not be read, interactions will not be calculated."
                 )
@@ -554,9 +571,7 @@ class RingtailCore:
             if ".json" in extensions:
                 receptor_name, receptor_jsons = self._process_receptor_polymer(receptor)
             elif ".pdbqt" in extensions:
-                receptor_name, receptor_blob = RM.make_receptor_blob(
-                    receptor
-                )
+                receptor_name, receptor_blob = RM.make_receptor_blob(receptor)
             else:
                 raise OptionError(
                     f"Receptor {receptor} must be a .pdbqt or a meeko Polymer .json file."
@@ -754,7 +769,9 @@ class RingtailCore:
                     )
                     break
 
-                batch = sm.fetch_poses_pending_interactions(track_table_name, chunk_size)
+                batch = sm.fetch_poses_pending_interactions(
+                    track_table_name, chunk_size
+                )
                 if not batch:
                     break
 
@@ -1082,13 +1099,11 @@ class RingtailCore:
 
             # Process the union of the max miss combinations of interactions
             with self.storageman:
-                num_passing_ligands, union_bookmark = (
-                    self.storageman.get_maxmiss_union(
-                        len(interaction_combs),
-                        output_bookmark,
-                        union_filters,
-                        input_bookmark,
-                    )
+                num_passing_ligands, union_bookmark = self.storageman.get_maxmiss_union(
+                    len(interaction_combs),
+                    output_bookmark,
+                    union_filters,
+                    input_bookmark,
                 )
             # union result is the pre-cluster input for the max_miss path
             effective_bookmark = union_bookmark
@@ -1115,7 +1130,9 @@ class RingtailCore:
                     output_all_poses,
                     order_results,
                     clustering,
-                    max_miss_combs=None if write_one_bookmark else len(interaction_combs),
+                    max_miss_combs=(
+                        None if write_one_bookmark else len(interaction_combs)
+                    ),
                 )
         else:
             logger.warning(f"WARNING: No ligands found passing filters{print_string}.")
@@ -1645,7 +1662,9 @@ class RingtailCore:
                 "Bookmark prefix contains illegal symbols, please only use letters, numbers, and underscore."
             )
         first = wanted_dbs[0][0] if wanted_dbs else None
-        if first is None or (first and os.path.abspath(first) != os.path.abspath(self.db_file)):
+        if first is None or (
+            first and os.path.abspath(first) != os.path.abspath(self.db_file)
+        ):
             raise OptionError(
                 f"The first wanted database must be this database ({self.db_file}), given by its path or as ''."
             )
@@ -1998,6 +2017,48 @@ class RingtailCore:
         bookmark_name = bookmark_name.lower() if bookmark_name else None
         with self.storageman as sm:
             return sm.fetch_histogram_counts(column, num_bins, bookmark_name)
+
+    @_wrap_exceptions
+    def get_pose_details(
+        self,
+        pose_ids: int | list[int],
+        include_comment: bool = True,
+    ) -> list[PoseDetails]:
+
+        if isinstance(pose_ids, int):
+            pose_ids = [pose_ids]
+        if not pose_ids:
+            return []
+
+        with self.storageman as sm:
+            pose_rows = sm.fetch_rdkit_pose_properties(
+                pose_ids,
+                include_comment=include_comment,
+            )
+            interactions_by_pose = sm.fetch_pose_interactions(pose_ids)
+
+        result = []
+        for pose in pose_rows:
+            mol = self._build_pose_mol(
+                pose.rdmol, pose.pose_coordinates, name=pose.ligname
+            )
+            if mol is None:
+                raise RTCoreError(f"Could not build Mol for pose {pose.pose_id}")
+            interactions = [
+                tuple(record) for record in interactions_by_pose.get(pose.pose_id, [])
+            ]
+            properties = self._pose_properties(pose, None, False)
+            result.append(
+                PoseDetails(
+                    pose_id=pose.pose_id,
+                    mol=mol,
+                    ligname=pose.ligname,
+                    properties=properties,
+                    comment=pose.comment if include_comment else None,
+                    interactions=interactions,
+                )
+            )
+        return result
 
     @_wrap_exceptions
     def all_database_tables(self) -> list:
@@ -2977,10 +3038,15 @@ class RingtailCore:
             df = sm.to_dataframe(requested_data, table=table)
         if "pose_coordinates" in df.columns:
             df["pose_coordinates"] = df["pose_coordinates"].map(
-                lambda stored: None
-                if stored is None
-                else json.dumps(
-                    [[round(float(c), 3) for c in atom] for atom in sm._deserialize_pose_coordinates(stored)]
+                lambda stored: (
+                    None
+                    if stored is None
+                    else json.dumps(
+                        [
+                            [round(float(c), 3) for c in atom]
+                            for atom in sm._deserialize_pose_coordinates(stored)
+                        ]
+                    )
                 )
             )
         df.to_csv(csv_name, index=False)
