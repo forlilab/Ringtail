@@ -315,6 +315,8 @@ class StorageManager(ABC):
         Returns:
             list: of bookmark names
         """
+        if db_name is None and db_path is None and not self.tables_in_db():
+            return []
         if db_path:
             db_name = db_name or "attached_db"
             self._attach_db(db_path, db_name)
