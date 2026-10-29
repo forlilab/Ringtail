@@ -1555,7 +1555,7 @@ class RingtailCore:
             )
             return
         with self.storageman:
-            self.storageman._require_scope(bookmark_name)
+            self.storageman.require_scope(bookmark_name)
             if self.storageman.table_length(bookmark_name) == 0:
                 logger.warning(
                     f"No poses in bookmark '{bookmark_name}'. Database not exported."
@@ -1811,7 +1811,7 @@ class RingtailCore:
             return sm.get_pose_comment(pose_id)
 
     @_wrap_exceptions
-    def get_row_from_pose(self, table: str, pose_id: int) -> int:
+    def get_row_from_pose(self, table: str, pose_id: int) -> int | None:
         """
         Method to get table row for a a pose id in given table, used to support gui
 
@@ -1820,14 +1820,30 @@ class RingtailCore:
             pose_id (int):
 
         Returns:
-            int: row id in given table, the paging key of get_scrolling_table_data (for a SQLite bookmark the pose_id)
+            int: row id in given table, the paging key of get_table_page (for a SQLite bookmark the pose_id)
         """
-        table = table.lower()
+        table = self.validate_table_selection(table)
         with self.storageman as sm:
             return sm.pose_row_in_table(table, pose_id)
 
     @_wrap_exceptions
-    def get_scrolling_table_data(
+    def get_initial_table_page(self, table: str, length: int = 100) -> dict:
+        """
+        Gets the first page of a table plus its length
+
+        Args:
+            table (str): table name
+            length (int, optional): How many rows to request. Defaults to 100.
+
+        Returns:
+            dict:
+        """
+        total_length = self.table_length(table)
+        page = self.get_table_page(table, length=length)
+        return {"length": total_length, "page": page}
+
+    @_wrap_exceptions
+    def get_table_page(
         self, table: str, length: int = 100, starting_row_id: int = None, reverse=False
     ) -> dict[list[str], list]:
         """
@@ -1835,20 +1851,91 @@ class RingtailCore:
 
         Args:
             table (str): name of table or bookmark
-            length (int, optional): number of rows to collect. Defaults to 100.
+            length (int, optional): number of rows to collect per page, for this method 3 pages (3x length). Defaults to 100.
             starting_row_id (int, optional): rowid to start fetching from. Defaults to the first row of the table.
             reverse (bool, optional): whether to collect data in descending/reverse order. Defaults to False
 
         Returns:
             dict[list[str], list]: dict of headers and data
         """
-        table = table.lower()
+
+        table = self.validate_table_selection(table)
         with self.storageman as sm:
             if starting_row_id is None:
                 starting_row_id = sm.get_starting_rowid(table)
             return sm.fetch_viewable_data_columns_from(
                 table, length, starting_row_id, reverse
             )
+
+    @_wrap_exceptions
+    def get_table_window(self, table: str, pose_id: int, length: int) -> dict:
+        rowid = self.get_row_from_pose(table, pose_id)
+        if rowid is None:
+            return None
+
+        target = self.get_table_page(table, length, starting_row_id=rowid)
+        target_rows = target["data"]
+        if not target_rows:
+            return None
+
+        paging_column = target["headers"].index("paging_id")
+        previous_rows = self.get_table_page(
+            table,
+            length,
+            starting_row_id=target_rows[0][paging_column] - 1,
+            reverse=True,
+        )["data"]
+        previous_rows.reverse()
+        next_rows = self.get_table_page(
+            table, length, starting_row_id=target_rows[-1][paging_column] + 1
+        )["data"]
+
+        return {
+            "headers": target["headers"],
+            "target": target_rows,
+            "previous": previous_rows,
+            "next": next_rows,
+        }
+
+    @_wrap_exceptions
+    def get_adjacent_pose(
+        self, table: str, pose_id: int, direction: int, wrap: bool = False
+    ) -> dict | None:
+        """
+        Returns the next row (up or down) containing the requested adjacent pose
+
+        Args:
+            table (str): _description_
+            pose_id (int): _description_
+            direction (int): _description_
+            wrap (bool, optional): _description_. Defaults to False.
+
+        Returns:
+            dict: _description_
+        """
+        if direction not in [1, -1]:
+            raise OptionError(
+                f"Scrolling direction can only be -1 or 1, not {direction}"
+            )
+        row = self.get_row_from_pose(table, pose_id)
+        reverse = direction == -1
+        if row is None:
+            return None
+
+        data = self.get_table_page(table, 1, row + direction, reverse)
+        # if last row, wrap if requested
+        if not data["data"] and wrap:
+            boundary = (
+                self.get_ending_rowid(table)
+                if reverse
+                else self.get_starting_rowid(table)
+            )
+            if boundary is None:
+                return None
+
+            data = self.get_table_page(table, 1, boundary, reverse)
+
+        return data if data["data"] else None
 
     @_wrap_exceptions
     def get_table_data(
@@ -1910,6 +1997,7 @@ class RingtailCore:
         Returns:
             int: number of poses in table/bookmark, or of distinct values
         """
+        table = self.validate_table_selection(table)
 
         with self.storageman:
             return self.storageman.table_length(table, distinct_column)
@@ -1917,7 +2005,7 @@ class RingtailCore:
     @_wrap_exceptions
     def get_starting_rowid(self, table: str):
         """
-        Returns the lowest row id of a table or bookmark, the paging key of get_scrolling_table_data (for a SQLite bookmark its lowest pose_id).
+        Returns the lowest row id of a table or bookmark, the paging key of get_table_page (for a SQLite bookmark its lowest pose_id).
 
         Args:
             table (str): table or bookmark name
@@ -1925,9 +2013,35 @@ class RingtailCore:
         Returns:
             int: rowid
         """
-        table = table.lower()
+        table = self.validate_table_selection(table)
         with self.storageman:
             return self.storageman.get_starting_rowid(table)
+
+    @_wrap_exceptions
+    def get_ending_rowid(self, table: str):
+        """
+        Returns the highest row id of a table or bookmark, the paging key of get_table_page (for a SQLite bookmark its lowest pose_id).
+
+        Args:
+            table (str): table or bookmark name
+
+        Returns:
+            int: rowid
+        """
+        table = self.validate_table_selection(table)
+        with self.storageman:
+            return self.storageman.get_ending_rowid(table)
+
+    @_wrap_exceptions
+    def validate_table_selection(self, table_name: str) -> str:
+        """Validate selected data table and return normalized name"""
+
+        table_name = table_name.lower()
+
+        with self.storageman as sm:
+            sm.require_scope(table_name)
+
+        return table_name
 
     @_wrap_exceptions
     def database_is_empty(self) -> bool:

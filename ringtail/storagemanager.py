@@ -1937,7 +1937,7 @@ class StorageManager(ABC):
         R.delta, R.num_interactions, R.unbound_energy,
         R.reference_RMSD, R.energies_inter, R.energies_vdw,
         R.energies_electro, R.energies_flexlig, R.energies_flexlr,
-        R.energies_intra, R.energies_torsional, {rowid}"""
+        R.energies_intra, R.energies_torsional, {rowid} AS paging_id"""
 
         query.SELECT(ordered_columns)
 
@@ -1946,7 +1946,7 @@ class StorageManager(ABC):
         ).ORDER_BY(rowid).LIMIT(length).DESC(reverse)
 
         cursor = self.db_query(*query.build())
-        headers = [desc[0] for desc in cursor.description]
+        headers = [desc[0].lower() for desc in cursor.description]
         data = cursor.fetchall()
         return {"headers": headers, "data": data}
 
@@ -2000,7 +2000,7 @@ class StorageManager(ABC):
         Returns:
             pd.DataFrame: interactions presented as a dataframe
         """
-        self._require_scope(bookmark_name)
+        self.require_scope(bookmark_name)
         query = f"""
         SELECT DISTINCT
             II.interaction_type,
@@ -2474,6 +2474,18 @@ class StorageManager(ABC):
         ...
 
     @abstractmethod
+    def get_ending_rowid(self, table: str) -> int:
+        """
+        Ending row id for a table
+        Args:
+            table (str): table or bookmark name
+
+        Returns:
+            int: last row id belonging to that selection
+        """
+        ...
+
+    @abstractmethod
     def set_pose_comment(self, pose_id: int, comment: str) -> None:
         """Write (or clear) a user comment for a pose."""
         ...
@@ -2789,7 +2801,7 @@ class StorageManager(ABC):
         Returns:
             QueryBuilder: the same query, modified
         """
-        self._require_scope(table)
+        self.require_scope(table)
         if table is None or table.lower() == "results":
             return query
         return query.WHERE(
@@ -2886,7 +2898,7 @@ class StorageManager(ABC):
                 raise OptionError(
                     "Cannot use 'score_percentile' or 'le_percentile' with 'input_bookmark'."
                 )
-            self._require_scope(input_bookmark)
+            self.require_scope(input_bookmark)
             filtering_window = f"(SELECT * FROM Results WHERE pose_id IN ({self._get_scope_poses_query(input_bookmark)}))"
 
         if filters.is_flat():
@@ -3370,7 +3382,7 @@ class StorageManager(ABC):
             )
         """
 
-    def _require_scope(self, scope_name: str) -> None:
+    def require_scope(self, scope_name: str) -> None:
         """Raises OptionError unless scope_name is Results, candidates, a status table or a bookmark."""
         if (
             scope_name is None

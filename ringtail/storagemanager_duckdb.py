@@ -1152,7 +1152,9 @@ class StorageManagerDuckDB(StorageManager):
         Returns:
             str: formatted sql
         """
-        ligand_sql_string = ", ".join("'" + l.replace("'", "''") + "'" for l in ligand_list)
+        ligand_sql_string = ", ".join(
+            "'" + l.replace("'", "''") + "'" for l in ligand_list
+        )
         return f"""
             SELECT pose_id FROM Results
             WHERE ligand_id IN (
@@ -1580,6 +1582,31 @@ class StorageManagerDuckDB(StorageManager):
         """
         query = self.QueryBuilder()
         query.SELECT("MIN(rowid)")
+
+        if self._is_table(table):
+            query.FROM(table)
+        elif self.is_bookmark(table):
+            query.FROM("Filtered_poses").WHERE(
+                "filter_id = (SELECT filter_id FROM Filters WHERE name = ?)", table
+            )
+        elif self._is_candidates_table(table):
+            query.FROM("Results").WHERE(f"pose_id IN {CANDIDATES_SUBQ}")
+        else:
+            logger.error(f"Table -{table}- does not exist in the database.")
+            return None
+        return self.db_query(*query.build()).fetchone()[0]
+
+    def get_ending_rowid(self, table: str) -> int:
+        """
+        Highest row id of a table
+        Args:
+            table (str): table or bookmark name
+
+        Returns:
+            int: last row id belonging to that selection
+        """
+        query = self.QueryBuilder()
+        query.SELECT("MAX(rowid)")
 
         if self._is_table(table):
             query.FROM(table)
