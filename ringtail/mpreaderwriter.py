@@ -291,7 +291,9 @@ class Writer(mp.Process):
 
         except Exception as e:
             tb = traceback.format_exc()
-            error = WriteToStorageError(f"Error occurred while writing to the database: {e}")
+            error = WriteToStorageError(
+                f"Error occurred while writing to the database: {e}"
+            )
             # child logging is not visible under spawn, so report to the parent
             self.pipe.send((error, tb, WRITER_ERROR_SOURCE))
             raise error
@@ -327,6 +329,9 @@ class Writer(mp.Process):
             key: [row for packet in packets for row in packet[key]]
             for key in ("ligands", "poses", "interactions")
         }
+        data["custom_data"] = [
+            row for packet in packets for row in packet.get("custom_data", [])
+        ]
         with self.storageman as sm:
             sm.insert_data(data, self.duplicate_handling)
 
@@ -361,7 +366,9 @@ class Writer(mp.Process):
                     name = "unknown"
                 self.pipe.send(
                     (
-                        WriteToStorageError(f"Error while writing {name} to the database: {e}"),
+                        WriteToStorageError(
+                            f"Error while writing {name} to the database: {e}"
+                        ),
                         traceback.format_exc(),
                         f"ligand {name}",
                     )

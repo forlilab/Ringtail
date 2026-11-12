@@ -353,11 +353,13 @@ class ADGPUMoleculeSupplier:
         heavy_atoms = mol.GetNumHeavyAtoms()
         results_dict.update(
             {
-                "leff": [round(x / heavy_atoms, 2) for x in results_dict["docking_score"]],
+                "leff": [
+                    round(x / heavy_atoms, 2) for x in results_dict["docking_score"]
+                ],
                 # plain float lists; serialized per dialect by the storage manager
                 "pose_coordinates": [
                     coordinate.tolist() for coordinate in poses_coordinates
-                ]
+                ],
             }
         )
 
@@ -886,17 +888,15 @@ def process_docked_mol(
     interaction_rows = []
     results_dict = results_row() if add_default_columns else {}
     n_heavy = mol.GetNumHeavyAtoms()
-    mol, mol_properties = prepare_mol_for_database(
+    mol, mol_properties, custom_properties = prepare_mol_for_database(
         mol, store_properties=["docking_score", "pose_rank"]
     )
     ligand_row = [
         ligname,
         smiles,
         mol.ToBinary(
-            Chem.PropertyPickleOptions.MolProps
-            | Chem.PropertyPickleOptions.AtomProps
-            | Chem.PropertyPickleOptions.BondProps
-        ),
+            Chem.PropertyPickleOptions.AtomProps | Chem.PropertyPickleOptions.BondProps
+        ),  # not storing atom or bond properties explicitly so they are pickled with mol
     ]
 
     results_dict.update(mol_properties)
@@ -912,6 +912,8 @@ def process_docked_mol(
             f"is not a valid docking result. "
             f"Properties present: {sorted(mol.GetPropNames()) or 'none'}."
         )
+    if results_dict.get("pose_rank") is None:
+        results_dict["pose_rank"] = 1
     results_dict.update(
         {
             "ligname": ligname,
@@ -932,10 +934,6 @@ def process_docked_mol(
                 {
                     "ligname": ligname,
                     "run_number": run_number,
-                    # The real rank, read out of the molecule's properties above. A
-                    # hardcoded 1 here resolved every pose of a ligand to that ligand's
-                    # first pose, so rank 1 collected everyone's interactions and the
-                    # rest were stored with none.
                     "pose_rank": results_dict["pose_rank"],
                 },
                 single_pose_coordinate,
@@ -948,12 +946,21 @@ def process_docked_mol(
         results_dict.update(
             {"num_interactions": num_interactions[0], "num_hb": num_hb[0]}
         )
+    if custom_properties:
+        custom_properties.update(
+            {
+                "ligname": ligname,
+                "run_number": run_number,
+                "pose_rank": results_dict["pose_rank"],
+            }
+        )
 
     return {
         "ligands": [ligand_row],
         "poses": [_dict_to_pose_record(results_dict)],
         "interactions": _dicts_to_interaction_records(interaction_rows),
         "receptor": [],
+        "custom_data": [custom_properties] if custom_properties else [],
     }
 
 
@@ -993,7 +1000,7 @@ def generate_ligand_data_list_from_pdbqt_dlg(
     # return the whole list with conformers if requested
     rdkit_mol = RDKitMolCreate.from_pdbqt_mol(pdbqt_mol, only_hs_with_coords=True)[0]
 
-    rdkit_mol, properties = prepare_mol_for_database(rdkit_mol)
+    rdkit_mol, properties, _ = prepare_mol_for_database(rdkit_mol)
     pose_coordinates = properties.get("pose_coordinates")
     smiles = Chem.MolToSmiles(rdkit_mol)
     ligand_rdbin = rdkit_mol.ToBinary(
@@ -1009,7 +1016,7 @@ def generate_ligand_data_list_from_pdbqt_dlg(
 
 def prepare_mol_for_database(
     mol: Chem.Mol, store_properties: list = None
-) -> tuple[Chem.Mol, dict]:
+) -> tuple[Chem.Mol, dict, dict]:
     """
     In this method right now the pose coordinates assumes one or more conformers,
     while the property assumes only one mol with non-list property
@@ -1038,7 +1045,11 @@ def prepare_mol_for_database(
                 mol.ClearProp(prop_name)
             else:
                 properties.update({db_column: _read_deprecated_prop(mol, db_column)})
-    return mol, properties
+    # Collect remaining properties even when no standard properties were requested.
+    custom_props = mol.GetPropsAsDict(
+        includePrivate=False, includeComputed=False, autoConvertStrings=True
+    )
+    return mol, properties, custom_props
 
 
 def _read_deprecated_prop(mol: Chem.Mol, db_column: str):

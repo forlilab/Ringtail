@@ -98,7 +98,9 @@ class StorageManagerDuckDB(StorageManager):
 
         self.conn.execute(sql_insert)
 
-    def _create_temporary_results_tables(self):
+    def _create_temporary_results_tables(
+        self, custom_columns: dict[str, type] | None = None
+    ):
         """
         Creates temporary tables for results and interactions, which will be
         used for staging incoming data.
@@ -145,8 +147,30 @@ class StorageManagerDuckDB(StorageManager):
         self.db_query(create_temp_results)
         self.db_query(create_temp_interactions)
 
+        self.db_query("DROP TABLE IF EXISTS Custom_temp")
+        if custom_columns:
+            sql_types = {
+                int: "INTEGER",
+                float: "DOUBLE",
+                bool: "DOUBLE",
+                str: "VARCHAR",
+            }
+            columns = []
+            for name, python_type in custom_columns.items():
+                quoted_name = '"' + name.replace('"', '""') + '"'
+                columns.append(f"{quoted_name} {sql_types[python_type]}")
+
+            column_definitions = ",\n".join(columns)
+            create_temp_custom = f"""
+            CREATE TEMP TABLE Custom_temp({column_definitions});
+            """
+            self.db_query(create_temp_custom)
+
     def _insert_results_in_temp_tables(
-        self, results_array: list, interactions_array: list
+        self,
+        results_array: list,
+        interactions_array: list,
+        custom_data: list | None = None,
     ):
         """
         Inserts docking results and interactions into their respective temporary
@@ -230,6 +254,18 @@ class StorageManagerDuckDB(StorageManager):
             SELECT df.ligname, df.run_number, df.pose_rank, df.type, df.chain, df.residue, df.resid, df.recname, df.recid
             FROM incoming_interaction AS df;"""
         self.db_query(temp_interaction_insert)
+
+        if custom_data:
+            # dynamically create columns
+            custom_df = pd.DataFrame(custom_data)
+            columns = ['"' + col.replace('"', '""') + '"' for col in custom_df.columns]
+            self.conn.register("incoming_custom_data", custom_df)
+            temp_custom_insert = f"""
+                INSERT INTO Custom_temp ({",".join(columns)})
+                SELECT {",".join(["df." + col for col in columns])}
+                FROM incoming_custom_data AS df;"""
+            print("the temp insert sql ", temp_custom_insert)
+            self.db_query(temp_custom_insert)
 
     def _move_tempresults_to_database(self):
         """
@@ -325,10 +361,85 @@ class StorageManagerDuckDB(StorageManager):
         )
         self.db_query(temp_to_interaction)
 
+        # first check if we need to add new columns to
+        has_custom = self._check_for_custom_data()
+        print(f"We do indeed have custom data? {has_custom}")
+        if has_custom:
+            identifiers = {"ligname", "run_number", "pose_rank"}
+            custom_columns = [
+                name
+                for name in self._fetch_dynamic_table_column_names("Custom_temp")
+                if name.lower() not in identifiers
+            ]
+            quoted_columns = [
+                '"' + name.replace('"', '""') + '"' for name in custom_columns
+            ]
+            insert_columns = ", ".join(quoted_columns)
+            select_columns = ", ".join(f"CT.{col}" for col in quoted_columns)
+            temp_to_custom_pose_data = f"""
+                INSERT INTO custom_pose_data(pose_id, {insert_columns})
+                SELECT M.pose_id, {select_columns}
+                FROM Custom_temp AS CT
+                JOIN pose_map AS M
+                    ON CT.pose_rank = M.pose_rank
+                    AND CT.run_number = M.run_number
+                JOIN Ligands AS L
+                    ON M.ligand_id = L.ligand_id
+                    AND CT.ligname = L.ligname;"""
+            print("The insert query ", temp_to_custom_pose_data)
+            self.db_query(temp_to_custom_pose_data)
+
         # clear temp tables
         self.db_query("DELETE FROM pose_map")
         self.db_query("DELETE FROM Interactions_temp")
         self.db_query("DELETE FROM Results_temp")
+
+    def _check_for_custom_data(self) -> bool:
+        """
+        Checks if there is custom data in the current active insert session
+        """
+        if self._is_table("Custom_temp"):  # does temp tables show up in table list?
+            # ensure custom table exists
+            self._create_custom_pose_table()
+            self._ensure_custom_columns()
+            return True
+        return False
+
+    def _ensure_custom_columns(self):
+        """
+        Adds columns if necessary to permanent custom table from temporary custom table
+        """
+        identifiers = {"ligname", "run_number", "pose_rank"}
+
+        permanent_columns = self._fetch_dynamic_table_column_names("custom_pose_data")
+        existing = {name.lower() for name in permanent_columns}
+
+        tmeporary_columns = self._fetch_dynamic_table_column_names("Custom_temp")
+
+        missing_columns = {
+            name: sql_type
+            for name, sql_type in tmeporary_columns.items()
+            if name.lower() not in existing | identifiers
+        }
+        print("The missing columns: ", missing_columns)
+        if missing_columns:
+            self._update_custom_columns("custom_pose_data", missing_columns)
+
+    def _update_custom_columns(self, table: str, columns: dict[str, str]):
+        for col, type in columns.items():
+            quoted_col = '"' + col.replace('"', '""') + '"'
+            self.db_query(f"""
+                ALTER TABLE {table} 
+                ADD COLUMN {quoted_col} {type};
+                """)
+
+    def _fetch_dynamic_table_column_names(self, table: str) -> dict[str, str]:
+        return dict(
+            self.db_query(
+                "SELECT name, type FROM pragma_table_info(?)",
+                [table],
+            ).fetchall()
+        )
 
     def _delete_new_duplicate_results(self):
         """Checks if a pose is uniquely represented in the Results table,
@@ -1152,7 +1263,9 @@ class StorageManagerDuckDB(StorageManager):
         Returns:
             str: formatted sql
         """
-        ligand_sql_string = ", ".join("'" + l.replace("'", "''") + "'" for l in ligand_list)
+        ligand_sql_string = ", ".join(
+            "'" + l.replace("'", "''") + "'" for l in ligand_list
+        )
         return f"""
             SELECT pose_id FROM Results
             WHERE ligand_id IN (

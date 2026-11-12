@@ -95,7 +95,7 @@ class StorageManagerSQLite(StorageManager):
 
         self.db_update(sql_insert, ligands, commit=False)
 
-    def _create_temporary_results_tables(self):
+    def _create_temporary_results_tables(self, custom_columns: set | None = None):
         """
         Creates temporary tables for results and interactions, which will be
         used for staging incoming data.
@@ -151,6 +151,21 @@ class StorageManagerSQLite(StorageManager):
         self.db_query(create_temp_interactions)
         self.db_query(create_temp_mapping_table)
 
+        if custom_columns:
+            create_temp_custom = """
+            CREATE TEMP TABLE IF NOT EXISTS Interactions_temp(
+                ligname             VARCHAR,
+                run_number          INTEGER,
+                pose_rank           INTEGER,
+                interaction_type    VARCHAR,
+                rec_chain           VARCHAR,
+                rec_resname         VARCHAR,
+                rec_resid           VARCHAR,
+                rec_atom            VARCHAR,
+                rec_atomid          VARCHAR);
+            """
+            self.db_query(create_temp_custom)
+
     def _insert_results_in_temp_tables(
         self, results_array: list[dict], interactions_array
     ):
@@ -190,7 +205,13 @@ class StorageManagerSQLite(StorageManager):
             """
         # pack pose_coordinates (a list of [x,y,z] floats) into a float32 BLOB
         packed = [
-            tuple(r._replace(pose_coordinates=self._serialize_pose_coordinates(r.pose_coordinates)))
+            tuple(
+                r._replace(
+                    pose_coordinates=self._serialize_pose_coordinates(
+                        r.pose_coordinates
+                    )
+                )
+            )
             for r in results_array
         ]
         self.db_update(temp_results_insert, packed, commit=False)
@@ -1093,7 +1114,9 @@ class StorageManagerSQLite(StorageManager):
         Returns:
             str: formatted sql
         """
-        ligand_sql_string = ", ".join("'" + l.replace("'", "''") + "'" for l in ligand_list)
+        ligand_sql_string = ", ".join(
+            "'" + l.replace("'", "''") + "'" for l in ligand_list
+        )
         return f"""
             SELECT pose_id, ligand_id FROM Results
             WHERE ligand_id IN (
@@ -1363,9 +1386,13 @@ class StorageManagerSQLite(StorageManager):
             logger.info("pose_coordinates is already a packed BLOB; nothing to do.")
             return
         logger.info("Converting pose_coordinates VARCHAR -> packed float32 BLOB ...")
-        self.conn.execute("ALTER TABLE Results ADD COLUMN pose_coordinates__native BLOB")
+        self.conn.execute(
+            "ALTER TABLE Results ADD COLUMN pose_coordinates__native BLOB"
+        )
         # snapshot ids first so we never read and write the same statement concurrently
-        pose_ids = [r[0] for r in self.conn.execute("SELECT pose_id FROM Results").fetchall()]
+        pose_ids = [
+            r[0] for r in self.conn.execute("SELECT pose_id FROM Results").fetchall()
+        ]
         for i in range(0, len(pose_ids), chunk_size):
             chunk = pose_ids[i : i + chunk_size]
             ph = ",".join("?" * len(chunk))
@@ -1375,13 +1402,18 @@ class StorageManagerSQLite(StorageManager):
             ).fetchall()
             updates = [
                 (
-                    self._serialize_pose_coordinates(json.loads(txt)) if txt is not None else None,
+                    (
+                        self._serialize_pose_coordinates(json.loads(txt))
+                        if txt is not None
+                        else None
+                    ),
                     pid,
                 )
                 for pid, txt in rows
             ]
             self.conn.executemany(
-                "UPDATE Results SET pose_coordinates__native = ? WHERE pose_id = ?", updates
+                "UPDATE Results SET pose_coordinates__native = ? WHERE pose_id = ?",
+                updates,
             )
         self.conn.execute("ALTER TABLE Results DROP COLUMN pose_coordinates")
         self.conn.execute(
@@ -1512,7 +1544,9 @@ class StorageManagerSQLite(StorageManager):
             # drop old bitvector table
             cur.execute("""DROP TABLE IF EXISTS Interaction_bitvectors;""")
             # only Interactions is indexable yet, the 3.0.0 step indexes the rest
-            for sql in build_create_indices(INTERACTIONS_SCHEMA.name, INTERACTIONS_SCHEMA):
+            for sql in build_create_indices(
+                INTERACTIONS_SCHEMA.name, INTERACTIONS_SCHEMA
+            ):
                 cur.execute(sql)
             self._set_ringtail_db_schema_version("2.0.0")  # set explicit version
             self.conn.commit()
@@ -2106,7 +2140,9 @@ class StorageManagerSQLite(StorageManager):
                 "filter_id = (SELECT filter_id FROM Filters WHERE name = ?)", table
             )
         elif self._is_candidates_table(table):
-            query.SELECT("MIN(rowid)").FROM("Results").WHERE(f"pose_id IN {CANDIDATES_SUBQ}")
+            query.SELECT("MIN(rowid)").FROM("Results").WHERE(
+                f"pose_id IN {CANDIDATES_SUBQ}"
+            )
         else:
             logger.error(f"Table -{table}- does not exist in the database.")
             return None

@@ -61,6 +61,8 @@ from .schema import (
     RECEPTORS_SCHEMA,
     STATUS_TABLE_SCHEMA,
     POSE_COMMENTS_SCHEMA,
+    CUSTOM_POSE_DATA_SCHEMA,
+    CUSTOM_LIGAND_DATA_SCHEMA,
     MINIMIZED_COLUMNS,
     ROW_ID_OWNERS,
     ROW_ID_TABLES,
@@ -96,7 +98,7 @@ class PoseData(NamedTuple):
 
 class StorageManager(ABC):
     """Base class for a generic virtual screening database object.
-    This class holds some of the common API for StorageManager child classes. 
+    This class holds some of the common API for StorageManager child classes.
     Each child class will implement their own functions to write to and read from the database
 
     The current schema version lives in schema.SCHEMA_VERSION and is stamped into
@@ -181,6 +183,7 @@ class StorageManager(ABC):
             docking_data (dict): docking results to be inserted, where key is ligand name and value is data to be written
             duplicate_handling (str, optional): Describes how to handle duplicates, if any. Defaults to None.
         """
+        # TODO ""custom_data"" is the field with custom columns
         ligands = docking_data.get("ligands", None)
         if ligands:
             self._insert_ligands(ligands)
@@ -188,9 +191,12 @@ class StorageManager(ABC):
         if interaction_data:
             self._insert_interaction_index_rows(interaction_data)
         poses = docking_data.get("poses", None)
+        custom_data = docking_data.get("custom_data", None)
         if poses:
             # interactions has ligname and pose rank
-            self._insert_docking_data(poses, interaction_data, duplicate_handling)
+            self._insert_docking_data(
+                poses, interaction_data, custom_data, duplicate_handling
+            )
         self.conn.commit()
 
     def post_insert_interactions(
@@ -728,7 +734,9 @@ class StorageManager(ABC):
         # screens are often all named output.db in separate folders, and DuckDB also
         # names the primary database after its own stem, so it is reserved as well.
         used_aliases = {"main", db_alias_from_path(self.db_file).lower()}
-        used_aliases.update(name.lower() for name in alternative_database_names.values())
+        used_aliases.update(
+            name.lower() for name in alternative_database_names.values()
+        )
 
         def _unique_alias(path: str) -> str:
             base = f"xref_{db_alias_from_path(path)}"
@@ -742,12 +750,17 @@ class StorageManager(ABC):
         # one alias per database, the first wanted database is this one
         aliases = {}
         entries = []
-        for kind, databases in (("wanted", wanted_dbs), ("unwanted", unwanted_dbs or [])):
+        for kind, databases in (
+            ("wanted", wanted_dbs),
+            ("unwanted", unwanted_dbs or []),
+        ):
             for path, scope in databases:
                 if not aliases:
                     aliases[path] = "main"
                 elif path not in aliases:
-                    aliases[path] = alternative_database_names.get(path) or _unique_alias(path)
+                    aliases[path] = alternative_database_names.get(
+                        path
+                    ) or _unique_alias(path)
                 entries.append((kind, aliases[path], path, scope))
 
         attached = []
@@ -764,7 +777,9 @@ class StorageManager(ABC):
                     or self._is_candidates_table(scope)
                 ):
                     continue
-                bookmarks = self.get_all_bookmark_names(None if alias == "main" else alias)
+                bookmarks = self.get_all_bookmark_names(
+                    None if alias == "main" else alias
+                )
                 if scope.lower() not in bookmarks:
                     raise OptionError(
                         f"{path or self.db_file} has no bookmark or status table named {scope!r}."
@@ -786,8 +801,12 @@ class StorageManager(ABC):
                 )
                 for name, (_, alias, _, scope) in zip(names, entries)
             ]
-            wanted = [name for name, entry in zip(names, entries) if entry[0] == "wanted"]
-            unwanted = [name for name, entry in zip(names, entries) if entry[0] == "unwanted"]
+            wanted = [
+                name for name, entry in zip(names, entries) if entry[0] == "wanted"
+            ]
+            unwanted = [
+                name for name, entry in zip(names, entries) if entry[0] == "unwanted"
+            ]
             wanted_joins = " ".join(
                 f"INNER JOIN {name} ON {wanted[0]}.ligname = {name}.ligname"
                 for name in wanted[1:]
@@ -795,7 +814,9 @@ class StorageManager(ABC):
             unwanted_cte = ""
             unwanted_where = ""
             if unwanted:
-                exclude_union = " UNION ".join(f"SELECT ligname FROM {name}" for name in unwanted)
+                exclude_union = " UNION ".join(
+                    f"SELECT ligname FROM {name}" for name in unwanted
+                )
                 unwanted_cte = f", unwanted AS ({exclude_union})"
                 unwanted_where = "WHERE i.ligname NOT IN (SELECT ligname FROM unwanted)"
             query = f"""
@@ -876,7 +897,9 @@ class StorageManager(ABC):
             OptionError: if cluster_type is not "mfp" or "ifp"
         """
         if cluster_type.lower() not in ("mfp", "ifp"):
-            raise OptionError(f"cluster_type must be 'mfp' or 'ifp', not {cluster_type!r}.")
+            raise OptionError(
+                f"cluster_type must be 'mfp' or 'ifp', not {cluster_type!r}."
+            )
         logger.debug("Preparing to cluster")
         time0 = time.perf_counter()
 
@@ -990,7 +1013,9 @@ class StorageManager(ABC):
             logger.info(
                 "The two databases have compatible receptors. Merging will proceed."
             )
-            if not self.db_query(f"SELECT COUNT(*) FROM {merging_db_alias}.Results").fetchone()[0]:
+            if not self.db_query(
+                f"SELECT COUNT(*) FROM {merging_db_alias}.Results"
+            ).fetchone()[0]:
                 raise MergeError(f"{merging_db} has no results to merge.")
 
             # add to merging table the absolute path
@@ -1144,12 +1169,10 @@ class StorageManager(ABC):
         for status_table in ("Accepted", "Maybe", "Rejected"):
             if not self._is_table(status_table):
                 continue  # older database predating the status tables
-            self.db_query(
-                f"""
+            self.db_query(f"""
         INSERT INTO {alias}.{status_table} ({cols(STATUS_TABLE_SCHEMA)})
         SELECT {cols(STATUS_TABLE_SCHEMA)} FROM main.{status_table}
-        WHERE main.{status_table}.pose_id IN ({scope_poses});"""
-            )
+        WHERE main.{status_table}.pose_id IN ({scope_poses});""")
         logger.debug("Pose statuses have been copied into the new subset database.")
         if has_comments:
             comments = f"""
@@ -2125,7 +2148,9 @@ class StorageManager(ABC):
         """
         # Accept either form, so callers that do not rename anything can pass a list
         headers = (
-            dict(columns) if isinstance(columns, dict) else {col: None for col in columns}
+            dict(columns)
+            if isinstance(columns, dict)
+            else {col: None for col in columns}
         )
 
         # Build a flat map of column_name -> table from all queryable tables
@@ -2205,6 +2230,14 @@ class StorageManager(ABC):
 
         for sql in build_create_table(
             POSE_COMMENTS_SCHEMA.name, POSE_COMMENTS_SCHEMA, self.dialect
+        ):
+            self.db_query(sql)
+        for sql in build_create_table(
+            CUSTOM_POSE_DATA_SCHEMA.name, CUSTOM_POSE_DATA_SCHEMA, self.dialect
+        ):
+            self.db_query(sql)
+        for sql in build_create_table(
+            CUSTOM_LIGAND_DATA_SCHEMA.name, CUSTOM_LIGAND_DATA_SCHEMA, self.dialect
         ):
             self.db_query(sql)
         self.conn.commit()
@@ -2311,7 +2344,9 @@ class StorageManager(ABC):
         # opening the database checks its schema version
         with self:
             pass
-        logger.info(f"{self.db_file} is at the current schema version, nothing to upgrade.")
+        logger.info(
+            f"{self.db_file} is at the current schema version, nothing to upgrade."
+        )
 
     @abstractmethod
     def db_query(self, query: str, params: tuple = ()) -> Any:
@@ -2541,6 +2576,13 @@ class StorageManager(ABC):
         ):
             self.db_query(sql)
 
+    def _create_custom_pose_table(self):
+        """Creates a table of each pose-interaction combination."""
+        for sql in build_create_table(
+            CUSTOM_POSE_DATA_SCHEMA.name, CUSTOM_POSE_DATA_SCHEMA, self.dialect
+        ):
+            self.db_query(sql)
+
     def _create_db_properties_table(self):
         """Create table of database properties used during write session to the database."""
         for sql in build_create_table(
@@ -2588,7 +2630,11 @@ class StorageManager(ABC):
         self.conn.commit()
 
     def _insert_docking_data(
-        self, results: list[list], interactions: list[list], duplicate_handling: str
+        self,
+        results: list[list],
+        interactions: list[list],
+        custom_data: list[dict] | None,
+        duplicate_handling: str,
     ):
         """Takes list of database rows to insert, adds data to results table.
         First stages data in temporary tables, then handles duplicates (if requested),
@@ -2601,10 +2647,29 @@ class StorageManager(ABC):
             options (dict): includes options on how to handle duplicates if there are any
 
         """
+        custom_cols = {}
+        if custom_data:
+            custom_cols = {
+                key: float if isinstance(value, (int, float)) else type(value)
+                for entry in custom_data
+                for key, value in entry.items()
+            }
+            # ensure the identifying columns use integers
 
-        self._create_temporary_results_tables()
-        self._insert_results_in_temp_tables(results, interactions)
+            custom_cols.update(
+                {
+                    "ligname": str,
+                    "run_number": int,
+                    "pose_rank": int,
+                }
+            )
+
+        print(f"\nCustom columns: {custom_cols}")
+
+        self._create_temporary_results_tables(custom_columns=custom_cols)
+        self._insert_results_in_temp_tables(results, interactions, custom_data)
         # handle duplicates if requested
+        # TODO handle duplicates of custom data
         if duplicate_handling and duplicate_handling.lower() == "replace":
             # first delete duplicate results and interactions
             # then insert all the new ones indiscrimenately
@@ -3810,7 +3875,9 @@ class StorageManager(ABC):
 
     def _max_id(self, table: str, column: str) -> int:
         """Returns the largest id in a table column, 0 if the table is empty."""
-        return self.db_query(f"SELECT COALESCE(MAX({column}), 0) FROM {table}").fetchone()[0]
+        return self.db_query(
+            f"SELECT COALESCE(MAX({column}), 0) FROM {table}"
+        ).fetchone()[0]
 
     @staticmethod
     def _decode_flexres_column(value) -> list:

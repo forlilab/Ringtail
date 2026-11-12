@@ -84,7 +84,7 @@ DUCKDB_TYPES: dict[str, str] = {
 # The database schema version, stamped into the ringtail_schema_version table of
 # every database created by this code. A database with no such table predates
 # versioning (a pre-release lab build) and must be upgraded before use.
-SCHEMA_VERSION = "3.0.0"
+SCHEMA_VERSION = "3.0.1"
 
 
 # ---------------------------------------------------------------------------
@@ -113,6 +113,22 @@ LIGANDS_SCHEMA = TableSchema(
         "rdmol": Column("BLOB", "RDKit molecule binary"),
     },
     sqlite_indices=[["ligname"]],
+)
+
+CUSTOM_POSE_DATA_SCHEMA = TableSchema(
+    name="custom_pose_data",
+    undo_on_failed_write=True,
+    columns={
+        "pose_id": Column("INTEGER", "pose", primary_key=True),
+    },
+)
+
+CUSTOM_LIGAND_DATA_SCHEMA = TableSchema(
+    name="custom_ligand_data",
+    undo_on_failed_write=True,
+    columns={
+        "ligand_id": Column("INTEGER", "ligand", primary_key=True),
+    },
 )
 
 RESULTS_SCHEMA = TableSchema(
@@ -327,7 +343,9 @@ FILTERS_SCHEMA = TableSchema(
             "groups the bookmarks one call created (e.g. _preclust, _0.._n, _union and the final bookmark)",
         ),
         "created": Column(
-            "DATETIME", "creation timestamp, gives replay order", default="CURRENT_TIMESTAMP"
+            "DATETIME",
+            "creation timestamp, gives replay order",
+            default="CURRENT_TIMESTAMP",
         ),
     },
 )
@@ -487,7 +505,10 @@ ALL_TABLE_NAMES = frozenset(TABLE_SCHEMAS)
 _UNDO_SCHEMAS = [s for s in TABLE_SCHEMAS.values() if s.undo_on_failed_write]
 #: growing id column of each table a failed write is undone in, and the table that owns it
 ROW_ID_OWNERS = {
-    name: s.name for s in _UNDO_SCHEMAS for name, col in s.columns.items() if col.autoincrement
+    name: s.name
+    for s in _UNDO_SCHEMAS
+    for name, col in s.columns.items()
+    if col.autoincrement
 }
 
 
