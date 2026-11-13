@@ -487,7 +487,30 @@ class StorageManagerDuckDB(StorageManager):
                         AND R.flexible_res_coordinates IS NULL))
                 AND L.ligand_id    = R.ligand_id);
         """
+        delete_custom_sql = """
+                DELETE FROM Custom_temp
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM Results_temp AS RT
+                    JOIN Results AS R
+                        ON (RT.receptor = R.receptor
+                            OR (RT.receptor IS NULL AND R.receptor IS NULL))
+                        AND RT.pose_coordinates = R.pose_coordinates
+                        AND (RT.flexible_res_coordinates = R.flexible_res_coordinates
+                            OR (RT.flexible_res_coordinates IS NULL
+                                AND R.flexible_res_coordinates IS NULL))
+                    JOIN Ligands AS L
+                        ON RT.ligname = L.ligname
+                        AND R.ligand_id = L.ligand_id
+                    WHERE 
+                        RT.ligname   = Custom_temp.ligname
+                        AND RT.pose_rank = Custom_temp.pose_rank
+                        AND RT.run_number = Custom_temp.run_number
+                );
+                """
         self.db_query(delete_int_sql)
+        if self._is_table("Custom_temp"):
+            self.db_query(delete_custom_sql)
         self.db_query(delete_res_sql)
 
     def _delete_old_duplicate_results(self):
@@ -529,6 +552,11 @@ class StorageManagerDuckDB(StorageManager):
                 f"""DELETE FROM Results WHERE pose_id IN ({placeholders});""",
                 tuple(delete_pose_ids_list),
             )
+            if delete_pose_ids_list and self._is_table("custom_pose_data"):
+                self.db_query(
+                    f"""DELETE FROM custom_pose_data WHERE pose_id IN ({placeholders});""",
+                    tuple(delete_pose_ids_list),
+                )
 
     def _insert_interactions(self, interactions: list[tuple]):
         """
