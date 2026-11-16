@@ -149,9 +149,7 @@ class TestFiltering:
         ("percentile", "expected_count"),
         [(0, 0), (5, 0), (25, 1), (50, 2), (100, 4)],
     )
-    def test_score_percentile_floor_rounding(
-        self, ad6_db, percentile, expected_count
-    ):
+    def test_score_percentile_floor_rounding(self, ad6_db, percentile, expected_count):
         """Percentiles preserve legacy floor rounding and include the accepted cutoff."""
         count, _ = ad6_db.filter(
             score_percentile=percentile,
@@ -302,9 +300,7 @@ class TestFiltering:
                 {"eworst": -7},
             ],
         }
-        count_or, _ = populated_db.filter(
-            filters=expr, output_bookmark="tier_or"
-        )
+        count_or, _ = populated_db.filter(filters=expr, output_bookmark="tier_or")
         # each tier on its own
         count_a, _ = populated_db.filter(
             eworst=-6,
@@ -363,9 +359,7 @@ class TestFiltering:
         c_score, _ = populated_db.filter(
             filters=score_only, output_bookmark="sig_score"
         )
-        c_both, _ = populated_db.filter(
-            filters=with_smarts, output_bookmark="sig_both"
-        )
+        c_both, _ = populated_db.filter(filters=with_smarts, output_bookmark="sig_both")
         assert c_both > 0
         assert c_both <= c_score  # adding SMARTS only narrows
 
@@ -531,10 +525,15 @@ class TestOutput:
     def test_status_table_exports(self, populated_db, tmp_path, scope):
         import pandas as pd
 
-        pose_ids = [row[0] for row in populated_db.db_query("SELECT pose_id FROM Results LIMIT 3")]
+        pose_ids = [
+            row[0]
+            for row in populated_db.db_query("SELECT pose_id FROM Results LIMIT 3")
+        ]
         populated_db.update_pose_status(pose_ids, 1)
 
-        populated_db.write_molecule_sdfs(bookmark_name=scope, sdf_path=str(tmp_path / "sdf"))
+        populated_db.write_molecule_sdfs(
+            bookmark_name=scope, sdf_path=str(tmp_path / "sdf")
+        )
         sdf = next((tmp_path / "sdf").glob("*.sdf"))
         assert sdf.read_text().count("$$$$") == 3
 
@@ -548,7 +547,9 @@ class TestOutput:
     def test_histogram_matches_numpy(self, populated_db):
         import numpy as np
 
-        scores = [row[0] for row in populated_db.db_query("SELECT docking_score FROM Results")]
+        scores = [
+            row[0] for row in populated_db.db_query("SELECT docking_score FROM Results")
+        ]
         edges, counts = populated_db.get_histogram_data("docking_score", 5)
         expected, _ = np.histogram(scores, bins=edges)
         assert counts == expected.tolist()
@@ -621,14 +622,12 @@ class TestInteractionAnalysis:
         Interactions are held as sets: a receptor atom reached by several ligand atoms
         is stored once, so the set is what the database actually holds.
         """
-        rows = rtc.db_query(
-            """SELECT L.ligname, R.run_number, II.interaction_type,
+        rows = rtc.db_query("""SELECT L.ligname, R.run_number, II.interaction_type,
                       II.rec_resname, II.rec_resid, II.rec_chain, II.rec_atom
                FROM Interactions I
                JOIN Interaction_indices II ON II.interaction_id = I.interaction_id
                JOIN Results R ON R.pose_id = I.pose_id
-               JOIN Ligands L ON L.ligand_id = R.ligand_id"""
-        )
+               JOIN Ligands L ON L.ligand_id = R.ligand_id""")
         poses = {}
         for ligname, run, itype, resname, resid, chain, recname in rows:
             poses.setdefault((ligname, run), set()).add(
@@ -723,11 +722,17 @@ class TestStorageMan:
 
     def test_selection_names_ignore_case(self, populated_db):
         populated_db.filter(eworst=-7, output_bookmark="mixed")
-        assert populated_db.get_range_of_e_le("MIXED") == populated_db.get_range_of_e_le("mixed")
-        assert populated_db.table_length("MIXED") == populated_db.table_length("mixed") > 0
+        assert populated_db.get_range_of_e_le(
+            "MIXED"
+        ) == populated_db.get_range_of_e_le("mixed")
+        assert (
+            populated_db.table_length("MIXED") == populated_db.table_length("mixed") > 0
+        )
         populated_db.update_pose_status([1, 2], 1)
         # the GUI passes status tables capitalized
-        assert populated_db.get_range_of_e_le("Accepted") == populated_db.get_range_of_e_le("accepted")
+        assert populated_db.get_range_of_e_le(
+            "Accepted"
+        ) == populated_db.get_range_of_e_le("accepted")
         assert populated_db.get_histogram_data("docking_score", 5, "Accepted")[1]
 
 
@@ -1096,18 +1101,26 @@ class TestAD6Handling:
         import gzip
 
         sdf_gz = tmp_path / "docked_ligands.sdf.gz"
-        sdf_gz.write_bytes(gzip.compress((TEST_DATA / "ad6/docked_ligands.sdf").read_bytes()))
+        sdf_gz.write_bytes(
+            gzip.compress((TEST_DATA / "ad6/docked_ligands.sdf").read_bytes())
+        )
         tmp_db.add_results_from_files(
-            docking_results=str(sdf_gz), docking_mode="ad6", calculate_interactions=False
+            docking_results=str(sdf_gz),
+            docking_mode="ad6",
+            calculate_interactions=False,
         )
         assert tmp_db.table_length("Results") == 9
 
     def test_bad_record_is_logged_and_skipped(self, tmp_db, tmp_path, monkeypatch):
         from rdkit import Chem
 
-        monkeypatch.chdir(tmp_path)  # the failed-files log is written to the working directory
+        monkeypatch.chdir(
+            tmp_path
+        )  # the failed-files log is written to the working directory
         mols = list(
-            Chem.SDMolSupplier(str(TEST_DATA / "ad6/docked_ligands.sdf"), removeHs=False)
+            Chem.SDMolSupplier(
+                str(TEST_DATA / "ad6/docked_ligands.sdf"), removeHs=False
+            )
         )
         mols[1].ClearProp("autodock_free_energy")
         sdf = tmp_path / "one_bad.sdf"
@@ -1169,7 +1182,9 @@ class TestAD6Handling:
 
         seen = []
         result = db.add_interactions(
-            consent=True, chunk_size=2, progress_callback=lambda d, t: seen.append((d, t))
+            consent=True,
+            chunk_size=2,
+            progress_callback=lambda d, t: seen.append((d, t)),
         )
 
         assert seen, "a batched run should report at least once"
@@ -1236,9 +1251,7 @@ class TestAD6Handling:
         assert ad6_db.bookmarks_with_interaction_filters() == []
 
         ad6_db.filter(eworst=-13, output_bookmark="score_only")
-        ad6_db.filter(
-            vdw_interactions=[(":VAL::", True)], output_bookmark="uses_vdw"
-        )
+        ad6_db.filter(vdw_interactions=[(":VAL::", True)], output_bookmark="uses_vdw")
         ad6_db.filter(hb_count=0, output_bookmark="uses_hb_count")
 
         found = set(ad6_db.bookmarks_with_interaction_filters())
@@ -1301,3 +1314,149 @@ class TestOptions:
         count_new = tmp_db.table_length("Ligands")
         assert count_old == 3
         assert count_new == 2
+
+
+class TestCustomFields:
+
+    def test_custom_fields(self, tmp_db: RingtailCore, make_ad6_sdf):
+        """Make sure
+        1. SDFs with same columns populates correctly
+        2. SDFs with some shared some different columns populate none or value as appropriate
+        """
+        basic = make_ad6_sdf()
+        filler = make_ad6_sdf(
+            smiles=" O(C(=O)CC)C(=O)CC",
+            ligname="filler_ligand",
+            docking_score=-7,
+            pose_rank=1,
+        )
+
+        custom = make_ad6_sdf(
+            smiles="O=C(O)c1ccccc1C(=O)O",
+            ligname="custom_ligand",
+            docking_score=-13,
+            pose_rank=1,
+            custom={"supplier": "fischer", "special_score": 2.1},
+        )
+        custom_same = make_ad6_sdf(
+            smiles="O=C(O)c1ccccc1C(=O)O",
+            ligname="custom_ligand",
+            docking_score=-6.3,
+            pose_rank=2,
+            custom={"supplier": "sigma-aldrich", "special_score": 8},
+        )
+        custom_other = make_ad6_sdf(
+            smiles="CCO",
+            ligname="custom_ligand_other",
+            docking_score=-8.9,
+            pose_rank=1,
+            custom={"supplier": "emolecule", "category": "inactive"},
+        )
+
+        tmp_db.add_results_from_files(
+            docking_results=[basic, filler, custom, custom_same, custom_other],
+            docking_mode="ad6",
+            calculate_interactions=False,
+        )
+        # test that the fields are as specified for each ligand and pose
+        rows = tmp_db.db_query("""
+            SELECT L.ligname, R.pose_rank,
+                C.supplier, C.special_score, C.category
+            FROM Results AS R
+            JOIN Ligands AS L ON L.ligand_id = R.ligand_id
+            LEFT JOIN custom_pose_data AS C ON C.pose_id = R.pose_id
+        """)
+
+        actual = {
+            (ligname, rank): (supplier, score, category)
+            for ligname, rank, supplier, score, category in rows
+        }
+
+        assert actual[("test_ligand", 1)] == (None, None, None)
+        assert actual[("custom_ligand", 1)] == ("fischer", 2.1, None)
+        assert actual[("custom_ligand", 2)] == ("sigma-aldrich", 8.0, None)
+        assert actual[("custom_ligand_other", 1)] == ("emolecule", None, "inactive")
+        assert actual[("filler_ligand", 1)] == (None, None, None)
+        assert len(rows) == 5
+
+    @pytest.mark.parametrize("duplicate_handling", ["ignore", "replace"])
+    def test_custom_fields_deduplication(
+        self, tmp_db: RingtailCore, make_ad6_sdf, duplicate_handling
+    ):
+        """
+        Make sure custom fields deduplicate as requested
+        """
+        original = make_ad6_sdf(custom={"supplier": "fischer", "special_score": 3.5})
+        replacement = make_ad6_sdf(
+            custom={"supplier": "sigma-aldrich", "category": "active"}
+        )
+        filler = make_ad6_sdf(
+            smiles="O=C(O)c1ccccc1C(=O)O",
+            ligname="filler_ligand",
+            docking_score=-13,
+            pose_rank=1,
+            custom={"supplier": "fischer", "special_score": 2.1},
+        )
+
+        tmp_db.add_results_from_files(
+            docking_results=[original, filler],
+            docking_mode="ad6",
+            calculate_interactions=False,
+        )
+        test_query = """
+            SELECT L.ligname, R.pose_rank, R.run_number,
+                R.pose_id, C.supplier, C.special_score
+            FROM Results AS R
+            JOIN Ligands AS L ON L.ligand_id = R.ligand_id
+            JOIN custom_pose_data AS C ON C.pose_id = R.pose_id
+        """
+        before = {
+            (name, rank, run): (pose_id, supplier, score)
+            for name, rank, run, pose_id, supplier, score in tmp_db.db_query(test_query)
+        }
+        target = ("test_ligand", 1, 1)
+        filler_key = ("filler_ligand", 1, 1)
+        assert len(before) == 2
+        assert before[target][1:] == ("fischer", 3.5)
+
+        tmp_db.add_results_from_files(
+            docking_results=replacement,
+            docking_mode="ad6",
+            duplicate_handling=duplicate_handling,
+            calculate_interactions=False,
+        )
+        after = {
+            (name, rank, run): (pose_id, supplier, score)
+            for name, rank, run, pose_id, supplier, score in tmp_db.db_query(test_query)
+        }
+        assert tmp_db.table_length("Results") == 2
+        assert tmp_db.table_length("custom_pose_data") == 2
+        assert after.keys() == before.keys()
+        assert after[filler_key] == before[filler_key]
+
+        if duplicate_handling == "ignore":
+            assert after == before
+        else:
+            old_id = before[target][0]
+            new_id = after[target][0]
+
+            assert new_id != old_id
+
+            assert after[target][1:] == ("sigma-aldrich", None)
+
+            assert tmp_db.db_query(
+                "SELECT category FROM custom_pose_data WHERE pose_id = ?",
+                (new_id,),
+            ) == [("active",)]
+
+            assert (
+                tmp_db.db_query(
+                    "SELECT pose_id FROM custom_pose_data WHERE pose_id = ?",
+                    (old_id,),
+                )
+                == []
+            )
+
+    def test_custom_field_excport(self):
+        """Test that custom fields are exported"""
+        pass

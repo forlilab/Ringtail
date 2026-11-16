@@ -201,6 +201,50 @@ def flexres_pdbqt_db(tmp_path, storage_type, _flexres_pdbqt_template) -> Ringtai
 
 
 @pytest.fixture
+def make_ad6_sdf(tmp_path):
+    from rdkit import Chem
+
+    counter = 0
+
+    def make(
+        smiles="OCC(N)(CO)CO",
+        ligname="test_ligand",
+        docking_score=-10,
+        pose_rank=1,
+        custom=None,
+    ):
+        nonlocal counter
+        mol = Chem.MolFromSmiles(smiles)
+
+        mol.AddConformer(Chem.Conformer(mol.GetNumAtoms()))
+
+        for name, value in (custom or {}).items():
+            if value is None:
+                continue
+            if isinstance(value, bool):
+                mol.SetIntProp(name, int(value))
+            elif isinstance(value, int):
+                mol.SetIntProp(name, value)
+            elif isinstance(value, float):
+                mol.SetDoubleProp(name, value)
+            else:
+                mol.SetProp(name, str(value))
+
+        mol.SetProp("_Name", ligname)
+        mol.SetDoubleProp("autodock_free_energy", docking_score)
+        mol.SetIntProp("pose_id", pose_rank)
+
+        path = tmp_path / f"ligand_{counter}.sdf"
+        counter += 1
+        with Chem.SDWriter(str(path)) as writer:
+            writer.write(mol)
+
+        return str(path)
+
+    return make
+
+
+@pytest.fixture
 def cli(tmp_path):
     """
     Fixture providing write/read helpers that route CLI output to tmp_path.
