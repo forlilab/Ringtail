@@ -1501,6 +1501,11 @@ class RingtailCore:
         self._export_csv(sql, csv_name, False)
 
     @_wrap_exceptions
+    def get_custom_fields(self) -> dict:
+        with self.storageman as sm:
+            return sm.fetch_dynamic_table_column_names("custom_pose_data")
+
+    @_wrap_exceptions
     def export_table_as_csv(self, table: str, csv_name: str = "table_output.csv"):
         """
         Exports specified table (all of it) as a csv file

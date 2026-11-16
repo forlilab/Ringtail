@@ -339,7 +339,7 @@ class StorageManagerSQLite(StorageManager):
             identifiers = {"ligname", "run_number", "pose_rank"}
             custom_columns = [
                 name
-                for name in self._fetch_dynamic_table_column_names("Custom_temp")
+                for name in self.fetch_dynamic_table_column_names("Custom_temp")
                 if name.lower() not in identifiers
             ]
             quoted_columns = [
@@ -384,10 +384,10 @@ class StorageManagerSQLite(StorageManager):
         """
         identifiers = {"ligname", "run_number", "pose_rank"}
 
-        permanent_columns = self._fetch_dynamic_table_column_names("custom_pose_data")
+        permanent_columns = self.fetch_dynamic_table_column_names("custom_pose_data")
         existing = {name.lower() for name in permanent_columns}
 
-        tmeporary_columns = self._fetch_dynamic_table_column_names("Custom_temp")
+        tmeporary_columns = self.fetch_dynamic_table_column_names("Custom_temp")
 
         missing_columns = {
             name: sql_type
@@ -404,14 +404,6 @@ class StorageManagerSQLite(StorageManager):
                 ALTER TABLE {table} 
                 ADD COLUMN {quoted_col} {type};
                 """)
-
-    def _fetch_dynamic_table_column_names(self, table: str) -> dict[str, str]:
-        return dict(
-            self.db_query(
-                "SELECT name, type FROM pragma_table_info(?)",
-                [table],
-            ).fetchall()
-        )
 
     def _delete_new_duplicate_results(self):
         """Checks if a pose is uniquely represented in the Results table,

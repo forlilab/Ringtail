@@ -1457,6 +1457,61 @@ class TestCustomFields:
                 == []
             )
 
-    def test_custom_field_excport(self):
+    def test_custom_fields_export(self, tmp_db, make_ad6_sdf, tmp_path):
+        import csv
+
         """Test that custom fields are exported"""
-        pass
+        custom = make_ad6_sdf(
+            ligname="with_custom",
+            custom={
+                "supplier": "Fischer, Inc.",
+                "special score": 3.5,
+            },
+        )
+        basic = make_ad6_sdf(ligname="without_custom")
+
+        tmp_db.add_results_from_files(
+            docking_results=[custom, basic],
+            docking_mode="ad6",
+            calculate_interactions=False,
+        )
+
+        csv_path = tmp_path / "custom_fields.csv"
+        tmp_db.export_columns_as_csv(
+            columns={
+                "pose_id": None,
+                "ligname": None,
+                "supplier": None,
+                "special score": "custom_score",
+            },
+            csv_name=str(csv_path),
+        )
+
+        with csv_path.open(newline="") as handle:
+            reader = csv.DictReader(handle)
+            assert reader.fieldnames == [
+                "pose_id",
+                "ligname",
+                "supplier",
+                "custom_score",
+            ]
+            rows = list(reader)
+
+        assert len(rows) == 2
+        by_name = {row["ligname"]: row for row in rows}
+        assert set(by_name) == {"with_custom", "without_custom"}
+
+        assert by_name["with_custom"]["supplier"] == "Fischer, Inc."
+        assert float(by_name["with_custom"]["custom_score"]) == 3.5
+
+        assert by_name["without_custom"]["supplier"] == ""
+        assert by_name["without_custom"]["custom_score"] == ""
+
+        expected_ids = {name: pose_id for name, pose_id in tmp_db.db_query("""
+                SELECT L.ligname, R.pose_id
+                FROM Results AS R
+                JOIN Ligands AS L ON L.ligand_id = R.ligand_id
+            """)}
+        assert {
+            name: int(row["pose_id"]) for name, row in by_name.items()
+        } == expected_ids

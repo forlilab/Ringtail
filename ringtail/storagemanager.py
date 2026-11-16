@@ -2157,28 +2157,50 @@ class StorageManager(ABC):
         column_to_table = {
             col: table for table, cols in OUTFIELD_BY_TABLE.items() for col in cols
         }
+        # check for custom table, get columns
+        if self._is_table("custom_pose_data"):
+            custom_cols = list(
+                self.fetch_dynamic_table_column_names("custom_pose_data").keys()
+            )
+            column_to_table.update(
+                {
+                    col.lower(): "custom_pose_data"
+                    for col in custom_cols
+                    if col != "pose_id"
+                }
+            )
+        # ensure primary keys from primary tables
+        column_to_table.update(
+            {
+                "pose_id": "Results",
+                "ligand_id": "Ligands",
+            }
+        )
 
-        columns_by_table = {}
-        for col in headers:
-            table = column_to_table.get(col.lower())
-            if table is None:
-                raise OptionError(f"Column '{col}' not found in any queryable table.")
-            columns_by_table.setdefault(table, []).append(col)
-
-        included_tables = [t.lower() for t in columns_by_table]
+        included_tables = set()
 
         query = self.QueryBuilder()
         for col, header in headers.items():
+            table = column_to_table.get(col.lower())
+            if table is None:
+                raise OptionError(f"Column '{col}' not found in any queryable table.")
+
+            included_tables.add(table.lower())
+
+            quoted_col = '"' + col.replace('"', '""') + '"'
+            field = f"{table}.{quoted_col}"
             if header is None:
-                query.SELECT(col)
+                query.SELECT(field)
                 continue
+
             # The header is interpolated into the SQL, so hold it to an identifier
             if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", str(header)):
                 raise OptionError(
                     f"'{header}' is not usable as a column name. Use letters, "
                     "digits and underscores, and do not start with a digit."
                 )
-            query.SELECT(f"{col} AS {header}")
+            query.SELECT(f'{field} AS "{header}"')
+
         query.FROM("Results")
 
         # join to tables that are represented in the columns
@@ -2192,10 +2214,26 @@ class StorageManager(ABC):
                 "interaction_id",
                 "Interactions",
             )
+        if "custom_pose_data" in included_tables:
+            query.JOIN(
+                "custom_pose_data",
+                "custom_pose_data",
+                "pose_id",
+                "Results",
+                kind="LEFT",
+            )
 
         self._apply_table_filter(query, bookmark)
 
         return query.build()[0]
+
+    def fetch_dynamic_table_column_names(self, table: str) -> dict[str, str]:
+        return dict(
+            self.db_query(
+                "SELECT name, type FROM pragma_table_info(?)",
+                [table],
+            ).fetchall()
+        )
 
     def clear_interaction_tables(self) -> bool:
         """
