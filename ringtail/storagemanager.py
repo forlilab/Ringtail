@@ -2462,9 +2462,12 @@ class StorageManager(ABC):
         ...
 
     @abstractmethod
-    def tables_in_db(self) -> list:
+    def tables_in_db(self, temp: bool = False) -> list:
         """
         Returns a list of all table names in the database
+
+        Args:
+            temp (bool): whether it's a temporary table. Defaults to False
 
         Returns:
             list: list of table names
@@ -2664,12 +2667,9 @@ class StorageManager(ABC):
                 }
             )
 
-        print(f"\nCustom columns: {custom_cols}")
-
         self._create_temporary_results_tables(custom_columns=custom_cols)
         self._insert_results_in_temp_tables(results, interactions, custom_data)
         # handle duplicates if requested
-        # TODO handle duplicates of custom data
         if duplicate_handling and duplicate_handling.lower() == "replace":
             # first delete duplicate results and interactions
             # then insert all the new ones indiscrimenately
@@ -2740,7 +2740,7 @@ class StorageManager(ABC):
 
         return cluster_bookmark
 
-    def _is_table(self, table: str) -> bool:
+    def _is_table(self, table: str, temp: bool = False) -> bool:
         """
         Returns True if table name is actually a bookmark
 
@@ -2750,7 +2750,7 @@ class StorageManager(ABC):
         Returns:
             bool: if table name is a bookmark
         """
-        if table.lower() in self.tables_in_db():
+        if table.lower() in self.tables_in_db(temp):
             return True
         else:
             return False

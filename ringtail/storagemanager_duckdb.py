@@ -264,7 +264,6 @@ class StorageManagerDuckDB(StorageManager):
                 INSERT INTO Custom_temp ({",".join(columns)})
                 SELECT {",".join(["df." + col for col in columns])}
                 FROM incoming_custom_data AS df;"""
-            print("the temp insert sql ", temp_custom_insert)
             self.db_query(temp_custom_insert)
 
     def _move_tempresults_to_database(self):
@@ -352,7 +351,7 @@ class StorageManagerDuckDB(StorageManager):
         cur_max = self.conn.execute(
             "SELECT COALESCE(MAX(pose_id), 0) FROM Results"
         ).fetchone()[0]
-        self.db_query(temp_to_results)  # INSERT INTO Results (no RETURNING)
+        self.db_query(temp_to_results)
         self.db_query(
             "INSERT INTO pose_map (pose_id, ligand_id, run_number, pose_rank) "
             "SELECT pose_id, ligand_id, run_number, pose_rank FROM Results "
@@ -363,7 +362,6 @@ class StorageManagerDuckDB(StorageManager):
 
         # first check if we need to add new columns to
         has_custom = self._check_for_custom_data()
-        print(f"We do indeed have custom data? {has_custom}")
         if has_custom:
             identifiers = {"ligname", "run_number", "pose_rank"}
             custom_columns = [
@@ -386,13 +384,14 @@ class StorageManagerDuckDB(StorageManager):
                 JOIN Ligands AS L
                     ON M.ligand_id = L.ligand_id
                     AND CT.ligname = L.ligname;"""
-            print("The insert query ", temp_to_custom_pose_data)
             self.db_query(temp_to_custom_pose_data)
 
         # clear temp tables
         self.db_query("DELETE FROM pose_map")
         self.db_query("DELETE FROM Interactions_temp")
         self.db_query("DELETE FROM Results_temp")
+        if has_custom:
+            self.db_query("DELETE FROM Custom_temp")
 
     def _check_for_custom_data(self) -> bool:
         """
@@ -421,7 +420,6 @@ class StorageManagerDuckDB(StorageManager):
             for name, sql_type in tmeporary_columns.items()
             if name.lower() not in existing | identifiers
         }
-        print("The missing columns: ", missing_columns)
         if missing_columns:
             self._update_custom_columns("custom_pose_data", missing_columns)
 
@@ -1464,7 +1462,7 @@ class StorageManagerDuckDB(StorageManager):
         """
         pass
 
-    def tables_in_db(self) -> list:
+    def tables_in_db(self, temp: bool = False) -> list:
         """
         Returns a list of all table names in the database
 

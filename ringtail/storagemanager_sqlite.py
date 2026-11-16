@@ -95,7 +95,9 @@ class StorageManagerSQLite(StorageManager):
 
         self.db_update(sql_insert, ligands, commit=False)
 
-    def _create_temporary_results_tables(self, custom_columns: set | None = None):
+    def _create_temporary_results_tables(
+        self, custom_columns: dict[str, type] | None = None
+    ):
         """
         Creates temporary tables for results and interactions, which will be
         used for staging incoming data.
@@ -151,23 +153,30 @@ class StorageManagerSQLite(StorageManager):
         self.db_query(create_temp_interactions)
         self.db_query(create_temp_mapping_table)
 
+        self.db_query("DROP TABLE IF EXISTS Custom_temp")
         if custom_columns:
-            create_temp_custom = """
-            CREATE TEMP TABLE IF NOT EXISTS Interactions_temp(
-                ligname             VARCHAR,
-                run_number          INTEGER,
-                pose_rank           INTEGER,
-                interaction_type    VARCHAR,
-                rec_chain           VARCHAR,
-                rec_resname         VARCHAR,
-                rec_resid           VARCHAR,
-                rec_atom            VARCHAR,
-                rec_atomid          VARCHAR);
+            sql_types = {
+                int: "INTEGER",
+                float: "DOUBLE",
+                bool: "DOUBLE",
+                str: "VARCHAR",
+            }
+            columns = []
+            for name, python_type in custom_columns.items():
+                quoted_name = '"' + name.replace('"', '""') + '"'
+                columns.append(f"{quoted_name} {sql_types[python_type]}")
+
+            column_definitions = ",\n".join(columns)
+            create_temp_custom = f"""
+            CREATE TEMP TABLE Custom_temp({column_definitions});
             """
             self.db_query(create_temp_custom)
 
     def _insert_results_in_temp_tables(
-        self, results_array: list[dict], interactions_array
+        self,
+        results_array: list[dict],
+        interactions_array: list,
+        custom_data: list | None = None,
     ):
         """
         Inserts docking results and interactions into their respective
@@ -233,6 +242,16 @@ class StorageManagerSQLite(StorageManager):
         self.db_update(
             temp_int_insert, [tuple(r) for r in interactions_array], commit=False
         )
+
+        if custom_data:
+            columns = list(dict.fromkeys(key for entry in custom_data for key in entry))
+            quoted_columns = ['"' + col.replace('"', '""') + '"' for col in columns]
+            rows = [tuple(entry.get(col) for col in columns) for entry in custom_data]
+            placeholders = ", ".join("?" for _ in columns)
+            temp_custom_insert = f"""
+                INSERT INTO Custom_temp ({",".join(quoted_columns)})
+                VALUES ({placeholders});"""
+            self.db_update(temp_custom_insert, rows, commit=False)
 
     def _move_tempresults_to_database(self):
         """Inserts data from the temporary results tables to their permanent
@@ -313,11 +332,86 @@ class StorageManagerSQLite(StorageManager):
             mapping,
         )
         self.db_query(temp_to_interaction)
+        # first check if we need to add new columns to
 
+        has_custom = self._check_for_custom_data()
+        if has_custom:
+            identifiers = {"ligname", "run_number", "pose_rank"}
+            custom_columns = [
+                name
+                for name in self._fetch_dynamic_table_column_names("Custom_temp")
+                if name.lower() not in identifiers
+            ]
+            quoted_columns = [
+                '"' + name.replace('"', '""') + '"' for name in custom_columns
+            ]
+            insert_columns = ", ".join(quoted_columns)
+            select_columns = ", ".join(f"CT.{col}" for col in quoted_columns)
+            temp_to_custom_pose_data = f"""
+                INSERT INTO custom_pose_data(pose_id, {insert_columns})
+                SELECT M.pose_id, {select_columns}
+                FROM Custom_temp AS CT
+                JOIN pose_map AS M
+                    ON CT.pose_rank = M.pose_rank
+                    AND CT.run_number = M.run_number
+                JOIN Ligands AS L
+                    ON M.ligand_id = L.ligand_id
+                    AND CT.ligname = L.ligname;"""
+            self.db_query(temp_to_custom_pose_data)
         # clear temp tables
         self.db_query("DELETE FROM pose_map")
         self.db_query("DELETE FROM Interactions_temp")
         self.db_query("DELETE FROM Results_temp")
+        if has_custom:
+            self.db_query("DELETE FROM Custom_temp")
+
+    def _check_for_custom_data(self) -> bool:
+        """
+        Checks if there is custom data in the current active insert session
+        """
+        if self._is_table(
+            "Custom_temp", temp=True
+        ):  # does temp tables show up in table list?
+            # ensure custom table exists
+            self._create_custom_pose_table()
+            self._ensure_custom_columns()
+            return True
+        return False
+
+    def _ensure_custom_columns(self):
+        """
+        Adds columns if necessary to permanent custom table from temporary custom table
+        """
+        identifiers = {"ligname", "run_number", "pose_rank"}
+
+        permanent_columns = self._fetch_dynamic_table_column_names("custom_pose_data")
+        existing = {name.lower() for name in permanent_columns}
+
+        tmeporary_columns = self._fetch_dynamic_table_column_names("Custom_temp")
+
+        missing_columns = {
+            name: sql_type
+            for name, sql_type in tmeporary_columns.items()
+            if name.lower() not in existing | identifiers
+        }
+        if missing_columns:
+            self._update_custom_columns("custom_pose_data", missing_columns)
+
+    def _update_custom_columns(self, table: str, columns: dict[str, str]):
+        for col, type in columns.items():
+            quoted_col = '"' + col.replace('"', '""') + '"'
+            self.db_query(f"""
+                ALTER TABLE {table} 
+                ADD COLUMN {quoted_col} {type};
+                """)
+
+    def _fetch_dynamic_table_column_names(self, table: str) -> dict[str, str]:
+        return dict(
+            self.db_query(
+                "SELECT name, type FROM pragma_table_info(?)",
+                [table],
+            ).fetchall()
+        )
 
     def _delete_new_duplicate_results(self):
         """Checks if a pose is uniquely represented in the Results table,
@@ -365,7 +459,30 @@ class StorageManagerSQLite(StorageManager):
                         AND R.flexible_res_coordinates IS NULL))
                 AND L.ligand_id    = R.ligand_id);
         """
+        delete_custom_sql = """
+                DELETE FROM Custom_temp
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM Results_temp AS RT
+                    JOIN Results AS R
+                        ON (RT.receptor = R.receptor
+                            OR (RT.receptor IS NULL AND R.receptor IS NULL))
+                        AND RT.pose_coordinates = R.pose_coordinates
+                        AND (RT.flexible_res_coordinates = R.flexible_res_coordinates
+                            OR (RT.flexible_res_coordinates IS NULL
+                                AND R.flexible_res_coordinates IS NULL))
+                    JOIN Ligands AS L
+                        ON RT.ligname = L.ligname
+                        AND R.ligand_id = L.ligand_id
+                    WHERE 
+                        RT.ligname   = Custom_temp.ligname
+                        AND RT.pose_rank = Custom_temp.pose_rank
+                        AND RT.run_number = Custom_temp.run_number
+                );
+                """
         self.db_query(delete_int_sql)
+        if self._is_table("Custom_temp", temp=True):
+            self.db_query(delete_custom_sql)
         self.db_query(delete_res_sql)
 
     def _delete_old_duplicate_results(self):
@@ -407,6 +524,11 @@ class StorageManagerSQLite(StorageManager):
                 f"""DELETE FROM Results WHERE pose_id IN ({placeholders});""",
                 tuple(delete_pose_ids_list),
             )
+            if delete_pose_ids_list and self._is_table("custom_pose_data"):
+                self.db_query(
+                    f"""DELETE FROM custom_pose_data WHERE pose_id IN ({placeholders});""",
+                    tuple(delete_pose_ids_list),
+                )
 
     def _insert_interactions(self, interactions: list[tuple]):
         """
@@ -1299,13 +1421,21 @@ class StorageManagerSQLite(StorageManager):
         """
         self.conn.rollback()
 
-    def tables_in_db(self) -> list:
+    def tables_in_db(self, temp: bool = False) -> list:
         """
         Returns a list of all table names in the database
 
         Returns:
             list: list of table names
         """
+        if temp:
+            return [
+                name[0].lower()
+                for name in self.db_query(
+                    "SELECT name FROM sqlite_temp_master WHERE type='table';"
+                ).fetchall()
+            ]
+
         tables = [
             name[0].lower()
             for name in self.db_query(
