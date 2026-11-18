@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Ringtail storage adaptors
+# Ringtail storage adaptor
 #
 
 import time
@@ -9,7 +9,6 @@ import json
 import os.path
 import re
 from abc import ABC, abstractmethod
-from pathlib import Path
 import numpy as np
 import pandas as pd
 from .logutils import get_logger
@@ -26,7 +25,7 @@ from .util import db_alias_from_path, numlist2str
 import sys
 from signal import signal, SIGINT
 from rdkit import Chem
-from typing import Any, Union, ClassVar, NamedTuple
+from typing import Any, Union, ClassVar
 from ._version import __version__
 from packaging.version import Version
 from .filters import Filters
@@ -40,6 +39,7 @@ from .exceptions import (
 )
 from .clustermanager import *
 from .querybuilder import QueryBuilder
+from .types import PoseData
 from .schema import (
     NUMERIC_TYPES,
     NO_FLEXRES_JSON,
@@ -68,31 +68,9 @@ from .schema import (
     ROW_ID_TABLES,
     SCHEMA_VERSION_SCHEMA,
     SCHEMA_VERSION,
-    SQLITE_TYPES,
-    DUCKDB_TYPES,
     build_create_table,
 )
 from collections import defaultdict
-from datetime import datetime, timezone
-
-
-class PoseData(NamedTuple):
-    """Row returned by StorageManager.fetch_rdkit_pose_properties.
-
-    Optional fields are populated only when the corresponding flag is passed to
-    the fetch: flexres_coordinates is None unless include_flexres=True, and
-    comment is '' unless include_comment=True (and the Pose_comments table exists).
-    """
-
-    pose_id: int
-    rdmol: object
-    ligname: str
-    docking_score: object
-    leff: object
-    pose_coordinates: object
-    pose_rank: object
-    flexres_coordinates: object = None
-    comment: str = ""
 
 
 class StorageManager(ABC):
@@ -107,21 +85,11 @@ class StorageManager(ABC):
         active_connection (bool): if there is a current open connection to database
         keyboard_interrupt_allowed (bool): if Ctrl+Z will work, for example not supported in a GUI
         QueryBuilder: dialect of querybuilder
-        _filtered_poses_has_ligand_id (bool): flag that optimizes handling of filtered poses for sqlite vs duckdb
     """
 
     QueryBuilder = QueryBuilder
 
-    # Whether Filtered_poses carries a denormalized ligand_id column. SQLite sets
-    # this True so passing-ligand counts are a single-table COUNT(DISTINCT) instead
-    # of a costly JOIN into the row-store Results table. DuckDB leaves it False
-    # (its columnar count-JOIN is cheap) so existing DuckDB databases stay valid.
-    _filtered_poses_has_ligand_id: ClassVar[bool] = False
-
     dialect: ClassVar[str]
-    # whether the Filters table has been checked for the created column, see
-    # ensure_filters_columns
-    _filters_columns_checked: bool = False
 
     # region setup
     def __init__(self):
@@ -450,7 +418,7 @@ class StorageManager(ABC):
             return 0
         filter_id = filter_row[0]
         if grouped_by_ligand:
-            if self._filtered_poses_has_ligand_id:
+            if self.dialect == "sqlite":
                 # SQLite: ligand_id is denormalized into Filtered_poses — single-table count
                 return self.conn.execute(
                     "SELECT COUNT(DISTINCT ligand_id) FROM Filtered_poses WHERE filter_id = ?",
@@ -511,38 +479,6 @@ class StorageManager(ABC):
         logger.info(
             f"The bookmark {bookmark_name} and its associated filter data has been deleted."
         )
-
-    def ensure_filters_columns(self) -> list[str]:
-        """Add the Filters columns of the current schema that an older 3.0.0
-        pre-release database lacks. Idempotent.
-
-        Returns:
-            list[str]: names of the columns that were added
-        """
-        if not self._is_table(FILTERS_SCHEMA.name):
-            return []
-        existing = {
-            row[0].lower()
-            for row in self.db_query(
-                "SELECT name FROM pragma_table_info('Filters')"
-            ).fetchall()
-        }
-        type_map = SQLITE_TYPES if self.dialect == "sqlite" else DUCKDB_TYPES
-        added = []
-        for col_name, col in FILTERS_SCHEMA.columns.items():
-            if col_name.lower() in existing:
-                continue
-            # no DEFAULT: SQLite cannot ADD COLUMN with a non-constant default, and
-            # rows written before the column existed have no creation time anyway
-            self.db_query(
-                f"ALTER TABLE Filters ADD COLUMN {col_name} {type_map[col.sql_type]}"
-            )
-            added.append(col_name)
-        if added:
-            self.conn.commit()
-            logger.info(f"Added Filters columns: {', '.join(added)}")
-        self._filters_columns_checked = True
-        return added
 
     def has_filter_data(self) -> bool:
         """Whether the database holds any bookmarks/filters or clusterings.
@@ -645,7 +581,7 @@ class StorageManager(ABC):
         )
         union_cols = (
             "DISTINCT pose_id, ligand_id"
-            if self._filtered_poses_has_ligand_id
+            if self.dialect == "sqlite"
             else "DISTINCT pose_id"
         )
         query = self.QueryBuilder()
@@ -918,9 +854,7 @@ class StorageManager(ABC):
             internal_name,
         )
         clustered_cols = (
-            ["pose_id", "ligand_id"]
-            if self._filtered_poses_has_ligand_id
-            else ["pose_id"]
+            ["pose_id", "ligand_id"] if self.dialect == "sqlite" else ["pose_id"]
         )
         clustered_poses = self.QueryBuilder()
         clustered_poses.SELECT(*clustered_cols).FROM("results").WHERE(
@@ -3036,9 +2970,7 @@ class StorageManager(ABC):
             f"WHERE {' AND '.join(where_conditions)}" if where_conditions else ""
         )
         select_cols = (
-            "R.pose_id, R.ligand_id"
-            if self._filtered_poses_has_ligand_id
-            else "R.pose_id"
+            "R.pose_id, R.ligand_id" if self.dialect == "sqlite" else "R.pose_id"
         )
         return f"SELECT {select_cols} FROM {filtering_window} R {where_sql}"
 
@@ -3771,10 +3703,6 @@ class StorageManager(ABC):
                 "SELECT filter_id FROM Filters WHERE name = ?", (name.lower(),)
             ).fetchone()[0]
 
-        # pre-release 3.0.0 databases may lack the created column, add it once
-        if not self._filters_columns_checked:
-            self.ensure_filters_columns()
-
         last_ids = self.last_row_ids()
         self._begin_transaction()
         new_filter_id = self.conn.execute(
@@ -3789,7 +3717,6 @@ class StorageManager(ABC):
             "query",
             "filters",
             "filter_window",
-            "created",
         ).RETURNING("filter_id")
 
         # insert filter info, return filter_id
@@ -3802,16 +3729,13 @@ class StorageManager(ABC):
                 json.dumps(filters),
                 # None when clustering all results; stored as filter_results does
                 (input_bookmark or "Results").lower(),
-                # explicit, since a column added by ensure_filters_columns has no
-                # default; UTC so both backends agree
-                datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
             ),
         ).fetchone()[0]
 
         # single-pass INSERT — no COUNT pre-flight. SQLite also stores ligand_id
         # (carried for free by the filter query's Results scan) so passing-ligand
         # counts avoid a JOIN back into the row-store Results table.
-        if self._filtered_poses_has_ligand_id:
+        if self.dialect == "sqlite":
             insert_poses = f"""
                 WITH results_poses AS (
                     {query})

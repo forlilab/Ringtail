@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Ringtail storage adapter for DuckDB
+# Ringtail storage adaptor for DuckDB
 #
 
 import re

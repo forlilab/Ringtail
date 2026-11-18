@@ -34,6 +34,25 @@ class LigandMol(NamedTuple):
     flexres_residues: list
 
 
+class PoseData(NamedTuple):
+    """Row returned by StorageManager.fetch_rdkit_pose_properties.
+
+    Optional fields are populated only when the corresponding flag is passed to
+    the fetch: flexres_coordinates is None unless include_flexres=True, and
+    comment is '' unless include_comment=True (and the Pose_comments table exists).
+    """
+
+    pose_id: int
+    rdmol: object
+    ligname: str
+    docking_score: object
+    leff: object
+    pose_coordinates: object
+    pose_rank: object
+    flexres_coordinates: object = None
+    comment: str = ""
+
+
 @dataclass
 class ResultsObject:
     """Class that handles sources of data to be written including ligand data paths and how

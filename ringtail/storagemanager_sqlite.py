@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Ringtail storage adaptors
+# Ringtail storage adaptor for SQLite3
 #
 
 from .logutils import get_logger
@@ -56,10 +56,6 @@ class StorageManagerSQLite(StorageManager):
         db_file (str): database name
         conn (SQLite.conn): Connection to database
     """
-
-    # SQLite denormalizes ligand_id into Filtered_poses to avoid a 22.7GB row-store
-    # JOIN when counting passing ligands. See StorageManager._filtered_poses_has_ligand_id.
-    _filtered_poses_has_ligand_id = True
 
     QueryBuilder = QueryBuilderSQLite
 

@@ -334,11 +334,6 @@ FILTERS_SCHEMA = TableSchema(
         "query": Column("VARCHAR", "SQL query string"),
         "filters": Column("VARCHAR", "filter parameters as string"),
         "filter_window": Column("VARCHAR", "filter window parameters"),
-        "created": Column(
-            "DATETIME",
-            "creation timestamp",
-            default="CURRENT_TIMESTAMP",
-        ),
     },
 )
 
