@@ -73,7 +73,6 @@ from .schema import (
     build_create_table,
 )
 from collections import defaultdict
-from contextlib import contextmanager
 from datetime import datetime, timezone
 
 
@@ -120,9 +119,7 @@ class StorageManager(ABC):
     _filtered_poses_has_ligand_id: ClassVar[bool] = False
 
     dialect: ClassVar[str]
-    # replay record of the public call currently creating bookmarks, see recording_call
-    _call_record: Union[dict, None] = None
-    # whether the Filters table has been checked for the replay columns, see
+    # whether the Filters table has been checked for the created column, see
     # ensure_filters_columns
     _filters_columns_checked: bool = False
 
@@ -515,29 +512,6 @@ class StorageManager(ABC):
             f"The bookmark {bookmark_name} and its associated filter data has been deleted."
         )
 
-    @contextmanager
-    def recording_call(self, method: str, kwargs: dict):
-        """Record which public call is creating bookmarks, so each bookmark row it
-        writes stores a replayable definition and a shared call_id. A call made from
-        inside another recorded call (e.g. filter clustering its result) belongs to
-        the outer call.
-
-        Args:
-            method (str): RingtailCore method name, e.g. "filter"
-            kwargs (dict): the arguments that determine the selection
-        """
-        if self._call_record is not None:
-            yield
-            return
-        self._call_record = {
-            "definition": json.dumps({"method": method, "kwargs": kwargs}, default=str),
-            "call_id": None,  # allocated per database by the first bookmark written
-        }
-        try:
-            yield
-        finally:
-            self._call_record = None
-
     def ensure_filters_columns(self) -> list[str]:
         """Add the Filters columns of the current schema that an older 3.0.0
         pre-release database lacks. Idempotent.
@@ -858,12 +832,6 @@ class StorageManager(ABC):
                 )
             else:
                 with type(self)(path) as db:
-                    # same call, but call_id is numbered per database
-                    if self._call_record is not None:
-                        db._call_record = {
-                            "definition": self._call_record["definition"],
-                            "call_id": None,
-                        }
                     db._populate_filter_tables(
                         name=new_bookmark_name,
                         query=bookmark_query,
@@ -1097,6 +1065,7 @@ class StorageManager(ABC):
         Raises:
             StorageError:
         """
+        self._require_scope(bookmark_name)
         # create the database
         new_db = self.__class__(database_name)
         # make tables
@@ -1444,27 +1413,63 @@ class StorageManager(ABC):
             datacount = 0
         return True if datacount == 0 else False
 
-    def get_range_of_e_le(self, table: str) -> tuple:
+    def get_column_ranges(
+        self, columns: list[str], table: str
+    ) -> dict[str, tuple[float | int | None, float | int | None]]:
         """
-        Get min and max of e/docking_score and ligand efficiency/le/leff/
+        Gets MIN and MAX of given column(s), including custom properties if they were inferred as numeric
+        at time of database write
 
         Args:
-            table (str): table limit data, e.g., either Results or a bookmark name
+            columns (list[str]): _description_
+            table (str): _description_
 
         Returns:
-            tuple: e_min, e_max, le_min, le_max
+            dict[str, tuple[float | int | None, float | int | None]]: column:(min, max,)
         """
+        numeric_columns = {col.lower() for col in self._get_numeric_columns("results")}
+        columns = [col for col in columns if col.lower() in numeric_columns]
+        if not columns:
+            return {}
+        column_to_table = self.get_queryable_columns()
+        expressions = []
+
+        for col in columns:
+            source = (
+                "Results"
+                if col.lower() == "ligand_id"
+                else column_to_table[col.lower()]
+            )
+            quoted_col = self._safe_quoting(col)
+            field = f"{source}.{quoted_col}"
+            expressions.extend([f"MIN({field})", f"MAX({field})"])
 
         query = self.QueryBuilder()
-        query.SELECT(
-            "MIN(R.docking_score)",
-            "MAX(R.docking_score)",
-            "MIN(R.leff)",
-            "MAX(R.leff)",
-        ).FROM("Results", "R")
+        query.SELECT(*expressions).FROM("Results")
+
+        if any(column_to_table[col.lower()] == "custom_pose_data" for col in columns):
+            query.JOIN(
+                "custom_pose_data",
+                "custom_pose_data",
+                on="pose_id",
+                to="Results",
+                kind="LEFT",
+            )
         self._apply_table_filter(query, table)
 
-        return self.db_query(*query.build()).fetchall()[0]
+        row = self.db_query(*query.build()).fetchone()
+
+        ranges = {}
+
+        for i, col in enumerate(columns):
+            minimum = row[2 * i]
+            maximum = row[2 * i + 1]
+            ranges[col] = (
+                minimum,
+                maximum,
+            )
+
+        return ranges
 
     def calculate_percentiles(
         self, column: str, num_bins: int, table: str
@@ -1484,7 +1489,7 @@ class StorageManager(ABC):
         Returns:
             tuple[list[int],list[float]]: list of percentiles as bins, and list of edge of each bin
         """
-
+        # TODO should check custom data also for numeric types
         col_spec = RESULTS_SCHEMA.columns.get(column)
         if col_spec is None or col_spec.sql_type not in NUMERIC_TYPES:
             raise OptionError(
@@ -1518,6 +1523,7 @@ class StorageManager(ABC):
         Returns:
             tuple[list[float], list[int]]: bin_edges and per-bin counts
         """
+        # TODO update to also check custom data
         col_spec = RESULTS_SCHEMA.columns.get(column)
         if col_spec is None or col_spec.sql_type not in NUMERIC_TYPES:
             raise OptionError(f"Column {column} is not a numeric Results column")
@@ -1691,7 +1697,6 @@ class StorageManager(ABC):
     def fetch_rdkit_pose_properties(
         self,
         pose_ids,
-        *,
         include_flexres: bool = False,
         include_comment: bool = False,
     ) -> "list[PoseData]":
@@ -2127,6 +2132,42 @@ class StorageManager(ABC):
         )
         return [row[0] for row in self.db_query(sql).fetchall()]
 
+    def get_queryable_columns(self) -> dict[str, str]:
+        """
+        Returns any columns that are currently supported in Ringtail queries
+        and for output options, will check for and include custom properties/columns
+        if any
+
+        Returns:
+            dict[str, str]: {column: table}
+        """
+        column_to_table = {
+            col.lower(): table
+            for table, cols in OUTFIELD_BY_TABLE.items()
+            for col in cols
+        }
+        # check for custom table, get columns
+        if self._is_table("custom_pose_data"):
+            custom_cols = list(
+                self.fetch_dynamic_table_column_names("custom_pose_data").keys()
+            )
+            column_to_table.update(
+                {
+                    col.lower(): "custom_pose_data"
+                    for col in custom_cols
+                    if col != "pose_id"
+                }
+            )
+        # ensure primary keys from primary tables
+        column_to_table.update(
+            {
+                "pose_id": "Results",
+                "ligand_id": "Ligands",
+            }
+        )
+
+        return column_to_table
+
     def prepare_column_export_query(
         self,
         columns: Union[dict[str, str], list[str]],
@@ -2154,28 +2195,7 @@ class StorageManager(ABC):
         )
 
         # Build a flat map of column_name -> table from all queryable tables
-        column_to_table = {
-            col: table for table, cols in OUTFIELD_BY_TABLE.items() for col in cols
-        }
-        # check for custom table, get columns
-        if self._is_table("custom_pose_data"):
-            custom_cols = list(
-                self.fetch_dynamic_table_column_names("custom_pose_data").keys()
-            )
-            column_to_table.update(
-                {
-                    col.lower(): "custom_pose_data"
-                    for col in custom_cols
-                    if col != "pose_id"
-                }
-            )
-        # ensure primary keys from primary tables
-        column_to_table.update(
-            {
-                "pose_id": "Results",
-                "ligand_id": "Ligands",
-            }
-        )
+        column_to_table = self.get_queryable_columns()
 
         included_tables = set()
 
@@ -2187,7 +2207,7 @@ class StorageManager(ABC):
 
             included_tables.add(table.lower())
 
-            quoted_col = '"' + col.replace('"', '""') + '"'
+            quoted_col = self._safe_quoting(col)
             field = f"{table}.{quoted_col}"
             if header is None:
                 query.SELECT(field)
@@ -2553,6 +2573,16 @@ class StorageManager(ABC):
         """Convert pose_coordinates stored as JSON text to the backend's native format, a no-op if already converted."""
         ...
 
+    @abstractmethod
+    def check_attached(self) -> list[tuple]:
+        """
+        Checks what, if any, databases are attached
+
+        Returns:
+            list: attached databases
+        """
+        ...
+
     # endregion
 
     # region private api
@@ -2828,9 +2858,11 @@ class StorageManager(ABC):
         query.DROP_IF_EXISTS(name)
         return self.db_query(query.build()[0])
 
-    def _get_numeric_columns(self, table: str) -> list:
+    def _get_numeric_columns(self, table: str) -> list[str]:
         """
-        Get all numeric (float, int) columns from a table
+        Get all numeric (float, int, double) columns from a table.
+        If table is results, it will also include any custom results
+        columns
 
         Args:
             table (str)
@@ -2838,11 +2870,20 @@ class StorageManager(ABC):
         Returns:
             list: column names that are numeric
         """
-        return [
+
+        columns = [
             name
             for name, col in TABLE_SCHEMAS[table.lower()].columns.items()
             if col.sql_type in NUMERIC_TYPES
         ]
+        if table.lower() == "results" and self._is_table("custom_pose_data"):
+            custom_columns = self.fetch_dynamic_table_column_names("custom_pose_data")
+            for col, sql_type in custom_columns.items():
+                if col.lower() == "pose_id":
+                    continue
+                if sql_type in NUMERIC_TYPES:
+                    columns.append(col)
+        return columns
 
     def _fetch_table_column_names(self, table: str) -> list:
         """
@@ -3730,7 +3771,7 @@ class StorageManager(ABC):
                 "SELECT filter_id FROM Filters WHERE name = ?", (name.lower(),)
             ).fetchone()[0]
 
-        # pre-release 3.0.0 databases may lack the replay columns, add them once
+        # pre-release 3.0.0 databases may lack the created column, add it once
         if not self._filters_columns_checked:
             self.ensure_filters_columns()
 
@@ -3740,16 +3781,6 @@ class StorageManager(ABC):
             "SELECT COALESCE(MAX(filter_id), 0) + 1 FROM Filters"
         ).fetchone()[0]
 
-        # replay record, shared by every bookmark the current public call writes
-        definition = call_id = None
-        if self._call_record is not None:
-            if self._call_record["call_id"] is None:
-                self._call_record["call_id"] = self.conn.execute(
-                    "SELECT COALESCE(MAX(call_id), 0) + 1 FROM Filters"
-                ).fetchone()[0]
-            definition = self._call_record["definition"]
-            call_id = self._call_record["call_id"]
-
         insert_query = self.QueryBuilder()
         insert_query.INSERT_INTO(
             "Filters",
@@ -3758,8 +3789,6 @@ class StorageManager(ABC):
             "query",
             "filters",
             "filter_window",
-            "definition",
-            "call_id",
             "created",
         ).RETURNING("filter_id")
 
@@ -3773,8 +3802,6 @@ class StorageManager(ABC):
                 json.dumps(filters),
                 # None when clustering all results; stored as filter_results does
                 (input_bookmark or "Results").lower(),
-                definition,
-                call_id,
                 # explicit, since a column added by ensure_filters_columns has no
                 # default; UTC so both backends agree
                 datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
@@ -4114,6 +4141,19 @@ class StorageManager(ABC):
         self.db_query("DELETE FROM merged_tables WHERE merge_id = ?", (merge_id,))
         self.conn.commit()
         self._sync_auto_increment_state()
+
+    def _safe_quoting(self, text: str) -> str:
+        """
+        Applies safe quotation marks for database strings that may have space or quotation marks
+        in places that make them sql unsafde
+
+        Args:
+            text (str): string
+
+        Returns:
+            str: db safe string
+        """
+        return '"' + text.replace('"', '""') + '"'
 
     # endregion
 

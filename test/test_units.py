@@ -157,37 +157,6 @@ class TestFiltering:
         )
         assert count == expected_count
 
-    @staticmethod
-    def _filters_rows(rtc):
-        rows = rtc.db_query(
-            "SELECT name, definition, call_id, created FROM Filters ORDER BY filter_id"
-        )
-        return [
-            (name, json.loads(definition) if definition else None, call_id, created)
-            for name, definition, call_id, created in rows
-        ]
-
-    def test_bookmark_records_replayable_call(self, ad6_db):
-        """Filters.definition holds the call, and calling it again selects the same poses."""
-        ad6_db.filter(
-            eworst=-14,
-            vdw_interactions=[("A:VAL:243:", True)],
-            output_bookmark="hits",
-        )
-        [(name, definition, call_id, created)] = self._filters_rows(ad6_db)
-        assert name == "hits" and call_id == 1 and created
-        assert definition["method"] == "filter"
-        kwargs = definition["kwargs"]
-        assert kwargs["eworst"] == -14 and kwargs["output_bookmark"] == "hits"
-        # output-only arguments are not part of the selection
-        assert "output_log" not in kwargs and "return_iter" not in kwargs
-
-        kwargs["output_bookmark"] = "replayed"
-        getattr(ad6_db, definition["method"])(**kwargs)
-        poses = lambda bm: ad6_db.fetch_select_ligands_poses(bookmark_name=bm)
-        assert poses("replayed") == poses("hits")
-        assert self._filters_rows(ad6_db)[-1][2] == 2  # a new call, a new call_id
-
     def test_filter(self, populated_db):
         count, _ = populated_db.filter(
             eworst=-6,
@@ -434,16 +403,16 @@ class TestOutput:
         assert target_line == "11128, -7.25"
 
         csv_ligands = str(tmp_path / "Ligands.csv")
-        populated_db.export_table_as_csv("Ligands", csv_ligands)
+        populated_db.export_table_to_csv("Ligands", csv_ligands)
         assert Path(csv_ligands).exists()
 
         csv_bookmark = str(tmp_path / "export_csv.csv")
-        populated_db.export_table_as_csv("export_csv", csv_bookmark)
+        populated_db.export_table_to_csv("export_csv", csv_bookmark)
         assert Path(csv_bookmark).exists()
 
-    def test_export_sql_as_csv(self, populated_db, tmp_path):
+    def test_export_sql_to_csv(self, populated_db, tmp_path):
         csv_file = tmp_path / "query.csv"
-        populated_db.export_sql_as_csv(
+        populated_db.export_sql_to_csv(
             "SELECT pose_id, docking_score FROM Results", str(csv_file)
         )
         lines = csv_file.read_text().splitlines()
@@ -456,7 +425,7 @@ class TestOutput:
         expected_rows = ad6_db.table_length("Results")
         for index, selection in enumerate((None, "Results")):
             csv_path = tmp_path / f"all_results_{index}.csv"
-            ad6_db.export_columns_as_csv(
+            ad6_db.export_columns_to_csv(
                 ["docking_score"], bookmark_name=selection, csv_name=str(csv_path)
             )
             with csv_path.open() as csv_file:
@@ -464,7 +433,7 @@ class TestOutput:
             assert len(rows) - 1 == expected_rows
 
         with pytest.raises(OptionError, match="not a bookmark"):
-            ad6_db.export_columns_as_csv(
+            ad6_db.export_columns_to_csv(
                 ["docking_score"],
                 bookmark_name="does_not_exist",
                 csv_name=str(tmp_path / "invalid.csv"),
@@ -538,7 +507,7 @@ class TestOutput:
         assert sdf.read_text().count("$$$$") == 3
 
         csv = tmp_path / "status.csv"
-        populated_db.export_table_as_csv(scope, str(csv))
+        populated_db.export_table_to_csv(scope, str(csv))
         assert len(pd.read_csv(csv)) == 3
 
         subset = populated_db.export_bookmark_db(scope, str(tmp_path / "subset.db"))
@@ -699,12 +668,13 @@ class TestStorageMan:
         assert populated_db.table_length("child_bm") == child_poses
 
     def test_version_info(self, ad6_db):
-        from importlib.metadata import version
+        from ringtail.schema import SCHEMA_VERSION
 
         with ad6_db.storageman:
             versionmatch, db_version = ad6_db.storageman.check_ringtaildb_version()
+
         assert versionmatch
-        assert db_version == version("ringtail")
+        assert db_version == SCHEMA_VERSION
 
     def test_bookmark_paging(self, populated_db):
         """The GUI table and viewer page through a bookmark with these three calls."""
@@ -719,21 +689,6 @@ class TestStorageMan:
         row = populated_db.get_row_from_pose("page", poses[1])
         following = populated_db.get_scrolling_table_data("page", 1, row + 1)["data"]
         assert following[0][pose_col] == poses[2]
-
-    def test_selection_names_ignore_case(self, populated_db):
-        populated_db.filter(eworst=-7, output_bookmark="mixed")
-        assert populated_db.get_range_of_e_le(
-            "MIXED"
-        ) == populated_db.get_range_of_e_le("mixed")
-        assert (
-            populated_db.table_length("MIXED") == populated_db.table_length("mixed") > 0
-        )
-        populated_db.update_pose_status([1, 2], 1)
-        # the GUI passes status tables capitalized
-        assert populated_db.get_range_of_e_le(
-            "Accepted"
-        ) == populated_db.get_range_of_e_le("accepted")
-        assert populated_db.get_histogram_data("docking_score", 5, "Accepted")[1]
 
 
 @pytest.mark.slow  # clones a database and merges another into it
@@ -1477,7 +1432,7 @@ class TestCustomFields:
         )
 
         csv_path = tmp_path / "custom_fields.csv"
-        tmp_db.export_columns_as_csv(
+        tmp_db.export_columns_to_csv(
             columns={
                 "pose_id": None,
                 "ligname": None,

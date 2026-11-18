@@ -18,10 +18,11 @@ from .logutils import LOGGER, get_logger, setup_logging
 from .filters import Filters
 from .ringtailoptions import (
     RingtailDefaults,
-    validate_file_pattern,
+    check_file_pattern,
 )
 from .storagemanager import StorageManager
 from .querybuilder import QueryBuilder
+from .types import LigandMol, PoseMol
 from .exceptions import OptionError, RingtailError
 from ._version import __version__
 
@@ -29,7 +30,7 @@ __all__ = [
     "RingtailCore",
     "__version__",
     "RingtailDefaults",
-    "validate_file_pattern",
+    "check_file_pattern",
     "storage_types",
     "Filters",
     "LOGGER",
@@ -41,4 +42,6 @@ __all__ = [
     "RingtailError",
     "QueryBuilder",
     "RECALC_TRACKING_TABLE",
+    "PoseMol",
+    "LigandMol",
 ]

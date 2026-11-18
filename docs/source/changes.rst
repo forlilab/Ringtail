@@ -37,6 +37,7 @@ Database size scales roughly linearly with the number of stored poses (~0.6 KB p
 Enhancements to the codebase
 ==============================
 * Works with AD6 SDF file docking output, and allows receptor to be provided as a ``json`` or a ``Meeko.Polymer``
+* Ringtail will read and store custom properties stored to the Mol in the SDF, type of each new database column will be inferred from the first occurrence of the property in a Mol for a given database
 * Chemicalite is no longer required, including for the SQLite backend. Ligand molecules are stored as RDKit binary data.
 * DuckDB is the new default backend, with SQLite still available, with overall similar database creating times and significantly enhanced filtering times and smaller file size
 * The Ringtail database schema is now fully defined in ``schema.py``, and most storage level methods use a custom QueryBuilder class to handle building of SQL dynamically (and with specific backend dialects)
@@ -49,7 +50,6 @@ Enhancements to the codebase
 * It's now possible to assign status/flags to poses via the API using ``update_pose_status``, such as Accepted/1, Maybe/2, Rejected/3 or 0 to remove status
 * New method ``merge_databases`` which will safely merge one or more secondary databases with the database currently initialized as a Ringtail object.
 * New method to (re-)calculate interactions for vina and AD6 results. This will delete all interactions present and calculate them all anew based on current receptor data in the database and given vdw and hb cutoffs. Useful if interactions were not calculated during database creation, or if user wants to re-calculate them with new interaction cutoff distances. It commits in batches and records which poses it finished, so an interrupted run resumes where it stopped rather than starting over. It optionally backs up the database first (``backup=True``), reports progress through a ``progress_callback``, and can be stopped between batches through ``should_cancel`` while staying resumable. ``interaction_recalc_status`` reports whether a database was left half recomputed, and at which cutoffs, since resuming at different cutoffs is refused.
-* Every bookmark records the call that created it (``Filters.definition``, with ``call_id`` grouping the bookmarks one call creates, and a ``created`` timestamp), so bookmarks can be re-created after the underlying data changes
 * New method ``bookmarks_with_interaction_filters`` lists the bookmarks whose filters select on interactions, i.e. the ones worth re-running after a recalculation changes ``num_hb`` and ``num_interactions`` under them.
 * Interactions are calculated for all atoms of all provided poses in one batch, significantly reducing the time to calculate interactions
 * Ringtail database version is now tracked in a ``ringtail_schema_version`` table (SQLite ``PRAGMA user_version`` has been deprecated)
@@ -121,7 +121,7 @@ Changes to API and code behavior
 * ``export_receptor`` is now ``export_receptor_pdbqt``
 * ``write_flexres_pdb`` has been modernized to work from the new receptor ``Polymer`` object (passed in or read from the database) and also works when there are no flexible residues.
 * ``write_molecule_sdfs`` method argument ``write_nonpassing`` has been discontinued, and ``ligname`` (string or list of strings) has been added. It is assumed that if a ``bookmark_name`` is provided, only passing poses of each ligand will be written to an SD file. If no ``bookmark_name`` is provided, each pose of each ligand is written to the SDF.  
-* The method ``export_csv`` has been broken into three distinct methods, ``export_columns_as_csv`` where one or more columns (from Results and Ligands tables + modified interaction columns) are specified and exported, ``export_table_as_csv`` where an entire table is exported, and ``export_sql_as_csv`` where the user specifies a properly formatted SQL prompt
+* The method ``export_csv`` has been broken into three distinct methods, ``export_columns_to_csv`` where one or more columns (from Results and Ligands tables + modified interaction columns) are specified and exported, ``export_table_to_csv`` where an entire table is exported, and ``export_sql_to_csv`` where the user specifies a properly formatted SQL prompt
 * The options for creating plots and opening PyMol sessions (and associated methods) through the CLI have been discontinued 
 * The class ResultsManager, designed to handle different multi processor options, has been removed
 * If a ligand fails to be written to the database it will be skipped and listed in ``ringtail_failed_files.log`` in the current working directory, and the rest of the results in the same file will still be added. 

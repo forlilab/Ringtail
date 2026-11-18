@@ -335,19 +335,19 @@ If the user wishes to explore the data in CSV format, Ringtail provides three op
 
 .. code-block:: python
 
-    rtc.export_columns_as_csv(columns=["ligname","docking_score","interaction_type","rec_resname"],bookmark_name="eworst6")
+    rtc.export_columns_to_csv(columns=["ligname","docking_score","interaction_type","rec_resname"],bookmark_name="eworst6")
 
 For a more flexible option, you can write your own SQL and produce an output CSV file from that:
 
 .. code-block:: python
     
-    rtc.export_sql_as_csv(sql = "SELECT ligname, docking_score, leff, pose_id, ligand_smile FROM Results JOIN Ligands ON Results.ligand_id=Ligands.ligand_id", csv_name = "my_query.csv")
+    rtc.export_sql_to_csv(sql = "SELECT ligname, docking_score, leff, pose_id, ligand_smile FROM Results JOIN Ligands ON Results.ligand_id=Ligands.ligand_id", csv_name = "my_query.csv")
 
 Lastly, you can simply dump an entire database table to CSV, though please note this can be slow for large databases. A useful option may be for the table ``Interaction_indices`` which describes each unique interaction in the database. 
 
 .. code-block:: python
 
-    rtc.export_table_as_csv(table="Interaction_indices", csv_name = "unique_interactions.csv")
+    rtc.export_table_to_csv(table="Interaction_indices", csv_name = "unique_interactions.csv")
 
 Creating a new database from a bookmark
 =======================================

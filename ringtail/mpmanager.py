@@ -23,7 +23,8 @@ import traceback
 from datetime import datetime
 import multiprocessing as mp
 
-from .ringtailoptions import ResultsObject, validate_file_pattern
+from .ringtailoptions import check_file_pattern
+from .types import ResultsObject
 from .storagemanager import StorageManager
 
 
@@ -131,7 +132,7 @@ class MPManager:
         self.workers.append(writer)
         try:
             self._process_data_sources(
-                results, file_pattern=validate_file_pattern(docking_mode)
+                results, file_pattern=check_file_pattern(docking_mode)
             )
         except Exception as e:
             tb = traceback.format_exc()
@@ -163,9 +164,14 @@ class MPManager:
                 inputs = [inputs]
             for item in inputs:
                 if os.path.isdir(item):
-                    for f in self._scan_dir(item, file_pattern, results.recursive_path_traverse):
+                    for f in self._scan_dir(
+                        item, file_pattern, results.recursive_path_traverse
+                    ):
                         self._add_to_queue(f)
-                elif fnmatch.fnmatch(item, file_pattern) and item != self.receptor_file_path:
+                elif (
+                    fnmatch.fnmatch(item, file_pattern)
+                    and item != self.receptor_file_path
+                ):
                     self._add_to_queue(item)
                 else:
                     self._scan_file_list(item, file_pattern.replace("*", ""))
@@ -265,8 +271,7 @@ class MPManager:
             path = os.path.normpath(os.path.expanduser(path))
             for dirpath, _, filenames in os.walk(path):
                 yield from (
-                    os.path.join(dirpath, f)
-                    for f in fnmatch.filter(filenames, pattern)
+                    os.path.join(dirpath, f) for f in fnmatch.filter(filenames, pattern)
                 )
         else:
             yield from glob.glob(os.path.join(path, pattern))

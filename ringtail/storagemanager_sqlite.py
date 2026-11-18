@@ -163,7 +163,7 @@ class StorageManagerSQLite(StorageManager):
             }
             columns = []
             for name, python_type in custom_columns.items():
-                quoted_name = '"' + name.replace('"', '""') + '"'
+                quoted_name = self._safe_quoting(name)
                 columns.append(f"{quoted_name} {sql_types[python_type]}")
 
             column_definitions = ",\n".join(columns)
@@ -245,7 +245,7 @@ class StorageManagerSQLite(StorageManager):
 
         if custom_data:
             columns = list(dict.fromkeys(key for entry in custom_data for key in entry))
-            quoted_columns = ['"' + col.replace('"', '""') + '"' for col in columns]
+            quoted_columns = [self._safe_quoting(col) for col in columns]
             rows = [tuple(entry.get(col) for col in columns) for entry in custom_data]
             placeholders = ", ".join("?" for _ in columns)
             temp_custom_insert = f"""
@@ -342,9 +342,7 @@ class StorageManagerSQLite(StorageManager):
                 for name in self.fetch_dynamic_table_column_names("Custom_temp")
                 if name.lower() not in identifiers
             ]
-            quoted_columns = [
-                '"' + name.replace('"', '""') + '"' for name in custom_columns
-            ]
+            quoted_columns = [self._safe_quoting(name) for name in custom_columns]
             insert_columns = ", ".join(quoted_columns)
             select_columns = ", ".join(f"CT.{col}" for col in quoted_columns)
             temp_to_custom_pose_data = f"""
@@ -399,7 +397,7 @@ class StorageManagerSQLite(StorageManager):
 
     def _update_custom_columns(self, table: str, columns: dict[str, str]):
         for col, type in columns.items():
-            quoted_col = '"' + col.replace('"', '""') + '"'
+            quoted_col = self._safe_quoting(col)
             self.db_query(f"""
                 ALTER TABLE {table} 
                 ADD COLUMN {quoted_col} {type};
@@ -2139,7 +2137,7 @@ class StorageManagerSQLite(StorageManager):
             logger.info(f"Attached database {new_db} aliased as {new_db_alias}.")
             return new_db_alias
 
-    def _check_attached(self) -> list[tuple]:
+    def check_attached(self) -> list[tuple]:
         """
         Check what databases are attached
 

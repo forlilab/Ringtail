@@ -191,9 +191,13 @@ def main():
                 ids = []
                 for cluster_id, filter_window, name in options:
                     ids.append(cluster_id)
-                    print(f"{cluster_id}             |    {filter_window}             |    {name}")
+                    print(
+                        f"{cluster_id}             |    {filter_window}             |    {name}"
+                    )
                 cluster_choice = int(
-                    input("Please specify choice number for the cluster you would like to return similar ligands from: ")
+                    input(
+                        "Please specify choice number for the cluster you would like to return similar ligands from: "
+                    )
                 )
                 if cluster_choice not in ids:
                     raise ValueError(
@@ -222,7 +226,7 @@ def main():
                     else bookmark_name + ".csv"
                 )
                 if not cli.output_options.outfields:
-                    rtcore.export_table_as_csv(
+                    rtcore.export_table_to_csv(
                         bookmark_name,
                         filename,
                     )
@@ -232,7 +236,7 @@ def main():
                     # ensure outfields is list of strings:
                     if isinstance(outs, str):
                         outs = [item.strip() for item in outs.split(",")]
-                    rtcore.export_columns_as_csv(
+                    rtcore.export_columns_to_csv(
                         outs,
                         bookmark_name,
                         filename,
@@ -240,7 +244,7 @@ def main():
 
             # export query as csv
             if cli.output_options.export_query_csv:
-                rtcore.export_sql_as_csv(
+                rtcore.export_sql_to_csv(
                     cli.output_options.export_query_csv, "query.csv"
                 )
 

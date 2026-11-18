@@ -1,46 +1,37 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Ringtail virtual screening manager
+# Ringtail virtual screening public API
 #
 import copy
 import itertools
 import glob
 import os
 import re
-from typing import Callable, Union, NamedTuple
+from typing import Callable
 import functools
-import inspect
 from collections.abc import Iterable
 import json
 from pathlib import Path
 from meeko import RDKitMolCreate
 from rdkit import Chem
 
-from .interactions import find_interactions, make_interaction_finder
-from .util import *
+
 from .logutils import get_logger
 
 logger = get_logger(__name__)
 
-#: Decimals the interaction cutoffs are rounded to before being stamped into the
-#: interaction-recalculation tracking table, and before being compared against on
-#: resume. Rounded rather than compared with a tolerance so the number stored and the
-#: number compared are the same one.
-_CUTOFF_DECIMALS = 1
-
-#: Name of the table that records which poses add_interactions has already recomputed.
-#: Its presence in a database means a recalculation was interrupted and can be resumed.
-#: Shared with the GUI and rt_recalc_interactions so all three agree on the name.
-RECALC_TRACKING_TABLE = "recomputed_interactions"
 from .filters import Filters
+from .interactions import find_interactions, make_interaction_finder
+from .util import *
 from .ringtailoptions import (
     RingtailDefaults,
-    ResultsObject,
     statuses,
     validate_docking_mode,
+    num_poses_to_store,
+    validate_bookmark_name,
 )
-from .schema import OUTFIELD_BY_TABLE, CANDIDATES_NAME
+from .schema import OUTFIELD_BY_TABLE, CANDIDATES_NAME, RECALC_TRACKING_TABLE
 from .exceptions import (
     RTCoreError,
     OutputError,
@@ -60,30 +51,7 @@ from .parsers import (
     VinaMoleculeSupplier,
     generate_interaction_tuples,
 )
-
-
-class PoseMol(NamedTuple):
-    """One RDKit mol per pose, returned by RingtailCore.create_rdkit_mols.
-
-    flexres_mols is [] unless flexres_data was passed to the call.
-    """
-
-    pose_id: int
-    mol: object
-    ligname: str
-    flexres_mols: list
-    properties: dict
-
-
-class LigandMol(NamedTuple):
-    """One multi-conformer RDKit mol per ligand, from create_rdkit_mols_by_ligand."""
-
-    ligname: str
-    mol: object
-    flexres_per_pose: list
-    properties: dict
-    flexres_residues: list
-
+from .types import PoseMol, LigandMol, ResultsObject
 
 storage_types = {}
 if HAS_SQLITE:
@@ -105,53 +73,6 @@ def _wrap_exceptions(func):
             ) from e
 
     return wrapper
-
-
-def _records_bookmark_call(exclude: tuple = (), normalize: Callable = None):
-    """Store the call on every bookmark it creates (Filters.definition and call_id),
-    so the bookmark can be re-created by calling the same method with the same
-    arguments. Defaults are applied, so a later change of default does not change
-    what a replay selects.
-
-    Args:
-        exclude (tuple): arguments that only shape output, not the selection
-        normalize (Callable, optional): takes and returns the recorded kwargs dict,
-            e.g. to make paths absolute
-    """
-
-    def decorator(func):
-        signature = inspect.signature(func)
-
-        @functools.wraps(func)
-        def wrapper(self, *args, **kwargs):
-            bound = signature.bind(self, *args, **kwargs)
-            bound.apply_defaults()
-            recorded = {
-                name: value.to_dict() if isinstance(value, Filters) else value
-                for name, value in bound.arguments.items()
-                if name != "self" and name not in exclude
-            }
-            if normalize is not None:
-                recorded = normalize(recorded)
-            with self.storageman.recording_call(func.__name__, recorded):
-                return func(self, *args, **kwargs)
-
-        return wrapper
-
-    return decorator
-
-
-def _absolute_crossref_paths(recorded: dict) -> dict:
-    """Crossref pairs as (absolute database path, bookmark), so a replay does not
-    depend on the working directory."""
-    for key in ("wanted_dbs", "unwanted_dbs"):
-        if recorded.get(key):
-            # "" names this database, it has no path to make absolute
-            recorded[key] = [
-                (os.path.abspath(db) if db else db, scope)
-                for db, scope in recorded[key]
-            ]
-    return recorded
 
 
 @_wrap_exceptions
@@ -182,7 +103,7 @@ class RingtailCore:
         db_file (str): name of database file being operated on
         storageman (StorageManager): Interface module with database
         storagetype (str): database type
-        _run_mode (str): refers to whether ringtail is ran from the command line or through direct API use, where the former is more restrictive
+        _run_mode (str): refers to whether ringtail is ran from the command line, direct API use, where the former is more restrictive, or in GUI mode which displays certain terminal inputs as popups
     """
 
     def __init__(
@@ -219,16 +140,8 @@ class RingtailCore:
 
         self._run_mode = access_mode.lower()
 
-    def build_gui_tables(self):
-        """
-        Create tables (if not exists) that are used in the GUI,
-        but not directly by other cli/api processes
-        """
-        with self.storageman as sm:
-            sm.ensure_gui_tables()
-
     @_wrap_exceptions
-    def get_previous_docking_mode(self) -> Union[None, str]:
+    def get_previous_docking_mode(self) -> None | str:
         """
         Will return the last used docking mode/engine of the database, normalized to the standardized
         names for docking modes used in ringtail (e.g., see RingtailOptions)
@@ -244,7 +157,7 @@ class RingtailCore:
     @_wrap_exceptions
     def add_results_from_files(
         self,
-        docking_results: Union[str, list[str]] = RingtailDefaults.docking_results,
+        docking_results: str | list[str] = RingtailDefaults.docking_results,
         recursive: bool = RingtailDefaults.recursive,
         receptor_file: str = None,
         save_receptor: bool = RingtailDefaults.save_receptor,
@@ -262,8 +175,8 @@ class RingtailCore:
     ):
         """
         Call storage manager to process result files and add to database. Creates or adds to an existing a database.
-        Adding results to a database that has bookmarks or filters would leave those out of date, so it
-        requires consent=True, which deletes all bookmarks, filters and clusterings first.
+        Adding results to a database that has bookmarks or filters would leave them invalid, so consent=True is required in
+        this instance which deletes all bookmarks, filters and clusterings before adding additional results.
 
         Args:
             docking_results (str | list[str]): one or more docking result files, directories to scan,
@@ -300,7 +213,7 @@ class RingtailCore:
 
         # validate docking mode
         docking_mode = validate_docking_mode(docking_mode)
-        num_poses = self._num_poses_to_store(max_poses, store_all_poses)
+        num_poses = num_poses_to_store(max_poses, store_all_poses)
 
         # Docking mode compatibility check
         if docking_mode == "vina" and interaction_tolerance:
@@ -338,9 +251,7 @@ class RingtailCore:
                     logger.debug(
                         "Loading polymer .json receptor string for interaction calculation"
                     )
-                    # Pass the polymer JSON straight through: the interaction
-                    # finder reads receptor atoms natively from the Polymer, with
-                    # no pdbqt round-trip.
+                    # Pass the polymer JSON straight to interaction calc
                     with open(results.receptor_file_path, "r") as f:
                         results.receptor_string = f.read()
                 else:
@@ -352,7 +263,7 @@ class RingtailCore:
                 t.lower() for t in self.all_database_tables()
             ]:
                 logger.debug(
-                    "No receptor file path provided, attempting to load receptor string from database"
+                    "No receptor file path provided,looking for the receptor string in the database"
                 )
                 results.receptor_string = self.get_receptor_object().receptor_string()
             if not results.receptor_string:
@@ -360,7 +271,7 @@ class RingtailCore:
                     "Interaction calculation requires a receptor. Pass receptor_file, "
                     "save a receptor to the database first, or set calculate_interactions=False."
                 )
-            # readers log nowhere under spawn, so check the receptor here
+            # validate the receptor in the main process so failures produce a visible warning
             if (
                 make_interaction_finder(results.receptor_string, interaction_cutoffs)
                 is None
@@ -410,12 +321,13 @@ class RingtailCore:
             f"{self.table_length('Results') - poses_before} poses to the database."
         )
         if finalize:
+            # indexes the new data, only performed for some backends like SQLite
             self.finalize_write()
 
     @_wrap_exceptions
     def add_results_from_vina_string(
         self,
-        results: Union[dict, Iterable[dict]],
+        results: dict | Iterable[dict],
         duplicate_handling: str = RingtailDefaults.duplicate_handling,
         store_all_poses: bool = RingtailDefaults.store_all_poses,
         max_poses: int = RingtailDefaults.max_poses,
@@ -448,7 +360,7 @@ class RingtailCore:
         interaction_finder = self._prepare_interaction_finder(
             calculate_interactions, receptor_string, interaction_cutoffs
         )
-        num_poses = self._num_poses_to_store(max_poses, store_all_poses)
+        num_poses = num_poses_to_store(max_poses, store_all_poses)
         vina_parser = VinaMoleculeSupplier(num_poses)
 
         self._insert_non_file_results(
@@ -470,7 +382,7 @@ class RingtailCore:
     @_wrap_exceptions
     def add_mol(
         self,
-        mols: Union[Iterable[Chem.Mol], Chem.Mol],
+        mols: Iterable[Chem.Mol] | Chem.Mol,
         docking_mode: str = "ad6",
         calculate_interactions: bool = RingtailDefaults.calculate_interactions,
         interaction_cutoffs: list = RingtailDefaults.interaction_cutoffs,
@@ -510,7 +422,7 @@ class RingtailCore:
         self._insert_non_file_results(
             docking_mode,
             mols,
-            lambda m: process_docked_mol(  # TODO this needs to deal with custom properties
+            lambda m: process_docked_mol(
                 m,
                 interaction_finder=interaction_finder,
                 calculate_interactions=calculate_interactions,
@@ -542,7 +454,7 @@ class RingtailCore:
             self.storageman.finalize_database_write()
 
     @_wrap_exceptions
-    def save_receptor(self, receptor: Union[str, dict]):
+    def save_receptor(self, receptor: str | dict):
         """
         Add receptor to database.
 
@@ -658,15 +570,6 @@ class RingtailCore:
                 table is left in place for a later call to pick up.
         """
         track_table_name = RECALC_TRACKING_TABLE
-
-        # The receptor is resolved and the finder built before anything is deleted.
-        # make_interaction_finder reports failure by returning None rather than
-        # raising, and find_interactions then reports zero interactions for every
-        # pose — which, once the clear below has run, is indistinguishable from a
-        # database whose ligands genuinely touch nothing. Left later, an unreadable
-        # receptor deleted every interaction, zeroed num_hb/num_interactions and
-        # still reported completed: True. So it has to stop the run here, while the
-        # database is still intact.
         if not receptor_string:
             receptor_string = self.get_receptor_object().receptor_string()
         if not receptor_string:
@@ -684,14 +587,11 @@ class RingtailCore:
                 "interactions cannot be calculated; the logged warning above gives "
                 "the underlying error. Nothing was changed."
             )
+        status = self.interaction_recalc_status()
 
         with self.storageman as sm:
-            # A previous run left its tracking table behind, so this call finishes it.
-            # Resuming only computes poses that were never reached, so it deletes
-            # nothing: it needs neither consent nor a backup, and re-cloning here
-            # would overwrite the backup the first attempt took with a copy of the
-            # half-recomputed database.
-            resuming = track_table_name in sm.tables_in_db()
+            # check if database has unfinished interaction calculations
+            resuming = status["pending"]
             if resuming:
                 logger.info(
                     "A table tracking processed pose interactions exists.\nWill continue processing poses and not recompute those that have already been processed."
@@ -703,8 +603,6 @@ class RingtailCore:
                         "Consent not given for deleting and re-calculating interactions, exiting."
                     )
                     return {"completed": False, "poses_done": 0, "poses_total": 0}
-                # Before clearing, not after: a backup taken afterwards would
-                # be a copy of the damage it exists to undo.
                 if backup:
                     sm.clone()
                 success = sm.clear_interaction_tables()
@@ -716,41 +614,27 @@ class RingtailCore:
                 sm.clone()
 
         with self.storageman as sm:
-            # a "temporary" table that keeps track of what pose_ids have been processed
+            # a table that only exists as long as not all pose_ids have been processed
             sm.create_transaction_tracking_table(track_table_name)
 
-            # Accounting, on sm rather than self.table_length so it reuses this
-            # connection instead of opening a nested one. Counted after the tracking
-            # table is created, since table_length only warns and returns None for a
-            # table that does not exist yet. A resumed run reports against the whole
-            # database, not just the part still pending, so a progress bar picks up
-            # where it left off instead of restarting at zero.
-            poses_total = sm.table_length("Results")
-            processed = sm.table_length(track_table_name)
-
-            # Resuming with different cutoffs would leave one database holding
-            # interactions computed two different ways, with nothing recording which
-            # pose got which.
-            tracked = sm.fetch_tracked_cutoffs(track_table_name)
+            poses_total = status["poses_total"]
+            processed = status["poses_done"]
+            tracked = status["cutoffs"]
+            # needs to resume with same cutoffs used before
             if tracked is not None and tracked != (
-                round(hb_cutoff, _CUTOFF_DECIMALS),
-                round(vdw_cutoff, _CUTOFF_DECIMALS),
+                round(hb_cutoff, 1),
+                round(vdw_cutoff, 1),
             ):
                 raise OptionError(
                     f"This database has a partly finished interaction calculation that "
                     f"used cutoffs hb={tracked[0]}, vdw={tracked[1]}, but this call asks "
                     f"for hb={hb_cutoff}, vdw={vdw_cutoff}. Finish or discard the "
-                    f"previous run before changing cutoffs; dropping the "
+                    f"previous run before changing cutoffs. Dropping the "
                     f"'{track_table_name}' table discards it."
                 )
 
-            # One batch per round trip, asking the database each time what is still
-            # pending. Nothing is read across a write, and an interrupted run resumes
-            # from whatever the tracking table says was finished.
             cancelled = False
             while True:
-                # Between batches, so a cancelled run stops on a committed boundary
-                # with the tracking table agreeing with the interactions written.
                 if should_cancel is not None and should_cancel():
                     cancelled = True
                     logger.info(
@@ -769,10 +653,7 @@ class RingtailCore:
                 interactions = []
                 processed_poseids = []
                 results_counts = []
-                # Poses arrive grouped by ligand, and find_interactions prepares the
-                # meeko molsetup once for the whole group it is handed — the expensive
-                # part by far. One call per pose would redo that preparation for every
-                # pose of a ligand.
+
                 for _, ligand_poses in itertools.groupby(batch, key=lambda row: row[0]):
                     ligand_poses = list(ligand_poses)
                     # rdmol is the same blob on every row of the group
@@ -801,12 +682,12 @@ class RingtailCore:
                         processed_poseids.append(
                             (
                                 pose_id,
-                                round(hb_cutoff, _CUTOFF_DECIMALS),
-                                round(vdw_cutoff, _CUTOFF_DECIMALS),
+                                round(hb_cutoff, 1),
+                                round(vdw_cutoff, 1),
                             )
                         )
 
-                # The pose ids land in the tracking table in the same transaction as
+                # pose_ids are entered in the tracking table in the same transaction as
                 # their interactions, so a crash loses a whole batch or none of it.
                 sm.post_insert_interactions(
                     interactions,
@@ -818,13 +699,9 @@ class RingtailCore:
                 logger.info(f"Interactions calculated for {processed} poses.")
                 if progress_callback is not None:
                     progress_callback(processed, poses_total)
-
-            # Only once every pose is accounted for. Dropping it after a cancellation
-            # would turn a resumable run into a half-recomputed database with no record
-            # of which half.
+            # finalize, add indices to (rewritten) interaction tables
             if not cancelled:
                 sm._delete_table(track_table_name)
-                # the interaction tables were recreated without their indices
                 sm.finalize_database_write()
 
         return {
@@ -839,7 +716,9 @@ class RingtailCore:
 
     @_wrap_exceptions
     def db_summary_data(
-        self, columns=["docking_score", "leff"], percentiles=[1, 10]
+        self,
+        columns: list[str] = ["docking_score", "leff"],
+        percentiles: list[int] = [1, 10],
     ) -> tuple[dict, dict]:
         """
         Produces dictionary of docking score and ligand efficiency data for 1st and 10th percentile
@@ -859,18 +738,9 @@ class RingtailCore:
             }
 
     @_wrap_exceptions
-    @_records_bookmark_call(
-        exclude=(
-            "output_log",
-            "outfields",
-            "order_results",
-            "return_iter",
-            "output_all_poses",
-        )
-    )
     def filter(
         self,
-        filters: Union[Filters, dict] = None,
+        filters: Filters | dict = None,
         eworst=None,
         ebest=None,
         leworst=None,
@@ -902,7 +772,7 @@ class RingtailCore:
         input_bookmark: str = None,
         return_iter: bool = False,
         ligand_name_file=None,
-    ) -> Union[tuple[int, str], list[tuple]]:
+    ) -> tuple[int, str] | list[tuple]:
         """Prepare list of filters, then filters and writes all passing pose_ids to a bookmark of given name. Creates an output log text file of all ligand (or all poses, if requested) docking results that passes.
         If clustering is requested, it will first perform the filtering, then cluster, and create a new bookmark of name <bookmark_<cluster_type>_cluster> for each requested cluster type.
         In the case of clustering, the representative ligands will be the ones written to the output log.
@@ -994,17 +864,16 @@ class RingtailCore:
         else:
             filters = flat
 
-        output_bookmark = valid_bookmark_name(output_bookmark)
+        output_bookmark = validate_bookmark_name(output_bookmark)
         if output_bookmark is None:
             raise OptionError(
                 "Bookmark name must only use letters, numbers and underscore, and cannot be a table name."
             )
-        # bookmark lookups ignore case, so compare lowercased names: 'KEEP' as input and
-        # 'keep' as output would otherwise pass and overwrite the input bookmark
+        # bookmark lookups ignore case
         input_bookmark = input_bookmark.lower() if input_bookmark else None
         if input_bookmark == output_bookmark:
             raise OptionError(
-                f"'input_bookmark' and 'output_bookmark' cannot be the same ({output_bookmark!r}), please choose a different 'output_bookmark'."
+                f"'input_bookmark' and 'output_bookmark' cannot be the same ({output_bookmark}), please choose a different 'output_bookmark'."
             )
         # make sure enumerate_interaction_combs always true if max_miss = 0, since we don't ever worry about the union in this case
         if max_miss == 0:
@@ -1015,8 +884,8 @@ class RingtailCore:
             enumerate_interaction_combs = False
             if filters.rdkit_group_count() > 1:
                 logger.warning(
-                    "SMARTS/RDKit criteria appear in multiple filter groups; each group "
-                    "is evaluated with a separate ligand scan, which is slower."
+                    "SMARTS/RDKit criteria appear in multiple filter groups, please know that each filter group "
+                    "with RDKit criteria is evaluated with a separate database scan and this may be slow."
                 )
 
         logger.info("Starting to filter results")
@@ -1079,7 +948,7 @@ class RingtailCore:
                     )
                 if num_passing_ligands:
                     logger.info(
-                        f"\nNumber passing ligands filter combination {str(combination)}:{num_passing_ligands}"
+                        f"Number passing ligands filter combination {str(combination)}:{num_passing_ligands}"
                     )
                 else:
                     logger.warning(
@@ -1103,9 +972,7 @@ class RingtailCore:
             print_string = " in max_miss union"
 
         if num_passing_ligands:
-            logger.info(
-                f"\nNumber passing ligands{print_string}: {num_passing_ligands}"
-            )
+            logger.info(f"Number passing ligands{print_string}: {num_passing_ligands}")
             if clustering:
                 _, num_passing_ligands = self._parse_clustering(
                     clustering, output_bookmark, effective_bookmark
@@ -1126,7 +993,7 @@ class RingtailCore:
                     ),
                 )
         else:
-            logger.warning(f"WARNING: No ligands found passing filters{print_string}.")
+            logger.warning(f"No ligands found passing filters{print_string}.")
 
         if return_iter:
             if not num_passing_ligands:
@@ -1145,13 +1012,12 @@ class RingtailCore:
             return num_passing_ligands, output_bookmark
 
     @_wrap_exceptions
-    @_records_bookmark_call()
     def cluster(
         self,
         output_bookmark: str,
         cluster_type: str = "mfp",
         cutoff: float = 0.5,
-        input_bookmark: Union[str, None] = None,
+        input_bookmark: str | None = None,
     ) -> tuple[int, str]:
         """
         Clusters data and saves representatives to output_bookmark.
@@ -1165,7 +1031,7 @@ class RingtailCore:
         Returns:
             tuple[int, str]: number of cluster representatives, output_bookmark
         """
-        output_bookmark = valid_bookmark_name(output_bookmark)
+        output_bookmark = validate_bookmark_name(output_bookmark)
         if output_bookmark is None:
             raise OptionError(
                 "Bookmark name must only use letters, numbers and underscore, and cannot be a table name."
@@ -1173,7 +1039,7 @@ class RingtailCore:
         input_bookmark = input_bookmark.lower() if input_bookmark else None
         if input_bookmark == output_bookmark:
             raise OptionError(
-                f"'input_bookmark' and 'output_bookmark' cannot be the same ({output_bookmark!r}), please choose a different 'output_bookmark'."
+                f"'input_bookmark' and 'output_bookmark' cannot be the same ({output_bookmark}), please choose a different 'output_bookmark'."
             )
         with self.storageman as sm:
             generated_name, num_clusters = sm.cluster_data(
@@ -1194,7 +1060,7 @@ class RingtailCore:
         filters: dict,
         num_passing_ligands: int,
         output_log: str = RingtailDefaults.output_log,
-        output_fields: Union[str, list] = RingtailDefaults.outfields,
+        output_fields: str | list = RingtailDefaults.outfields,
         output_all_poses: bool = RingtailDefaults.output_all_poses,
         order_results: str = RingtailDefaults.order_results,
         clustering: dict = None,
@@ -1248,8 +1114,8 @@ class RingtailCore:
     @_wrap_exceptions
     def write_flexres_pdb(
         self,
-        receptor_polymer: Union[object, str] = None,
-        ligname: Union[str, list] = None,
+        receptor_polymer: object | str = None,
+        ligname: str | list = None,
         bookmark_name: str = None,
         filename: str = "receptor.pdb",
         consent: bool = False,
@@ -1349,7 +1215,7 @@ class RingtailCore:
         bookmark_name: str = None,
         sdf_path: str = ".",
         all_in_one: bool = True,
-        ligname: Union[str, list] = None,
+        ligname: str | list = None,
     ):
         """
         Have output manager write molecule sdf files for passing results in given results bookmark
@@ -1471,14 +1337,14 @@ class RingtailCore:
                     opm.write_filter_results_in_log(similar_ligands)
                     opm.log_num_passing_ligands(len(similar_ligands))
             logger.info(
-                f"\nNumber of similar ligands: {len(similar_ligands) if similar_ligands else 0}"
+                f"Number of similar ligands: {len(similar_ligands) if similar_ligands else 0}"
             )
         return similar_ligands, bookmark_name, cluster_name
 
     @_wrap_exceptions
-    def export_columns_as_csv(
+    def export_columns_to_csv(
         self,
-        columns: Union[dict[str, str], list[str]],
+        columns: dict[str, str] | list[str],
         bookmark_name: str = None,
         csv_name: str = "columns_output.csv",
     ):
@@ -1502,11 +1368,17 @@ class RingtailCore:
 
     @_wrap_exceptions
     def get_custom_fields(self) -> dict:
+        """
+        Retrieves any custom properties and fields not in the standard results columns
+
+        Returns:
+            dict: {field: type}
+        """
         with self.storageman as sm:
             return sm.fetch_dynamic_table_column_names("custom_pose_data")
 
     @_wrap_exceptions
-    def export_table_as_csv(self, table: str, csv_name: str = "table_output.csv"):
+    def export_table_to_csv(self, table: str, csv_name: str = "table_output.csv"):
         """
         Exports specified table (all of it) as a csv file
 
@@ -1517,7 +1389,7 @@ class RingtailCore:
         self._export_csv(table, csv_name, True)
 
     @_wrap_exceptions
-    def export_sql_as_csv(self, sql: str, csv_name: str = "sql_output.csv"):
+    def export_sql_to_csv(self, sql: str, csv_name: str = "sql_output.csv"):
         """
         Exports sql-formatted query as csv, assumes user has used appropriate sql terminology for their database engine.
 
@@ -1547,11 +1419,10 @@ class RingtailCore:
         logger.info("Exporting bookmark database")
         if os.path.exists(db_filepath):
             logger.warning(
-                "Requested export DB name already exists. Please rename or remove existing database. New database not exported."
+                "Requested export database name already exists. Please rename or remove existing database. New database not exported."
             )
             return
         with self.storageman:
-            self.storageman._require_scope(bookmark_name)
             if self.storageman.table_length(bookmark_name) == 0:
                 logger.warning(
                     f"No poses in bookmark '{bookmark_name}'. Database not exported."
@@ -1575,29 +1446,14 @@ class RingtailCore:
         output_manager.write_receptor_pdbqt(recname, recstr)
 
     @_wrap_exceptions
-    def get_available_outfields(self) -> dict[str, str]:
-        """Return all column names available as output fields with their descriptions.
-
-        Returns:
-            dict[str, str]: mapping of column name to human-readable description.
-                No database connection is required.
-        """
-        return {
-            col: desc
-            for cols in self.get_exportable_columns().values()
-            for col, desc in cols.items()
-        }
-
-    @_wrap_exceptions
     def get_previous_filter_data(
         self,
         bookmark_name: str,
-        outfields: str = "Ligname,docking_score",
+        outfields: str = "ligname,docking_score",
         order_results: str = "ligname",
         output_log: str = None,
     ):
-        """Get data requested in outfields from the
-        results bookmark of a previous filtering
+        """Get data requested in outfields from the results bookmark of a previous filtering
 
         Args:
             bookmark_name (str): bookmark for which the filters were used
@@ -1618,11 +1474,10 @@ class RingtailCore:
                 opm.write_filter_results_in_log(new_data)
 
     @_wrap_exceptions
-    @_records_bookmark_call(normalize=_absolute_crossref_paths)
     def cross_reference_databases(
         self,
-        wanted_dbs: list[tuple[str, Union[str, None]]] = None,
-        unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
+        wanted_dbs: list[tuple[str, str | None]] = None,
+        unwanted_dbs: list[tuple[str, str | None]] = None,
         bookmark_prefix: str = "crossref",
         alternative_database_names: dict = None,
     ) -> tuple[int, dict, dict]:
@@ -1652,7 +1507,7 @@ class RingtailCore:
             dict: {db_file: new_bookmark_name,}
             dict: "filter" {"wanted":[list of wanted dbs],"unwanted":[list of unwanted dbs]
         """
-        bookmark_prefix = valid_bookmark_name(bookmark_prefix)
+        bookmark_prefix = validate_bookmark_name(bookmark_prefix)
         if not bookmark_prefix:
             raise OptionError(
                 "Bookmark prefix contains illegal symbols, please only use letters, numbers, and underscore."
@@ -1678,14 +1533,14 @@ class RingtailCore:
             )
 
     @_wrap_exceptions
-    def detach_database(self, name: str) -> None:
+    def detach_database(self, name: str):
         """Detach a previously attached database by its alias, no-op if not attached.
 
         Args:
             name (str): alias of the database to detach
         """
         with self.storageman as sm:
-            attached = [db[0] for db in sm._check_attached() if db]
+            attached = [db[0] for db in sm.check_attached() if db]
             if name in attached:
                 sm.detach_db(name)
 
@@ -1708,8 +1563,7 @@ class RingtailCore:
 
         Returns:
             ReceptorData: receptor name, pdbqt blob string, and polymer JSON string.
-                Each field may be None if not stored. Use receptor_string() for
-                interaction calculation or pdbqt_str() for pdbqt file export.
+
         """
         with self.storageman as sm:
             rec_data = sm.fetch_receptor_object()
@@ -1722,6 +1576,29 @@ class RingtailCore:
     # endregion
 
     # region utilities
+
+    @_wrap_exceptions
+    def get_available_outfields(self) -> dict[str, str]:
+        """Return all column names available as output fields with their descriptions.
+
+        Returns:
+            dict[str, str]: mapping of column name to human-readable description.
+                No database connection is required.
+        """
+        return {
+            col: desc
+            for cols in self.get_exportable_columns().values()
+            for col, desc in cols.items()
+        }
+
+    @_wrap_exceptions
+    def build_gui_tables(self):
+        """
+        Create tables (if not exists) that are used in the GUI,
+        but not directly by other cli/api processes
+        """
+        with self.storageman as sm:
+            sm.ensure_gui_tables()
 
     @_wrap_exceptions
     def db_query(self, query: str, params=(), commit=False) -> list[tuple]:
@@ -1739,7 +1616,7 @@ class RingtailCore:
             return sm.db_query(query, params, commit).fetchall()
 
     @_wrap_exceptions
-    def update_pose_status(self, pose_id: Union[int, list[int]], status: int):
+    def update_pose_status(self, pose_id: int | list[int], status: int):
         """
         Updates the status of a given pose so that it is only ever in one status table
 
@@ -1768,16 +1645,28 @@ class RingtailCore:
     @_wrap_exceptions
     def get_exportable_columns(self) -> dict[str, dict[str, str]]:
         """Return exportable columns grouped by table with descriptions.
+        Includes custom columns/properties, which will not have descriptions
 
         Returns:
             dict[str, dict[str, str]]: ``{table_name: {col_name: description}}``
                 for Results, Ligands, and Interaction_indices.
                 No database connection is required.
         """
-        return {
-            table: {name: col.description for name, col in cols.items()}
+        with self.storageman as sm:
+            column_to_table = sm.get_queryable_columns()
+
+        descriptions = {
+            (table.lower(), name.lower()): col.description
             for table, cols in OUTFIELD_BY_TABLE.items()
+            for name, col in cols.items()
         }
+        grouped = {}
+        for column, table in column_to_table.items():
+            grouped.setdefault(table, {})[column] = (
+                descriptions.get((table.lower(), column.lower())) or ""
+            )
+
+        return grouped
 
     @_wrap_exceptions
     def set_pose_comment(self, pose_id: int, comment: str) -> None:
@@ -1792,7 +1681,7 @@ class RingtailCore:
             sm.set_pose_comment(pose_id, comment)
 
     @_wrap_exceptions
-    def get_pose_comment(self, pose_id: int) -> Union[str, None]:
+    def get_pose_comment(self, pose_id: int) -> str | None:
         """
         Return the comment for a pose, or None if none exists.
 
@@ -1800,7 +1689,7 @@ class RingtailCore:
             pose_id (int)
 
         Returns:
-            Union[str,None]: comment or None
+            str | None: comment or None
 
         """
         with self.storageman as sm:
@@ -1816,7 +1705,7 @@ class RingtailCore:
             pose_id (int):
 
         Returns:
-            int: row id in given table, the paging key of get_scrolling_table_data (for a SQLite bookmark the pose_id)
+            int: row id in given table, the paging key of get_scrolling_table_data
         """
         table = table.lower()
         with self.storageman as sm:
@@ -1911,9 +1800,9 @@ class RingtailCore:
             return self.storageman.table_length(table, distinct_column)
 
     @_wrap_exceptions
-    def get_starting_rowid(self, table: str):
+    def get_starting_rowid(self, table: str) -> int:
         """
-        Returns the lowest row id of a table or bookmark, the paging key of get_scrolling_table_data (for a SQLite bookmark its lowest pose_id).
+        Returns the lowest paging key of a table or bookmark
 
         Args:
             table (str): table or bookmark name
@@ -1937,20 +1826,24 @@ class RingtailCore:
             return sm.db_empty()
 
     @_wrap_exceptions
-    def get_range_of_e_le(
-        self, table: str = "Results"
-    ) -> tuple[float, float, float, float]:
+    def get_column_ranges(
+        self, columns: str | list[str], table: str = "Results"
+    ) -> dict[str, tuple[float | int | None, float | int | None]]:
         """
-        Get min and max of e/docking_score and ligand efficiency/le/leff/
+        Gets max and min for given column(s) within given table/data window. If a given column is not numeric, it will be ignored
 
         Args:
-            table (str): table limit data, e.g., either Results or a bookmark name
+            columns (str | list[str]): a single column or a list of columns
+            table (str, optional): data window for which to get the range. Defaults to "Results".
 
         Returns:
-            tuple: e_min, e_max, le_min, le_max
+            dict[str, tuple[float | int | None, float | int | None]]: column: (min, max)
         """
+        if isinstance(columns, str):
+            columns = [columns]
+
         with self.storageman as sm:
-            return sm.get_range_of_e_le(table)
+            return sm.get_column_ranges(columns, table)
 
     @_wrap_exceptions
     def get_pose_interactions(self, pose_id: int) -> list[tuple]:
@@ -1988,7 +1881,7 @@ class RingtailCore:
         Args:
             column (str): what column to calculate percentile for. must be numeric
             num_bins (int, optional): how many percentile bins data should be divided into. Defaults to 20.
-            table (str, optional): whether the column is in Results or filtered results (i.e., bookmark). Defaults to "Results".
+            table (str, optional): Data window over which to calculate percentiles. Defaults to "Results".
 
         Returns:
             tuple[list[int],list[float]]: list of percentiles as bins, and list of edge of each bin
@@ -2015,7 +1908,7 @@ class RingtailCore:
             return sm.fetch_histogram_counts(column, num_bins, bookmark_name)
 
     @_wrap_exceptions
-    def all_database_tables(self) -> list:
+    def all_database_tables(self) -> list[str]:
         """
         Returns a list of all table names in the database
 
@@ -2060,10 +1953,8 @@ class RingtailCore:
     def bookmarks_with_interaction_filters(self) -> list:
         """Bookmarks whose filters depend on interactions.
 
-        Recalculating interactions changes which poses those filters would select, so
-        these bookmarks keep their stored poses but no longer describe what their own
-        filters mean. Provenance only, like get_bookmark_dependents — nothing is
-        invalidated automatically.
+        Returns any bookmarks that use interaction filters, can be used e.g.,
+        if interactions are recalculated, as these bookmarks would no longer be valid
 
         Returns:
             list: names of bookmarks filtered on any interaction criterion
@@ -2106,10 +1997,6 @@ class RingtailCore:
         Method to retrieve the bookmarks that were made by filtering over the
         given bookmark (i.e., that used it as their input_bookmark).
 
-        This is provenance only. A dependent's poses are stored in its own right,
-        so deleting the given bookmark does not invalidate their data, it only
-        leaves their recorded lineage pointing at a bookmark that no longer exists.
-
         Args:
             bookmark_name (str): name of bookmark to find the dependents of
 
@@ -2136,16 +2023,17 @@ class RingtailCore:
         with self.storageman as sm:
             return sm.fetch_bookmark_interactions(bookmark_name)
 
+    @_wrap_exceptions
     def fetch_select_ligands_poses(
         self,
-        ligand_names: Union[str, list] = None,
-        pose_ids: Union[int, list] = None,
+        ligand_names: str | list = None,
+        pose_ids: int | list = None,
         bookmark_name: str = None,
     ) -> dict[str, list[int]]:
         """
         Basically give this method anything, and get back a dict with ligand names and
         the pose ids selected by all the inputs. Can be a combo of ligand names, pose ids,
-        and bookmark/status table. PS The combo only pose_ids and bookmark will work as if just
+        and bookmark/status table. PS: The combo only pose_ids and bookmark will work as if just
         the pose_ids were given.
 
         Args:
@@ -2159,7 +2047,7 @@ class RingtailCore:
 
         # if just given bookmark, get all ligands in that bookmark
         if bookmark_name is not None:
-            bookmark_name = self._validate_bookmark_name(bookmark_name)
+            bookmark_name = self._resolve_sdf_selection(bookmark_name)
 
         # if just pose_id(s), get their ligand names and add to dict
         # assumes that the specific IDs were given for a reason, bookmark will not be considered
@@ -2175,12 +2063,12 @@ class RingtailCore:
     @_wrap_exceptions
     def create_rdkit_mols(
         self,
-        pose_ids,
-        flexres_data: tuple = None,
+        pose_ids: int | list[int],
+        flexres_data: tuple | None = None,
         include_interactions: bool = True,
         include_comment: bool = False,
-    ) -> "list[PoseMol]":
-        """Create one RDKit mol per pose_id. 1 DB call (no interactions) or 2 (with interactions).
+    ) -> list[PoseMol]:
+        """Create one RDKit mol per pose_id
 
         Flexible-residue mols are built only when flexres_data is provided (and
         the flexres coordinates are fetched only then); the pose comment is
@@ -2237,10 +2125,11 @@ class RingtailCore:
 
         return result
 
+    @_wrap_exceptions
     def create_rdkit_mols_by_ligand(
         self,
         ligands_poses: dict,
-        flexres_data: tuple = None,
+        flexres_data: tuple | None = None,
         include_interactions: bool = True,
         include_comment: bool = False,
     ):
@@ -2476,8 +2365,8 @@ class RingtailCore:
     def convert_pose_coordinates_to_native(self):
         """Convert an existing database's pose_coordinates column from JSON text to the
         compact native format (DuckDB FLOAT[][] ~8x smaller; SQLite packed float32 BLOB
-        ~5x smaller and ~65x faster to read). Idempotent and safe to re-run. After
-        conversion, VACUUM (SQLite) or compaction (DuckDB) reclaims the freed space.
+        ~5x smaller and ~65x faster to read). After conversion, VACUUM (SQLite) or
+        compaction (DuckDB) reclaims the freed space.
         """
         with self.storageman:
             self.storageman.convert_pose_coordinates_to_native()
@@ -2485,7 +2374,8 @@ class RingtailCore:
     @_wrap_exceptions
     def db_compatibility_check(self, database_path: str) -> bool:
         """
-        Checks if the database in the provided path uses the same database engine (sqlite or duckdb) as the current Ringtail database.
+        Checks if the database in the provided path uses the same database engine (sqlite or duckdb)
+        as the current Ringtail database.
 
         Args:
             database_path (str): path to the other database
@@ -2587,8 +2477,7 @@ class RingtailCore:
     def _clear_filters_for_new_results(self, consent: bool):
         """Bookmarks are stored selections: new results would not be in them, and
         replaced poses would drop out of them, so no bookmark stays coherent once
-        results are added. With consent, delete them all; otherwise refuse.
-        Must be called with the storage manager open.
+        results are added. Delete them all with consent only
 
         Args:
             consent (bool): whether the user agreed to delete all filter data
@@ -2603,29 +2492,13 @@ class RingtailCore:
                 "This database has bookmarks/filters, which adding results would make "
                 "inconsistent. Pass consent=True (command line: answer 'yes' or use "
                 "--yes) to delete all bookmarks, filters and clusterings and add the "
-                "results. Nothing was written."
+                "results."
             )
         logger.warning(
             "Adding results to a database with bookmarks/filters: deleting all "
             "bookmarks, filters and clusterings. Re-run filtering afterwards."
         )
         self.storageman.delete_all_filter_data()
-
-    def _num_poses_to_store(self, max_poses: int, store_all_poses: bool) -> int:
-        """
-        Determine number of poses to store based on Ringtail user arguments
-
-        Args:
-            max_poses (int): number of poses given as integer
-            store_all_poses (bool): yes/no to store all poses
-
-        Returns:
-            int: number of poses to store, -1 for all, positive int for anything else
-        """
-        if store_all_poses:
-            return -1
-        else:
-            return max_poses
 
     def _prepare_interaction_finder(
         self,
@@ -2689,7 +2562,7 @@ class RingtailCore:
             return flexres_mols_tmpl, flexres_info, flexres_residues
         return [], [], []
 
-    def _build_pose_mol(self, skeleton, coords, name: str = None) -> "Chem.Mol | None":
+    def _build_pose_mol(self, skeleton, coords, name: str = None) -> Chem.Mol | None:
         """Build a posed RDKit mol from a ligand skeleton and pose coordinates.
 
         Single source of truth for the skeleton -> posed-mol step shared by
@@ -2723,7 +2596,7 @@ class RingtailCore:
         return mol
 
     @staticmethod
-    def _pose_properties(pose, interactions_str, include_comment: bool) -> dict:
+    def _pose_properties(pose, interactions_str: str, include_comment: bool) -> dict:
         """Build the SDF/viewer property dict for a single pose."""
         properties = {
             "Binding energies": [pose.docking_score],
@@ -2738,7 +2611,19 @@ class RingtailCore:
     @staticmethod
     def _build_pose_flexres(
         flexres_mols_tmpl, flexres_info, fr_coords_json, pose_id
-    ) -> list:
+    ) -> list[Chem.Mol]:
+        """
+        builds flexres Chem.Mols
+
+        Args:
+            flexres_mols_tmpl (_type_): _description_
+            flexres_info (_type_): _description_
+            fr_coords_json (_type_): _description_
+            pose_id (_type_): _description_
+
+        Returns:
+            list[Chem.Mol]: rdkit Mols with flexible residue coordinates etc
+        """
         if not flexres_mols_tmpl or not fr_coords_json:
             return []
         try:
@@ -2880,7 +2765,7 @@ class RingtailCore:
 
         return filters
 
-    def _validate_bookmark_name(self, bookmark_name: str) -> Union[str, None]:
+    def _resolve_sdf_selection(self, bookmark_name: str) -> str | None:
         """
         Ensures a bookmark exist, and runs checks on it. Particularly useful for dealing with union and interaction combinations,
         as user may provide the base bookmark_name but the filtering auto-generates derived bookmark_names for the combos.
@@ -2933,7 +2818,7 @@ class RingtailCore:
         self,
         cluster_data: dict,
         output_bookmark: str,
-        input_bookmark: Union[str, None] = None,
+        input_bookmark: str | None = None,
     ) -> tuple[str, int]:
         """
         Takes dictionary with one or more cluster constraints and performs clustering one after another.
@@ -2977,7 +2862,7 @@ class RingtailCore:
                 cluster_data.get("ifp"),
                 mfp_output if both else input_bookmark,
             )
-        logger.info(f"\nNumber of cluster representative ligands: {count_reps}")
+        logger.info(f"Number of cluster representative ligands: {count_reps}")
         return output_bookmark, count_reps
 
     def _export_csv(self, requested_data: str, csv_name: str, table=False):

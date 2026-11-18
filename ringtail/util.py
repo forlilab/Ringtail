@@ -7,7 +7,6 @@
 import os
 import shutil
 import subprocess
-from typing import Union
 from .logutils import get_logger
 
 logger = get_logger(__name__)
@@ -50,32 +49,6 @@ def iterate_nested(obj):
             yield from iterate_nested(item)
     else:
         yield obj
-
-
-def valid_bookmark_name(name: str) -> Union[str, None]:
-    """Checks that bookmark name adheres to sqlite naming conventions of alphanumerical and limited symbols.
-
-    Args:
-        name (str): bookmark name
-
-    Returns:
-        str, None: bookmark name if valid else None
-
-    """
-    import re
-
-    if any(c.isupper() for c in name):
-        logger.warning(
-            f"Bookmark name '{name}' contains uppercase letters, converting to lowercase."
-        )
-        name = name.lower()
-
-    from .schema import ALL_TABLE_NAMES, CANDIDATES_NAME
-
-    if name in ALL_TABLE_NAMES or name == CANDIDATES_NAME:
-        logger.warning(f"Bookmark name '{name}' is reserved for a table and cannot be used.")
-        return None
-    return name if re.match(r"^[a-z0-9_]+$", name) else None
 
 
 def detect_db_type(filepath: str) -> str:
@@ -142,7 +115,9 @@ def compress_file(
             break
     dst += _COMPRESS_EXT[method]
     if os.path.abspath(dst) == os.path.abspath(src):
-        raise ValueError(f"Refusing to compress {src} onto itself, choose another output path.")
+        raise ValueError(
+            f"Refusing to compress {src} onto itself, choose another output path."
+        )
 
     logger.info(f"Compressing {src} -> {dst} ({method} -{level})")
     if method == "zstd":
@@ -154,7 +129,10 @@ def compress_file(
     elif method == "gzip":
         import gzip
 
-        with open(src, "rb") as fin, gzip.open(dst, "wb", compresslevel=min(level, 9)) as fout:
+        with (
+            open(src, "rb") as fin,
+            gzip.open(dst, "wb", compresslevel=min(level, 9)) as fout,
+        ):
             shutil.copyfileobj(fin, fout, length=1024 * 1024)
     elif method == "xz":
         import lzma

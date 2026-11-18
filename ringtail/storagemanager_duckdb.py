@@ -157,7 +157,7 @@ class StorageManagerDuckDB(StorageManager):
             }
             columns = []
             for name, python_type in custom_columns.items():
-                quoted_name = '"' + name.replace('"', '""') + '"'
+                quoted_name = self._safe_quoting(name)
                 columns.append(f"{quoted_name} {sql_types[python_type]}")
 
             column_definitions = ",\n".join(columns)
@@ -258,7 +258,7 @@ class StorageManagerDuckDB(StorageManager):
         if custom_data:
             # dynamically create columns
             custom_df = pd.DataFrame(custom_data)
-            columns = ['"' + col.replace('"', '""') + '"' for col in custom_df.columns]
+            columns = [self._safe_quoting(col) for col in custom_df.columns]
             self.conn.register("incoming_custom_data", custom_df)
             temp_custom_insert = f"""
                 INSERT INTO Custom_temp ({",".join(columns)})
@@ -369,9 +369,7 @@ class StorageManagerDuckDB(StorageManager):
                 for name in self.fetch_dynamic_table_column_names("Custom_temp")
                 if name.lower() not in identifiers
             ]
-            quoted_columns = [
-                '"' + name.replace('"', '""') + '"' for name in custom_columns
-            ]
+            quoted_columns = [self._safe_quoting(name) for name in custom_columns]
             insert_columns = ", ".join(quoted_columns)
             select_columns = ", ".join(f"CT.{col}" for col in quoted_columns)
             temp_to_custom_pose_data = f"""
@@ -425,7 +423,7 @@ class StorageManagerDuckDB(StorageManager):
 
     def _update_custom_columns(self, table: str, columns: dict[str, str]):
         for col, type in columns.items():
-            quoted_col = '"' + col.replace('"', '""') + '"'
+            quoted_col = self._safe_quoting(col)
             self.db_query(f"""
                 ALTER TABLE {table} 
                 ADD COLUMN {quoted_col} {type};
@@ -1611,7 +1609,7 @@ class StorageManagerDuckDB(StorageManager):
         self.db_query(attach)
         return new_db_alias
 
-    def _check_attached(self):
+    def check_attached(self) -> list:
         return self.db_query("SHOW DATABASES;").fetchall()
 
     def detach_db(self, new_db_alias):

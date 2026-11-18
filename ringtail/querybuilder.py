@@ -68,7 +68,7 @@ class QueryBuilder:
 
     @staticmethod
     def bookmark_query(bookmark, db_alias=""):
-        # bookmark names are validated to [a-z0-9_] by valid_bookmark_name() before reaching here
+        # bookmark names are validated to [a-z0-9_] by validate_bookmark_name() before reaching here
         if not all(c.isalnum() or c == "_" for c in bookmark):
             raise ValueError(f"Unsafe bookmark name: {bookmark!r}")
         if db_alias:
