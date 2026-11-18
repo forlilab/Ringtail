@@ -70,3 +70,40 @@ class ResultsObject:
         if self.receptor_file_path and os.path.exists(self.receptor_file_path):
             return os.path.basename(self.receptor_file_path).split(".")[0]
         return None
+
+class PoseRecord(NamedTuple):
+    receptor: object = None
+    pose_rank: object = None
+    run_number: object = None
+    cluster_rmsd: object = 0
+    reference_rmsd: object = 0
+    docking_score: object = 0
+    leff: object = 0
+    delta: object = 0
+    energies_inter: object = 0
+    energies_vdw: object = 0
+    energies_electro: object = 0
+    energies_flexlig: object = 0
+    energies_flexlr: object = 0
+    energies_intra: object = 0
+    energies_torsional: object = 0
+    unbound_energy: object = 0
+    num_interactions: object = 0
+    num_hb: object = 0
+    cluster_size: object = 1
+    pose_coordinates: object = None
+    flexible_res_coordinates: object = "[]"
+    ligname: object = None
+
+
+class InteractionRecord(NamedTuple):
+    ligname: object
+    run_number: object
+    pose_rank: object
+    type: object
+    chain: object
+    residue: object
+    resid: object
+    recname: object
+    recid: object
+

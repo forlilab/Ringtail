@@ -1868,7 +1868,7 @@ class RingtailCore:
             list[str]: distinct ligand names
         """
         with self.storageman as sm:
-            return sm.get_candidate_lignames()
+            return list(sm.fetch_lignames_and_poses_for_selection("Candidates"))
 
     @_wrap_exceptions
     def get_percentiles(
@@ -1891,21 +1891,21 @@ class RingtailCore:
 
     @_wrap_exceptions
     def get_histogram_data(
-        self, column: str, num_bins: int = 50, bookmark_name: str = None
+        self, column: str, num_bins: int = 50, table: str = None
     ) -> tuple[list[float], list[int]]:
-        """SQL-side histogram counts for a numeric column in a bookmark.
+        """Will count the poses in equal-width bins of a numeric column, including custom columns.
 
         Args:
-            column (str): numeric column name ("docking_score" or "leff")
+            column (str): numeric Results or custom column
             num_bins (int): number of bins. Defaults to 50.
-            bookmark_name (str, optional): bookmark or table name. Defaults to None (→ Results).
+            table (str, optional): bookmark, status table, candidates, or None/"Results" for all results. Defaults to None.
 
         Returns:
             tuple[list[float], list[int]]: (bin_edges, counts) where len(bin_edges) == len(counts) + 1
         """
-        bookmark_name = bookmark_name.lower() if bookmark_name else None
+        table = table.lower() if table else None
         with self.storageman as sm:
-            return sm.fetch_histogram_counts(column, num_bins, bookmark_name)
+            return sm.fetch_histogram_counts(column, num_bins, table)
 
     @_wrap_exceptions
     def all_database_tables(self) -> list[str]:

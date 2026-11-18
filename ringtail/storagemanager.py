@@ -25,7 +25,7 @@ from .util import db_alias_from_path, numlist2str
 import sys
 from signal import signal, SIGINT
 from rdkit import Chem
-from typing import Any, Union, ClassVar
+from typing import Any, ClassVar
 from ._version import __version__
 from packaging.version import Version
 from .filters import Filters
@@ -148,7 +148,6 @@ class StorageManager(ABC):
             docking_data (dict): docking results to be inserted, where key is ligand name and value is data to be written
             duplicate_handling (str, optional): Describes how to handle duplicates, if any. Defaults to None.
         """
-        # TODO ""custom_data"" is the field with custom columns
         ligands = docking_data.get("ligands", None)
         if ligands:
             self._insert_ligands(ligands)
@@ -258,9 +257,6 @@ class StorageManager(ABC):
         if input_bookmark is None:
             input_bookmark = "Results"
 
-        # one shape goes into the Filters table regardless of how the user filtered: a flat
-        # specification serializes to the bare leaf dict earlier versions wrote, a nested
-        # one to the tree, and Filters.from_dict reads either back
         self._populate_filter_tables(
             name=output_bookmark,
             query=filter_query,
@@ -321,16 +317,6 @@ class StorageManager(ABC):
         )
         return [row[0].lower() for row in cur.fetchall()]
 
-    #: Filters fields that select on interactions. hb_count is listed separately from
-    #: the interaction lists because 0 is a real criterion for it ("no hydrogen bonds"),
-    #: so it counts as set whenever it is not None rather than whenever it is truthy.
-    _INTERACTION_FILTER_LISTS = (
-        "vdw_interactions",
-        "hb_interactions",
-        "reactive_interactions",
-        "react_any",
-    )
-
     def fetch_bookmarks_with_interaction_filters(self) -> list[str]:
         """
         Bookmarks whose stored filters select on interactions.
@@ -351,13 +337,19 @@ class StorageManager(ABC):
         Returns:
             list: names of bookmarks filtered on any interaction criterion
         """
+        _interaction_filters = (
+            "vdw_interactions",
+            "hb_interactions",
+            "reactive_interactions",
+            "react_any",
+        )
 
         def uses_interactions(node) -> bool:
             if isinstance(node, dict):
                 for key, value in node.items():
                     if key == "hb_count" and value is not None:
                         return True
-                    if key in self._INTERACTION_FILTER_LISTS and value:
+                    if key in _interaction_filters and value:
                         return True
                     if key == "cluster_type" and str(value).lower() == "ifp":
                         return True
@@ -419,12 +411,12 @@ class StorageManager(ABC):
         filter_id = filter_row[0]
         if grouped_by_ligand:
             if self.dialect == "sqlite":
-                # SQLite: ligand_id is denormalized into Filtered_poses — single-table count
+                # SQLite: ligand_id is denormalized into Filtered_poses
                 return self.conn.execute(
                     "SELECT COUNT(DISTINCT ligand_id) FROM Filtered_poses WHERE filter_id = ?",
                     (filter_id,),
                 ).fetchone()[0]
-            # DuckDB: columnar JOIN to Results reads only the ligand_id column — cheap
+            # DuckDB: columnar JOIN to Results reads only the ligand_id column
             return self.conn.execute(
                 "SELECT COUNT(DISTINCT R.ligand_id) FROM Filtered_poses FP "
                 "JOIN Results R ON R.pose_id = FP.pose_id WHERE FP.filter_id = ?",
@@ -605,8 +597,8 @@ class StorageManager(ABC):
 
     def crossref_databases(
         self,
-        wanted_dbs: list[tuple[str, Union[str, None]]] = None,
-        unwanted_dbs: list[tuple[str, Union[str, None]]] = None,
+        wanted_dbs: list[tuple[str, str | None]] = None,
+        unwanted_dbs: list[tuple[str, str | None]] = None,
         bookmark_prefix: str = "crossref",
         alternative_database_names: dict = None,
     ) -> tuple[int, dict, dict]:
@@ -626,8 +618,8 @@ class StorageManager(ABC):
         the intersect/exclude be scoped by acceptance status as well as by bookmark.
 
         Args:
-            wanted_dbs (list[tuple[str, Union[str, None]]], optional): (database_path, scope) tuples, where scope is a bookmark, a status table, or None/"Results" for all results. Defaults to None.
-            unwanted_dbs (list[tuple[str, Union[str, None]]], optional): (database_path, scope) tuples to exclude, scoped the same way. Defaults to None.
+            wanted_dbs (list[tuple[str, str | None]], optional): (database_path, scope) tuples, where scope is a bookmark, a status table, or None/"Results" for all results. Defaults to None.
+            unwanted_dbs (list[tuple[str, str | None]], optional): (database_path, scope) tuples to exclude, scoped the same way. Defaults to None.
             bookmark_prefix (str, optional): prefix of the bookmark written in each wanted database. Defaults to "crossref".
             alternative_database_names (dict, optional):  {path: alt name}. Defaults to None.
 
@@ -640,9 +632,7 @@ class StorageManager(ABC):
             dict: "filter" {"wanted":[list of wanted dbs],"unwanted":[list of unwanted dbs]
         """
         alternative_database_names = alternative_database_names or {}
-        # Aliases must be unique per attached database. The file stem alone is not:
-        # screens are often all named output.db in separate folders, and DuckDB also
-        # names the primary database after its own stem, so it is reserved as well.
+        # Aliases must be unique per attached database, the file stem alone is not
         used_aliases = {"main", db_alias_from_path(self.db_file).lower()}
         used_aliases.update(
             name.lower() for name in alternative_database_names.values()
@@ -780,7 +770,7 @@ class StorageManager(ABC):
 
     def cluster_data(
         self,
-        bookmark_name: Union[str, None],
+        bookmark_name: str | None,
         cluster_type: str = "mfp",
         cutoff: float = 0.5,
     ) -> tuple[str, int]:
@@ -879,6 +869,58 @@ class StorageManager(ABC):
         # index certain tables
         self._create_indices()
         logger.info("Database write session completed successfully.")
+    
+    def fetch_summary_data(
+        self,
+        columns: list[str] = ["docking_score", "leff"],
+        percentiles: list[int] = [1, 10],
+    ) -> dict:
+        """
+        Will collect summary data for the database: number of ligands, poses, unique interactions and interacting residues,
+        and min, max and percentile cutoffs for each numeric column in columns, including custom columns
+
+        Args:
+            columns (list[str]): columns to summarize, non-numeric columns are skipped with a warning
+            percentiles (list[int]): percentiles to calculate cutoffs for
+
+        Raises:
+            StorageError: if the database is empty
+
+        Returns:
+            dict: summary data
+        """
+        if self.db_empty():
+            raise StorageError("There is no data in the database.")
+
+        query = """
+        SELECT
+            (SELECT COUNT(ligand_id) FROM Ligands) AS num_ligands,
+            (SELECT COUNT(pose_id) FROM Results) AS num_poses,
+            (SELECT COUNT(interaction_id) FROM Interaction_indices) AS num_unique_interactions,
+            (SELECT COUNT(*)
+            FROM (SELECT DISTINCT interaction_type, rec_resid, rec_chain
+                    FROM Interaction_indices) residues
+            ) AS num_interacting_residues;"""
+        data = self.db_query(query).fetchone()
+        summary_data = {
+            "num_ligands": data[0],
+            "num_poses": data[1],
+            "num_unique_interactions": data[2],
+            "num_interacting_residues": data[3],
+        }
+
+        ranges = self.get_column_ranges(columns, None)
+        for col in columns:
+            if col not in ranges:
+                logger.warning(
+                    f"Requested column {col} is not a numeric Results or custom column and will not be used for the summary."
+                )
+                continue
+            summary_data[f"min_{col}"], summary_data[f"max_{col}"] = ranges[col]
+            for p in percentiles:
+                summary_data[f"{p}%_{col}"] = self._calc_percentile_cutoff(p, col)
+
+        return summary_data
 
     def merge_database(self, merging_db: str):
         """
@@ -957,13 +999,16 @@ class StorageManager(ABC):
             logger.info("The final database has been cleaned up, and indices rebuilt.")
 
     def last_row_ids(self) -> dict:
-        """Largest id of each growing table, so delete_rows_after can undo a failed write."""
+        """Largest id of each growing table, so delete_rows_after can undo a failed write.
+
+        Returns:
+            dict: _description_"""
         return {
             column: self._max_id(table, column) if self._is_table(table) else 0
             for column, table in ROW_ID_OWNERS.items()
         }
 
-    def delete_rows_after(self, last_ids: dict) -> None:
+    def delete_rows_after(self, last_ids: dict):
         """Rolls back, then deletes every row added after last_row_ids.
 
         Args:
@@ -999,7 +1044,8 @@ class StorageManager(ABC):
         Raises:
             StorageError:
         """
-        self._require_scope(bookmark_name)
+        # a bookmark, status table, candidates or all results, checked before the new file exists
+        scope_poses = self._get_scope_poses_query(bookmark_name, "main")
         # create the database
         new_db = self.__class__(database_name)
         # make tables
@@ -1007,9 +1053,7 @@ class StorageManager(ABC):
         with new_db:
             new_db._create_tables(commit=False)
             if has_comments:
-                # Pose_comments is created lazily by ensure_gui_tables rather than by
-                # _create_tables, so without this the subset has nowhere to put the
-                # comments and they are silently dropped.
+                # Pose_comments is created lazily
                 new_db.ensure_gui_tables()
         logger.debug(f"Created a new database with empty tables: {database_name}.")
         # attach the incoming database
@@ -1018,8 +1062,6 @@ class StorageManager(ABC):
         logger.debug(
             f"Database {database_name} attached to main database {self.db_file}."
         )
-        # a bookmark, status table, candidates or all results
-        scope_poses = self._get_scope_poses_query(bookmark_name, "main")
 
         # columns by name, since an upgraded database can hold them in another order
         def cols(schema) -> str:
@@ -1073,15 +1115,15 @@ class StorageManager(ABC):
             if not self._is_table(status_table):
                 continue  # older database predating the status tables
             self.db_query(f"""
-        INSERT INTO {alias}.{status_table} ({cols(STATUS_TABLE_SCHEMA)})
-        SELECT {cols(STATUS_TABLE_SCHEMA)} FROM main.{status_table}
-        WHERE main.{status_table}.pose_id IN ({scope_poses});""")
+            INSERT INTO {alias}.{status_table} ({cols(STATUS_TABLE_SCHEMA)})
+            SELECT {cols(STATUS_TABLE_SCHEMA)} FROM main.{status_table}
+            WHERE main.{status_table}.pose_id IN ({scope_poses});""")
         logger.debug("Pose statuses have been copied into the new subset database.")
         if has_comments:
             comments = f"""
-        INSERT INTO {alias}.{POSE_COMMENTS_SCHEMA.name} ({cols(POSE_COMMENTS_SCHEMA)})
-        SELECT {cols(POSE_COMMENTS_SCHEMA)} FROM main.{POSE_COMMENTS_SCHEMA.name}
-        WHERE main.{POSE_COMMENTS_SCHEMA.name}.pose_id IN ({scope_poses});"""
+            INSERT INTO {alias}.{POSE_COMMENTS_SCHEMA.name} ({cols(POSE_COMMENTS_SCHEMA)})
+            SELECT {cols(POSE_COMMENTS_SCHEMA)} FROM main.{POSE_COMMENTS_SCHEMA.name}
+            WHERE main.{POSE_COMMENTS_SCHEMA.name}.pose_id IN ({scope_poses});"""
             self.db_query(comments)
             logger.debug("Pose comments have been copied into the new subset database.")
         # receptor
@@ -1102,7 +1144,7 @@ class StorageManager(ABC):
             new_db._sync_auto_increment_state()
         logger.info(f"Subset database {database_name} has been successfully created.")
 
-    def fetch_pose_interactions(self, pose_ids) -> Union[list, dict]:
+    def fetch_pose_interactions(self, pose_ids) -> list | dict:
         """
         Fetch interaction parameters for one pose or a batch of poses.
 
@@ -1143,10 +1185,11 @@ class StorageManager(ABC):
             result.setdefault(pose_id, []).append(interaction)
         return result
 
+    # TODO this looks like one where i hav eto unify column/selection handling
     def get_bookmark_selection(
         self,
         bookmark_name: str,
-        selection: Union[list, str],
+        selection: list | str,
         group_by: str = None,
         order_results: str = None,
     ) -> str:
@@ -1155,7 +1198,7 @@ class StorageManager(ABC):
 
         Args:
             bookmark_name (str): bookmark name from which to get the passing poses
-            selection (Union[list, str]): what columns to have in the output query
+            selection (list | str): what columns to have in the output query
             group_by (str, optional): whether or not to group the output by a column
             order_results (str, optional): Whether or not to order by a column
 
@@ -1209,6 +1252,7 @@ class StorageManager(ABC):
         else:
             return self._execute_to_df(requested_data)
 
+    # TODO this is a method i think may have some duplication floating around
     def get_query_data_as_dicts(self, query: str) -> tuple[list[str], list[dict]]:
         """
         Will return data requested in an SQL-formatted query
@@ -1243,12 +1287,12 @@ class StorageManager(ABC):
             self._drop_existing_tables()
             logger.info("Tables in existing database were dropped.")
 
-    def get_previous_docking_mode(self) -> Union[None, str]:
+    def get_previous_docking_mode(self) -> str | None:
         """
         Checks the docking_mode last used in a database write session
 
         Returns:
-            Union[None, str]: docking_mode if any
+            str | None: docking_mode if any
         """
         if self.db_empty():
             return None
@@ -1355,55 +1399,20 @@ class StorageManager(ABC):
         at time of database write
 
         Args:
-            columns (list[str]): _description_
-            table (str): _description_
+            columns (list[str]): column names, non-numeric columns are left out
+            table (str): bookmark, status table, candidates, or None/"Results" for all results
 
         Returns:
             dict[str, tuple[float | int | None, float | int | None]]: column:(min, max,)
         """
-        numeric_columns = {col.lower() for col in self._get_numeric_columns("results")}
-        columns = [col for col in columns if col.lower() in numeric_columns]
-        if not columns:
+        query, fields = self._numeric_column_query(columns, table)
+        if not fields:
             return {}
-        column_to_table = self.get_queryable_columns()
-        expressions = []
-
-        for col in columns:
-            source = (
-                "Results"
-                if col.lower() == "ligand_id"
-                else column_to_table[col.lower()]
-            )
-            quoted_col = self._safe_quoting(col)
-            field = f"{source}.{quoted_col}"
-            expressions.extend([f"MIN({field})", f"MAX({field})"])
-
-        query = self.QueryBuilder()
-        query.SELECT(*expressions).FROM("Results")
-
-        if any(column_to_table[col.lower()] == "custom_pose_data" for col in columns):
-            query.JOIN(
-                "custom_pose_data",
-                "custom_pose_data",
-                on="pose_id",
-                to="Results",
-                kind="LEFT",
-            )
-        self._apply_table_filter(query, table)
-
+        query.SELECT(
+            *(f"{agg}({field})" for field in fields.values() for agg in ("MIN", "MAX"))
+        )
         row = self.db_query(*query.build()).fetchone()
-
-        ranges = {}
-
-        for i, col in enumerate(columns):
-            minimum = row[2 * i]
-            maximum = row[2 * i + 1]
-            ranges[col] = (
-                minimum,
-                maximum,
-            )
-
-        return ranges
+        return {col: (row[2 * i], row[2 * i + 1]) for i, col in enumerate(fields)}
 
     def calculate_percentiles(
         self, column: str, num_bins: int, table: str
@@ -1423,112 +1432,97 @@ class StorageManager(ABC):
         Returns:
             tuple[list[int],list[float]]: list of percentiles as bins, and list of edge of each bin
         """
-        # TODO should check custom data also for numeric types
-        col_spec = RESULTS_SCHEMA.columns.get(column)
-        if col_spec is None or col_spec.sql_type not in NUMERIC_TYPES:
+        query, fields = self._numeric_column_query([column], table)
+        if not fields:
             raise OptionError(
                 f"Requested column {column} is not a numeric Results column, percentiles cannot be calculated."
             )
-        aggregate = "MIN" if column in MINIMIZED_COLUMNS else "MAX"
-        query = self.QueryBuilder()
-        query.SELECT(f"{aggregate}({column})").FROM("Results")
-        self._apply_table_filter(query, table)
-        query.GROUP_BY("ligand_id")
-        values = [val[0] for val in self.db_query(query.build()[0]).fetchall()]
+        aggregate = "MIN" if column.lower() in MINIMIZED_COLUMNS else "MAX"
+        query.SELECT(f"{aggregate}({fields[column]})").GROUP_BY("Results.ligand_id")
+
+        values = [
+            val[0]
+            for val in self.db_query(query.build()[0]).fetchall()
+            if val[0] is not None
+        ]
+        if not values:
+            raise OptionError(
+                f"No numeric values for {column!r} in selection {table!r}."
+            )
 
         bins = np.linspace(0, 100, num_bins + 1)
         bin_edges = np.percentile(values, bins)
         return bins, bin_edges
 
     def fetch_histogram_counts(
-        self, column: str, num_bins: int, bookmark_name: str
+        self, column: str, num_bins: int, table: str
     ) -> tuple[list[float], list[int]]:
-        """SQL-side histogram aggregation. Returns (bin_edges, counts) where
-        len(bin_edges) == num_bins + 1 and len(counts) == num_bins.
-
-        Raw SQL is used intentionally to avoid QueryBuilderDuck.GROUP_BY() wrapping
-        all SELECT items in ANY_VALUE(), which breaks computed-column aggregates.
+        """
+        Will count the poses in each of num_bins equal-width bins of a numeric column, including custom columns.
 
         Args:
-            column (str): numeric Results column (e.g. "docking_score", "leff")
-            num_bins (int): number of histogram bins
-            bookmark_name (str): bookmark, status table, or "Results"
+            column (str): numeric Results or custom column
+            num_bins (int): number of bins
+            table (str): bookmark, status table, candidates, or None/"Results" for all results
+
+        Raises:
+            OptionError: if column is not numeric, or table is not a valid selection
 
         Returns:
-            tuple[list[float], list[int]]: bin_edges and per-bin counts
+            tuple[list[float], list[int]]: num_bins + 1 bin edges and num_bins counts, both empty if there are no values
         """
-        # TODO update to also check custom data
-        col_spec = RESULTS_SCHEMA.columns.get(column)
-        if col_spec is None or col_spec.sql_type not in NUMERIC_TYPES:
-            raise OptionError(f"Column {column} is not a numeric Results column")
+        values, fields = self._numeric_column_query([column], table)
+        if not fields:
+            raise OptionError(
+                f"Requested column {column} is not a numeric Results column, cannot make a histogram."
+            )
+        field = fields[column]
+        values.SELECT(f"{field} AS val").WHERE(f"{field} IS NOT NULL")
+        values_sql, params = values.build()
 
-        # Build filtered base subquery via QueryBuilder + _apply_table_filter.
-        # base_params is always [] — all filter conditions embed values as SQL literals.
-        base_q = self.QueryBuilder()
-        base_q.SELECT(column).FROM("Results")
-        if bookmark_name and bookmark_name.lower() != "results":
-            self._apply_table_filter(base_q, bookmark_name)
-        base_q.WHERE(f"{column} IS NOT NULL")
-        base_sql, base_params = base_q.build()
-
-        row = self.db_query(
-            f"SELECT MIN({column}), MAX({column}) FROM ({base_sql}) sub", base_params
+        min_val, max_val, total = self.db_query(
+            f"SELECT MIN(val), MAX(val), COUNT(*) FROM ({values_sql}) sub", params
         ).fetchone()
-        if not row or row[0] is None:
+        if not total:
             return [], []
-        min_val, max_val = float(row[0]), float(row[1])
-        if max_val == min_val:
-            total = self.db_query(
-                f"SELECT COUNT(*) FROM ({base_sql}) sub", base_params
-            ).fetchone()[0]
+        min_val, max_val = float(min_val), float(max_val)
+        if min_val == max_val:
             return [min_val - 0.5, min_val + 0.5], [total]
         bin_width = (max_val - min_val) / num_bins
 
-        # Raw SQL kept for GROUP BY on computed column — avoids QueryBuilderDuck
-        # wrapping bin_idx in ANY_VALUE(), which breaks the aggregation.
-        #
-        # The maximum value lands one past the last bin: (max - min) / bin_width ==
-        # num_bins exactly. Clamping it here — rather than in Python — keeps the invariant
-        # that each bin appears exactly once in the result, so the max simply merges into
-        # the last bin (closed right edge, as numpy does). Folding it afterwards instead
-        # meant two groups mapped to the last index and the second overwrote the first,
-        # under-reporting the total, that showed up on filtered bookmarks, where many poses
-        # sit exactly on the filter threshold and so share the max value.
-        # CASE, not LEAST/MIN(a, b): those differ across SQLite and DuckDB.
-        last_bin = num_bins - 1
-        # in double precision the minimum gives exactly 0, float32 columns on DuckDB would not
-        position = f"(CAST({column} AS DOUBLE) - {min_val}) / {bin_width}"
-        # position is never negative, so SQLite's truncating CAST floors it; DuckDB's CAST rounds
+        # the minimum gives exactly 0 in double precision, a float32 column on DuckDB would not
+        position = f"(CAST(val AS DOUBLE) - {min_val}) / {bin_width}"
+        # position is never negative, so SQLite's truncating CAST floors it, DuckDB's CAST rounds
         if self.dialect == "duckdb":
             raw_bin = f"CAST(FLOOR({position}) AS INTEGER)"
         else:
             raw_bin = f"CAST({position} AS INTEGER)"
-        bin_sql = f"""
-            SELECT
-                CASE WHEN {raw_bin} > {last_bin} THEN {last_bin} ELSE {raw_bin} END AS bin_idx,
-                COUNT(*) AS cnt
-            FROM ({base_sql}) sub
-            GROUP BY bin_idx
-            ORDER BY bin_idx
-        """
-        rows = self.db_query(bin_sql, base_params).fetchall()
+        last_bin = num_bins - 1
+        # raw SQL, QueryBuilderDuck.GROUP_BY would wrap the bin expression in ANY_VALUE
+        # the maximum lands at num_bins, the CASE puts it in the last bin (closed right edge, like numpy)
+        rows = self.db_query(
+            f"""SELECT CASE WHEN {raw_bin} > {last_bin} THEN {last_bin} ELSE {raw_bin} END AS bin_idx,
+                COUNT(*)
+            FROM ({values_sql}) sub
+            GROUP BY bin_idx""",
+            params,
+        ).fetchall()
 
         counts = [0] * num_bins
-        for bin_idx, cnt in rows:
-            idx = int(bin_idx)
-            if 0 <= idx < num_bins:
-                counts[idx] = cnt
+        for bin_idx, count in rows:
+            counts[bin_idx] = count
         bin_edges = [min_val + i * bin_width for i in range(num_bins + 1)]
         return bin_edges, counts
 
+    #TODO custom cols
     def fetch_data_for_passing_results(
-        self, bookmark_name: str, outfields: Union[str, list], order_results: str = None
+        self, bookmark_name: str, outfields: str| list, order_results: str = None
     ) -> Any:
         """Will return cursor with requested data for outfields for poses that passed filter in bookmark_name
 
         Args:
             bookmark_name (str): bookmark for which to retrieve data
-            outfields (Union[str, list]): columns to include
+            outfields (str| list): columns to include
             order_results (str, optional): if ordering by a column. Defaults to None.
 
         Returns:
@@ -1574,7 +1568,7 @@ class StorageManager(ABC):
 
         return json.loads(filters[0])
 
-    def fetch_receptor_object(self) -> Union[None, dict]:
+    def fetch_receptor_object(self) -> dict | None:
         """Returns all Receptor objects from database
 
         Returns:
@@ -1596,14 +1590,14 @@ class StorageManager(ABC):
             columns = ["recname", "receptor_object"]
         return dict(zip(columns, row)) if row else {}
 
-    def fetch_flexres_info(self, receptor: Union[str, int]) -> tuple[list, list]:
+    def fetch_flexres_info(self, receptor: str| int) -> tuple[list, list]:
         """fetch flexible residues names and atomname lists
 
         Always returns lists. The columns are decoded separately because databases from
         previous versions mix the spellings of "none" across them.
 
         Args:
-            receptor (Union[str, int]): receptor descriptor, either receptor_id or receptor name
+            receptor (str | int): receptor descriptor, either receptor_id or receptor name
 
         Returns:
             tuple[list, list]: (flexible_residues, flexres_atomnames)
@@ -1628,12 +1622,13 @@ class StorageManager(ABC):
             )
         return residues, atomnames
 
+    #TODO check for duplicity #TODO if this is used in building custom Mols it also need sthe custom properties? 
     def fetch_rdkit_pose_properties(
         self,
         pose_ids,
         include_flexres: bool = False,
         include_comment: bool = False,
-    ) -> "list[PoseData]":
+    ) -> list[PoseData]:
         """
         Gets molecular data needed to create rdkit mols for the given pose(s), including
         ligand mol binary and name via a JOIN with Ligands.
@@ -1724,22 +1719,14 @@ class StorageManager(ABC):
 
     def fetch_poses_pending_interactions(self, track_table_name: str, limit: int):
         """
-        Fetch up to `limit` poses that still need interaction calculation: poses in
+        Fetch up to limit poses that still need interaction calculation: poses in
         Results whose pose_id is not yet recorded in the tracking table.
 
-        Returns one batch and closes, rather than streaming. The caller writes to
-        `track_table_name` between batches, and that table is joined here — a
-        long-lived cursor over it does not survive those writes. On duckdb it does
-        not survive them at all: db_query returns the connection, which holds a
-        single pending result, so the insert replaced the rows still being read.
-        Re-querying is also what makes the loop resumable, since each batch asks the
-        database what is left rather than trusting a cursor's position.
+        Returns one batch and closes instead of streaming
 
         Ordered by ligand so a batch holds each ligand's poses together: the caller
         prepares one meeko molsetup per ligand and reuses it across that ligand's
-        poses, which is only possible if they arrive adjacent. Without the ORDER BY
-        the row order is whatever the query planner produces, and the grouping would
-        silently degrade to one setup per pose.
+        poses
 
         Args:
             track_table_name (str): name of the transaction-tracking table created
@@ -1758,7 +1745,7 @@ class StorageManager(ABC):
         query.LIMIT(limit)
         sql, params = query.build()
         return self.db_query(sql, params).fetchall()
-
+    #TODO duplicity in fetching stuff? also wont fetch custom columns
     def fetch_columns_from_table_as_dicts(
         self, table: str, columns: list, length: int = None, starting_rowid: int = 0
     ) -> tuple[list[str], list[dict]]:
@@ -1819,7 +1806,7 @@ class StorageManager(ABC):
             query.WHERE(f"R.rowid >= {starting_rowid}")
 
         return self.get_query_data_as_dicts(query.build()[0])
-
+    #TODO duplicity in fetching stuff? also wont fetch custom columns
     def fetch_viewable_data_columns_from(
         self, table: str, length: int, starting_rowid: int = 0, reverse=False
     ) -> dict[list[str], list]:
@@ -1943,7 +1930,6 @@ class StorageManager(ABC):
         Returns:
             pd.DataFrame: interactions presented as a dataframe
         """
-        self._require_scope(bookmark_name)
         query = f"""
         SELECT DISTINCT
             II.interaction_type,
@@ -1969,12 +1955,12 @@ class StorageManager(ABC):
 
         return interactions_df
 
-    def accept_pose(self, pose_ids: Union[int, list[int]]):
+    def accept_pose(self, pose_ids: int | list[int]):
         """
         Will add pose_id to accepted, and delete from maybe and rejected if needed
 
         Args:
-            pose_ids (Union[int, list[int]])
+            pose_ids (int | list[int])
         """
         if isinstance(pose_ids, int):
             pose_ids = [pose_ids]
@@ -1992,12 +1978,12 @@ class StorageManager(ABC):
             """DELETE FROM Rejected WHERE pose_id = ?;""", pose_ids, commit=True
         )
 
-    def maybe_pose(self, pose_ids: Union[int, list[int]]):
+    def maybe_pose(self, pose_ids: int | list[int]):
         """
         Will add pose_id to maybe, and delete from accepted and rejected if needed
 
         Args:
-            pose_ids (Union[int, list[int]])
+            pose_ids (int | list[int])
         """
         if isinstance(pose_ids, int):
             pose_ids = [pose_ids]
@@ -2015,12 +2001,12 @@ class StorageManager(ABC):
             """DELETE FROM Rejected WHERE pose_id = ?;""", pose_ids, commit=True
         )
 
-    def reject_pose(self, pose_ids: Union[int, list[int]]):
+    def reject_pose(self, pose_ids: int | list[int]):
         """
         Will add pose_id to rejected, and delete from accepted and maybe if needed
 
         Args:
-            pose_ids (Union[int, list[int]])
+            pose_ids int | list[int])
         """
         if isinstance(pose_ids, int):
             pose_ids = [pose_ids]
@@ -2038,12 +2024,12 @@ class StorageManager(ABC):
             """DELETE FROM Maybe WHERE pose_id = ?;""", pose_ids, commit=True
         )
 
-    def remove_status(self, pose_ids: Union[int, list[int]]):
+    def remove_status(self, pose_ids: int | list[int]):
         """
         Will remove status associated with a pose
 
         Args:
-            pose_ids (Union[int, list[int]])
+            pose_ids (int | list[int])
         """
         if isinstance(pose_ids, int):
             pose_ids = [pose_ids]
@@ -2053,19 +2039,7 @@ class StorageManager(ABC):
         )
         self.db_update("DELETE FROM Maybe WHERE pose_id = ?;", pose_ids, commit=False)
         self.db_update("DELETE FROM Rejected WHERE pose_id = ?;", pose_ids, commit=True)
-
-    def get_candidate_lignames(self) -> list[str]:
-        """
-        Ligand names with at least one pose in the screening candidate set.
-
-        Returns:
-            list[str]: distinct ligand names
-        """
-        sql = """SELECT DISTINCT ligname FROM Ligands JOIN Results ON Ligands.ligand_id = Results.ligand_id WHERE Results.pose_id IN ({0});""".format(
-            CANDIDATES_SUBQ
-        )
-        return [row[0] for row in self.db_query(sql).fetchall()]
-
+    #NOTE use this method for lots of goodness
     def get_queryable_columns(self) -> dict[str, str]:
         """
         Returns any columns that are currently supported in Ringtail queries
@@ -2101,11 +2075,11 @@ class StorageManager(ABC):
         )
 
         return column_to_table
-
+    #NOTE this method also good
     def prepare_column_export_query(
         self,
-        columns: Union[dict[str, str], list[str]],
-        bookmark: Union[str, None] = None,
+        columns: dict[str, str] | list[str],
+        bookmark: str| None = None,
     ) -> str:
         """
         Writes a query based on what columns are requested. Resolves each column
@@ -2182,6 +2156,15 @@ class StorageManager(ABC):
         return query.build()[0]
 
     def fetch_dynamic_table_column_names(self, table: str) -> dict[str, str]:
+        '''
+        Get columns from tables that may have user defined and dynamic columns
+
+        Args:
+            table (str): table
+
+        Returns:
+            dict[str, str]: col_name: SQL type
+        '''
         return dict(
             self.db_query(
                 "SELECT name, type FROM pragma_table_info(?)",
@@ -2215,21 +2198,13 @@ class StorageManager(ABC):
         else:
             return True
 
-    def ensure_gui_tables(self) -> None:
+    def ensure_gui_tables(self):
         """
         Ensures gui-specific tables exist in database
         """
 
         for sql in build_create_table(
             POSE_COMMENTS_SCHEMA.name, POSE_COMMENTS_SCHEMA, self.dialect
-        ):
-            self.db_query(sql)
-        for sql in build_create_table(
-            CUSTOM_POSE_DATA_SCHEMA.name, CUSTOM_POSE_DATA_SCHEMA, self.dialect
-        ):
-            self.db_query(sql)
-        for sql in build_create_table(
-            CUSTOM_LIGAND_DATA_SCHEMA.name, CUSTOM_LIGAND_DATA_SCHEMA, self.dialect
         ):
             self.db_query(sql)
         self.conn.commit()
@@ -2323,6 +2298,7 @@ class StorageManager(ABC):
         """
         ...
 
+    @abstractmethod
     def update_database_version(self, new_version: str, backup=False):
         """Only SQLite databases from Ringtail 1.x/2.x can be upgraded, others are only checked to be current.
 
@@ -2333,12 +2309,7 @@ class StorageManager(ABC):
         Raises:
             VersionError: if the schema is not current, e.g. a pre-release 3.0 database
         """
-        # opening the database checks its schema version
-        with self:
-            pass
-        logger.info(
-            f"{self.db_file} is at the current schema version, nothing to upgrade."
-        )
+        ...
 
     @abstractmethod
     def db_query(self, query: str, params: tuple = ()) -> Any:
@@ -2420,27 +2391,7 @@ class StorageManager(ABC):
         ...
 
     @abstractmethod
-    def fetch_summary_data(
-        self, columns=["docking_score", "leff"], percentiles=[1, 10]
-    ) -> dict:
-        """Collect summary data for database:
-            Num Ligands
-            Num stored poses
-            Num unique interactions
-
-            min, max, percentiles for columns in columns
-
-        Args:
-            columns (list (str)): columns to be displayed and used in summary
-            percentiles (list(int)): percentiles to consider
-
-        Returns:
-            dict: of data summary
-        """
-        ...
-
-    @abstractmethod
-    def pose_row_in_table(self, table: str, pose_id: int) -> Union[None, int]:
+    def pose_row_in_table(self, table: str, pose_id: int) -> int | None:
         """
         Find the row id of a pose in a given table
 
@@ -2449,7 +2400,7 @@ class StorageManager(ABC):
             pose_id (int)
 
         Returns:
-            Union[None, int]: rowid if any
+            int | None: rowid if any
         """
         ...
 
@@ -2521,9 +2472,12 @@ class StorageManager(ABC):
 
     # region private api
 
-    def _create_tables(self, commit=True) -> None:
+    def _create_tables(self, commit:bool=True):
         """
         Creates all tables needed for a Ringtail database
+
+        Args:
+            commit (bool): defaults to True
         """
         self._create_ligands_table()
         self._create_results_table()
@@ -2649,6 +2603,7 @@ class StorageManager(ABC):
         Args:
             results (list): list of arrays containing formatted result rows
             interactions (list): list of interactions
+            custom_data (list | None): custom data supplied as properties in the RDKit Mol
             options (dict): includes options on how to handle duplicates if there are any
 
         """
@@ -2792,34 +2747,28 @@ class StorageManager(ABC):
         query.DROP_IF_EXISTS(name)
         return self.db_query(query.build()[0])
 
-    def _get_numeric_columns(self, table: str) -> list[str]:
+    #NOTE this is a good method, updated
+    def _get_numeric_columns(self) -> dict[str, str]:
         """
-        Get all numeric (float, int, double) columns from a table.
-        If table is results, it will also include any custom results
-        columns
-
-        Args:
-            table (str)
+        Gets all numeric Results columns and numeric custom columns, and the table each one is in
 
         Returns:
-            list: column names that are numeric
+            dict[str, str]: lowercase column name: table
         """
-
-        columns = [
-            name
-            for name, col in TABLE_SCHEMAS[table.lower()].columns.items()
+        columns = {
+            name.lower(): "Results"
+            for name, col in RESULTS_SCHEMA.columns.items()
             if col.sql_type in NUMERIC_TYPES
-        ]
-        if table.lower() == "results" and self._is_table("custom_pose_data"):
+        }
+        if self._is_table("custom_pose_data"):
             custom_columns = self.fetch_dynamic_table_column_names("custom_pose_data")
             for col, sql_type in custom_columns.items():
-                if col.lower() == "pose_id":
-                    continue
-                if sql_type in NUMERIC_TYPES:
-                    columns.append(col)
+                if col.lower() != "pose_id" and sql_type in NUMERIC_TYPES:
+                    columns[col.lower()] = "custom_pose_data"
         return columns
-
+    #TODO custom cols
     def _fetch_table_column_names(self, table: str) -> list:
+
         """
         Get all column names in a table
 
@@ -2831,6 +2780,7 @@ class StorageManager(ABC):
         """
         return list(TABLE_SCHEMAS[table.lower()].columns)
 
+    #TODO check for duplicity
     def _apply_table_filter(self, query: QueryBuilder, table: str) -> QueryBuilder:
         """Restricts a query on Results to the poses of a bookmark, status table or candidates.
 
@@ -2844,12 +2794,47 @@ class StorageManager(ABC):
         Returns:
             QueryBuilder: the same query, modified
         """
-        self._require_scope(table)
         if table is None or table.lower() == "results":
             return query
         return query.WHERE(
             f"{query.aliased('Results')}.pose_id IN ({self._get_scope_poses_query(table)})"
         )
+
+    def _numeric_column_query(
+        self, columns: list[str], table: str
+    ) -> tuple[QueryBuilder, dict[str, str]]:
+        """
+        Will start a query on Results for numeric Results or custom columns, joining custom_pose_data if needed
+        and restricting it to table. Columns that are not numeric are left out.
+
+        Args:
+            columns (list[str]): column names, any case
+            table (str): bookmark, status table, candidates, or None/"Results" for all results
+
+        Raises:
+            OptionError: if table is not a valid selection
+
+        Returns:
+            tuple[QueryBuilder, dict[str, str]]: query with FROM, JOIN and WHERE but no SELECT, and column: quoted source.column field
+        """
+        numeric_columns = self._get_numeric_columns()
+        sources = {
+            col: numeric_columns[col.lower()]
+            for col in columns
+            if col.lower() in numeric_columns
+        }
+
+        query = self.QueryBuilder().FROM("Results")
+        if "custom_pose_data" in sources.values():
+            query.JOIN(
+                "custom_pose_data", "custom_pose_data", "pose_id", "Results", "LEFT"
+            )
+        self._apply_table_filter(query, table)
+        fields = {
+            col: f"{source}.{self._safe_quoting(col)}" for col, source in sources.items()
+        }
+        return query, fields
+
 
     def _is_statustable(self, table: str) -> bool:
         """
@@ -2878,7 +2863,8 @@ class StorageManager(ABC):
         """
         return table.lower() == CANDIDATES_NAME
 
-    def _format_orderby(self, column_name: str) -> Union[str, None]:
+    #TODO may need update for custom
+    def _format_orderby(self, column_name: str) -> str | None:
         """
         Ensures chosen order by column is a valid choice
 
@@ -2898,6 +2884,7 @@ class StorageManager(ABC):
         else:
             return None
 
+    #TODO future: allow custom column filtering
     def _generate_filtering_query(
         self,
         filters: Filters,
@@ -2923,9 +2910,6 @@ class StorageManager(ABC):
         """
         filtering_window = "Results"
 
-        # An explicit "Results" means the whole table, which is what no input_bookmark
-        # already means. Normalizing here also keeps percentiles usable in that case,
-        # since the guard below only applies to a genuine subset.
         if input_bookmark is not None and input_bookmark.lower() == "results":
             input_bookmark = None
 
@@ -2941,7 +2925,6 @@ class StorageManager(ABC):
                 raise OptionError(
                     "Cannot use 'score_percentile' or 'le_percentile' with 'input_bookmark'."
                 )
-            self._require_scope(input_bookmark)
             filtering_window = f"(SELECT * FROM Results WHERE pose_id IN ({self._get_scope_poses_query(input_bookmark)}))"
 
         if filters.is_flat():
@@ -3067,8 +3050,8 @@ class StorageManager(ABC):
         as SQL, so they're evaluated with one scan over ``filtering_window``, pre-narrowed by
         ``predicate`` so only poses that already passed the SQL part are streamed.
 
-        The returned predicate *subsumes* ``predicate`` — the pose_id set was computed with it
-        applied — so callers must use it in place of their SQL predicate, not in addition to it.
+        The returned predicate *subsumes* ``predicate`` - the pose_id set was computed with it
+        applied - so callers must use it in place of their SQL predicate, not in addition to it.
         Because the conjunction is baked into the id set, the result also composes correctly
         under OR in a nested filter expression.
 
@@ -3105,12 +3088,12 @@ class StorageManager(ABC):
 
         A node is either a Filters (a boolean node) or a Filter (a leaf). Boolean nodes
         wrap their children in parentheses, leaves render via ``_render_filter_group``.
-        Arbitrary nesting depth is supported — the same recursion renders
+        Arbitrary nesting depth is supported - the same recursion renders
         ``(a AND (b OR (c AND d)))``.
 
         RDKit leaves (SMARTS/substructure, molweight, max heavy atoms) can't be SQL, so
         each is evaluated up front to the set of pose_ids that pass it (one in-memory
-        scan over ``filtering_window``) and rendered as ``pose_id IN (...)`` — which then
+        scan over ``filtering_window``) and rendered as ``pose_id IN (...)`` - which then
         composes into AND/OR like any other predicate. This is why an RDKit criterion is
         cheap as SQL to combine but costs one scan per leaf.
 
@@ -3166,9 +3149,7 @@ class StorageManager(ABC):
                 return rendered[0]
             return "(" + f" {op} ".join(rendered) + ")"
 
-        # leaf: rendered by the same per-group core the flat path uses.
-        # strict=False: an interaction missing from the database makes only this leaf false,
-        # rather than aborting the whole boolean tree
+        # leaf: rendered by the same per-group core the flat path uses
         predicate, rdkit_lig_filters = self._render_filter_group(node, strict=False)
         if rdkit_lig_filters:
             # evaluate this leaf's RDKit criterion to a pose_id set (one scan), pre-narrowed
@@ -3401,7 +3382,7 @@ class StorageManager(ABC):
                 filtered_ligands[ligandict["ligand_id"]] = [ligandict["pose_id"]]
 
         return filtered_ligands
-
+    #TODO reevaluate later, it is used in two places, needs the ascending handling
     def _get_best_pose_per_ligand_condition(
         self, bookmark_name: str, results_alias: str = "R"
     ) -> str:
@@ -3423,19 +3404,6 @@ class StorageManager(ABC):
             )
         """
 
-    def _require_scope(self, scope_name: str) -> None:
-        """Raises OptionError unless scope_name is Results, candidates, a status table or a bookmark."""
-        if (
-            scope_name is None
-            or scope_name.lower() in ("results", CANDIDATES_NAME)
-            or self._is_statustable(scope_name)
-            or self.is_bookmark(scope_name)
-        ):
-            return
-        raise OptionError(
-            f"{scope_name!r} is not a bookmark, status table, {CANDIDATES_NAME} or Results in this database."
-        )
-
     def _get_scope_poses_query(self, scope_name: str, alias: str = "") -> str:
         """
         Returns the pose_id-selecting subquery for a selection name, in any case:
@@ -3444,6 +3412,9 @@ class StorageManager(ABC):
         Args:
             scope_name (str | None): bookmark name, status table name, or None/"Results" for all results
             alias (str): attached-database alias to qualify the table with
+
+        Raises:
+            OptionError: if scope_name is none of these in that database
 
         Returns:
             str: query selecting the pose_ids in that scope
@@ -3461,6 +3432,11 @@ class StorageManager(ABC):
             # lowercased status value back to the real table name.
             prefix = f"{alias}." if alias else ""
             return f"SELECT pose_id FROM {prefix}{scope_name.capitalize()}"
+        db_name = None if alias in ("", "main") else alias
+        if scope_name.lower() not in self.get_all_bookmark_names(db_name):
+            raise OptionError(
+                f"{scope_name!r} is not a bookmark, status table, {CANDIDATES_NAME} or Results in this database."
+            )
         return self.QueryBuilder.bookmark_query(scope_name.lower(), alias)
 
     def _generate_interaction_bitvectors(self, pose_ids: tuple[str]) -> dict:
@@ -3587,7 +3563,7 @@ class StorageManager(ABC):
 
         Uses the (interaction_id, pose_id) covering index: for each candidate pose SQLite
         does a fast point-lookup instead of materializing the full interaction result set.
-        For selective energy filters this is 10–100x faster than the IN (subquery) approach.
+        For selective energy filters this is 10-100x faster than the IN (subquery) approach.
 
         Args:
             include_groups (list[list[int]]): each inner list is a group of interaction_ids
@@ -3732,9 +3708,7 @@ class StorageManager(ABC):
             ),
         ).fetchone()[0]
 
-        # single-pass INSERT — no COUNT pre-flight. SQLite also stores ligand_id
-        # (carried for free by the filter query's Results scan) so passing-ligand
-        # counts avoid a JOIN back into the row-store Results table.
+        # single-pass INSERT, no COUNT pre-flight
         if self.dialect == "sqlite":
             insert_poses = f"""
                 WITH results_poses AS (
@@ -3756,14 +3730,12 @@ class StorageManager(ABC):
             self.delete_rows_after(last_ids)
             raise
 
-        # O(1) existence check — works for both SQLite and DuckDB
         row = self.conn.execute(
             "SELECT 1 FROM Filtered_poses WHERE filter_id = ? LIMIT 1", (filter_id,)
         ).fetchone()
 
         if row is None:
-            # Nothing matched. Reusing a bookmark name still means replacement,
-            # so remove both the empty new entry and the superseded selection.
+            # reusing a bookmark name still means replacement
             self.conn.execute("DELETE FROM Filters WHERE filter_id = ?", (filter_id,))
             if old_filter_id is not None:
                 self.conn.execute(
@@ -3775,7 +3747,7 @@ class StorageManager(ABC):
             self.conn.commit()
             return 0
 
-        # Results exist — now safe to remove the old bookmark atomically
+        # remove the old bookmark atomically
         if old_filter_id is not None:
             self.conn.execute(
                 "DELETE FROM Filtered_poses WHERE filter_id = ?", (old_filter_id,)
@@ -3786,7 +3758,7 @@ class StorageManager(ABC):
 
         self.conn.commit()
         return 1
-
+    #TODO custom cols
     def _get_possible_output_columns(self, tables=["Results", "Ligands"]):
         """
         Gets all column names from given tables
@@ -3845,7 +3817,7 @@ class StorageManager(ABC):
         """
         return pd.read_sql_query(sql, self.conn)
 
-    def _delete_pose_screening_data(self, pose_ids) -> None:
+    def _delete_pose_screening_data(self, pose_ids: list[int]):
         """Delete status assignments and comments for the given poses, e.g. before
         those poses are replaced by duplicate_handling="replace".
 
@@ -3863,7 +3835,21 @@ class StorageManager(ABC):
                 )
 
     def _max_id(self, table: str, column: str) -> int:
-        """Returns the largest id in a table column, 0 if the table is empty."""
+        '''
+        _summary_
+
+
+        
+        '''
+        """Returns the largest id in a table column, 0 if the table is empty.
+
+        Args:
+            table (str): _description_
+            column (str): which column to get max id for
+
+        Returns:
+                int
+        """
         return self.db_query(
             f"SELECT COALESCE(MAX({column}), 0) FROM {table}"
         ).fetchone()[0]
@@ -3971,9 +3957,61 @@ class StorageManager(ABC):
         cutoff = self._calc_percentile_cutoff(percentile, column)
         accepted_count = int(percentile * ligand_count / 100)
         return cutoff, "<=" if accepted_count > 0 else "<"
+   
+    def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
+        """
+        Will return the per-ligand cutoff for a percentile of a numeric column, including custom columns.
+        Keeps floor(percentile * ligand count) ligands, so the cutoff is the best value of the last ligand kept.
+        If that count is zero it returns the best value, and the caller compares exclusively to keep no ligands.
 
+        Args:
+            percentile (float): cutoff percentile
+            column (str, optional): numeric Results or custom column. Defaults to "docking_score".
+
+        Raises:
+            OptionError: if column is not numeric
+            StorageError: if no ligand has a value for column
+
+        Returns:
+            float: cutoff value for the percentile
+        """
+        per_ligand, fields = self._numeric_column_query([column], None)
+        if not fields:
+            raise OptionError(
+                f"Requested column {column} is not a numeric Results column, percentiles cannot be calculated."
+            )
+        field = fields[column]
+        aggregate = "MIN" if column.lower() in MINIMIZED_COLUMNS else "MAX"
+        direction = "ASC" if aggregate == "MIN" else "DESC"
+        per_ligand.SELECT(f"{aggregate}({field}) AS best_value").WHERE(
+            f"{field} IS NOT NULL"
+        ).GROUP_BY("Results.ligand_id")
+        per_ligand_sql, params = per_ligand.build()
+
+        ligand_count = self.db_query(
+            f"SELECT COUNT(*) FROM ({per_ligand_sql}) per_ligand", params
+        ).fetchone()[0]
+        if ligand_count == 0:
+            raise StorageError(
+                f"Cannot calculate a percentile, no ligand has a value for {column}."
+            )
+
+        accepted_count = int(percentile * ligand_count / 100)
+        cutoff, value_type = self.db_query(
+            f"""SELECT best_value, typeof(best_value) FROM ({per_ligand_sql}) per_ligand
+            ORDER BY best_value {direction} LIMIT 1 OFFSET ?""",
+            params + [max(accepted_count - 1, 0)],
+        ).fetchone()
+        if self.dialect == "duckdb" and value_type == "FLOAT":
+            # DuckDB FLOAT is 4 bytes, -6.66 reads back as -6.659999847412109 and compares wrongly, its shortest form compares exactly
+            cutoff = float(str(np.float32(cutoff)))
+        logger.debug(f"{column} percentile cutoff is {cutoff}")
+        return cutoff
+
+
+   #TODO custom cols
     def _format_output_fields(
-        self, outfields: Union[str, list], results_alias="R", ligands_alias="L"
+        self, outfields: str | list, results_alias="R", ligands_alias="L"
     ) -> list:
         """Handles string or list input of column names to be outputted, will make sure ligname
         is in the list, and make sure all options are valid
@@ -4079,6 +4117,65 @@ class StorageManager(ABC):
         """
         return '"' + text.replace('"', '""') + '"'
 
+    @staticmethod
+    def _serialize_pose_coordinates(coords):
+        """Serialize a list of [x, y, z] floats for storage in the pose_coordinates
+        column. Base/DuckDB store the native nested list (DuckDB FLOAT[][]), SQLite
+        overrides this to pack a float32 BLOB. Returns the value unchanged here.
+        """
+        return coords
+
+    @staticmethod
+    def _deserialize_pose_coordinates(stored):
+        """Inverse of _serialize_pose_coordinates: return a list of [x, y, z] floats.
+        Tolerates legacy JSON-text values from databases written before the native
+        coordinate format (so un-migrated DuckDB databases still read).
+        """
+        if stored is None:
+            return None
+        if isinstance(stored, str):
+            return json.loads(stored)
+        return [list(atom) for atom in stored]
+
+    def _open_storage(self):
+        """Create connection to db. Then, check if db needs to be created.
+
+        Raises:
+            StorageError
+            VersionError
+        """
+        try:
+            # check to see if file exist, and if it does, check that version is matching
+            if os.path.isfile(self.db_file) and os.path.getsize(self.db_file) > 0:
+                self.conn = self._create_connection()
+                # Only an initialized database (one with a Results table) needs a
+                # version check. An empty/uninitialized file — e.g. DuckDB writes a
+                # header on connect, so it is >0 bytes but has no tables — is treated
+                # like a brand-new database and created into.
+                if self._has_results_table():
+                    compatible, db_version = self.check_ringtaildb_version()
+                    if not compatible:
+                        raise VersionError(
+                            f"Database schema version '{db_version}' is not compatible "
+                            f"with this Ringtail (schema {SCHEMA_VERSION}). {UPGRADE_HINT}"
+                        )
+                else:
+                    logger.info("Creating a new database file.")
+            else:
+                logger.info("Creating a new database file.")
+                self.conn = self._create_connection()
+            if self.keyboard_interrupt_allowed:
+                signal(
+                    SIGINT, self._sigint_handler
+                )  # signal handler to catch keyboard interupts
+            logger.debug(
+                f"Ringtail connected to database {self.db_file} with connection: {self.conn}"
+            )
+        except VersionError as e:
+            raise
+        except Exception as e:
+            raise StorageError(f"Error while creating or connecting to database: {e}.")
+
     # endregion
 
     # region virtual private methods
@@ -4178,6 +4275,7 @@ class StorageManager(ABC):
         """
         ...
 
+    @abstractmethod
     def _update_interaction_counts(self, data: list[dict]):
         """
         Data is a dict that is expected to contain pose_id, num_int, and num_hb as keys.
@@ -4185,6 +4283,7 @@ class StorageManager(ABC):
         Args:
             data (list[dict]): _description_
         """
+        ...
 
     @abstractmethod
     def _insert_completed_poses(self, pose_ids: list[tuple], tracking_table: str):
@@ -4195,7 +4294,7 @@ class StorageManager(ABC):
             pose_ids (list[int]): _description_
         """
         ...
-
+    
     def _set_ringtail_db_schema_version(self, db_version: str = "3.0.0"):
         """
         Will check current storage manager db schema version and only set if it
@@ -4251,61 +4350,10 @@ class StorageManager(ABC):
         """
         pass
 
-    def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
-        """Return the discrete per-ligand cutoff for a percentile.
-
-        The historical filter retained ``floor(percentile * ligand_count)``
-        ligands. The cutoff is therefore the last accepted per-ligand value. If
-        that count is zero, the best value is returned so the filtering caller
-        can use an exclusive comparison and retain no ligands.
-
-        Args:
-            percentile (float): cutoff percentile
-            column (str, optional): string indicating column for percentile to be calculated over
-
-        Returns:
-            float: effective cutoff value of results based on percentile
-        """
-        column_spec = RESULTS_SCHEMA.columns.get(column)
-        if column_spec is None or column_spec.sql_type not in NUMERIC_TYPES:
-            raise OptionError(
-                f"Requested column {column} is not a numeric Results column, "
-                "percentiles cannot be calculated."
-            )
-
-        row = self.db_query(
-            "SELECT COUNT(*) FROM (SELECT ligand_id FROM Results GROUP BY ligand_id)"
-        ).fetchone()
-        ligand_count = int(row[0])
-        if ligand_count == 0:
-            raise StorageError("Cannot calculate a percentile for an empty database.")
-
-        accepted_count = int(percentile * ligand_count / 100)
-        offset = max(accepted_count - 1, 0)
-        aggregate = "MIN" if column in MINIMIZED_COLUMNS else "MAX"
-        direction = "ASC" if aggregate == "MIN" else "DESC"
-        query = f"""
-            SELECT best_value
-            FROM (
-                SELECT {aggregate}({column}) AS best_value
-                FROM Results
-                GROUP BY ligand_id
-            ) per_ligand
-            ORDER BY best_value {direction}
-            LIMIT 1 OFFSET ?
-        """
-        cutoff = self.db_query(query, (offset,)).fetchone()[0]
-        if self.dialect == "duckdb":
-            # DuckDB stores FLOAT in 4 bytes, so -6.66 reads back as -6.659999847412109,
-            # which DuckDB compares wrongly, while the 4-byte value's shortest form compares exactly
-            cutoff = float(str(np.float32(cutoff)))
-        logger.debug(f"{column} percentile cutoff is {cutoff}")
-        return cutoff
-
     @abstractmethod
     def _cluster_exists(
         self, cluster_name: str, cluster_window: str
-    ) -> Union[int, None]:
+    ) -> int| None:
         """
         Checks if a cluster already exists, based on what window was clustered over,
         and the standardized cluster name. Method will not work if cluster name starts
@@ -4477,64 +4525,5 @@ class StorageManager(ABC):
 
     @abstractmethod
     def _create_screening_tables(self): ...
-
-    @staticmethod
-    def _serialize_pose_coordinates(coords):
-        """Serialize a list of [x, y, z] floats for storage in the pose_coordinates
-        column. Base/DuckDB store the native nested list (DuckDB FLOAT[][]), SQLite
-        overrides this to pack a float32 BLOB. Returns the value unchanged here.
-        """
-        return coords
-
-    @staticmethod
-    def _deserialize_pose_coordinates(stored):
-        """Inverse of _serialize_pose_coordinates: return a list of [x, y, z] floats.
-        Tolerates legacy JSON-text values from databases written before the native
-        coordinate format (so un-migrated DuckDB databases still read).
-        """
-        if stored is None:
-            return None
-        if isinstance(stored, str):
-            return json.loads(stored)
-        return [list(atom) for atom in stored]
-
-    def _open_storage(self):
-        """Create connection to db. Then, check if db needs to be created.
-
-        Raises:
-            StorageError
-            VersionError
-        """
-        try:
-            # check to see if file exist, and if it does, check that version is matching
-            if os.path.isfile(self.db_file) and os.path.getsize(self.db_file) > 0:
-                self.conn = self._create_connection()
-                # Only an initialized database (one with a Results table) needs a
-                # version check. An empty/uninitialized file — e.g. DuckDB writes a
-                # header on connect, so it is >0 bytes but has no tables — is treated
-                # like a brand-new database and created into.
-                if self._has_results_table():
-                    compatible, db_version = self.check_ringtaildb_version()
-                    if not compatible:
-                        raise VersionError(
-                            f"Database schema version '{db_version}' is not compatible "
-                            f"with this Ringtail (schema {SCHEMA_VERSION}). {UPGRADE_HINT}"
-                        )
-                else:
-                    logger.info("Creating a new database file.")
-            else:
-                logger.info("Creating a new database file.")
-                self.conn = self._create_connection()
-            if self.keyboard_interrupt_allowed:
-                signal(
-                    SIGINT, self._sigint_handler
-                )  # signal handler to catch keyboard interupts
-            logger.debug(
-                f"Ringtail connected to database {self.db_file} with connection: {self.conn}"
-            )
-        except VersionError as e:
-            raise
-        except Exception as e:
-            raise StorageError(f"Error while creating or connecting to database: {e}.")
 
     # endregion

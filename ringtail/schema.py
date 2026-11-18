@@ -549,7 +549,7 @@ OUTFIELD_BY_TABLE: dict[str, dict[str, Column]] = {
     },
 }
 
-# Only numeric columns make sense as an ORDER BY key.
+# Numeric and text columns can be an ORDER BY key, arrays cannot
 ORDER_RESULT_SCHEMA: dict[str, Column] = {
     name: col
     for name, col in OUTFIELD_SCHEMA.items()

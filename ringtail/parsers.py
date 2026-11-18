@@ -8,7 +8,7 @@ import os
 import gzip
 import json
 import traceback
-from typing import Union, NamedTuple
+from typing import Union
 from collections import defaultdict
 import numpy as np
 from .exceptions import (
@@ -22,43 +22,8 @@ logger = get_logger(__name__)
 from rdkit import Chem
 from meeko import PDBQTMolecule, RDKitMolCreate
 from .interactions import find_interactions, make_interaction_finder
+from .types import InteractionRecord, PoseRecord
 
-
-class PoseRecord(NamedTuple):
-    receptor: object = None
-    pose_rank: object = None
-    run_number: object = None
-    cluster_rmsd: object = 0
-    reference_rmsd: object = 0
-    docking_score: object = 0
-    leff: object = 0
-    delta: object = 0
-    energies_inter: object = 0
-    energies_vdw: object = 0
-    energies_electro: object = 0
-    energies_flexlig: object = 0
-    energies_flexlr: object = 0
-    energies_intra: object = 0
-    energies_torsional: object = 0
-    unbound_energy: object = 0
-    num_interactions: object = 0
-    num_hb: object = 0
-    cluster_size: object = 1
-    pose_coordinates: object = None
-    flexible_res_coordinates: object = "[]"
-    ligname: object = None
-
-
-class InteractionRecord(NamedTuple):
-    ligname: object
-    run_number: object
-    pose_rank: object
-    type: object
-    chain: object
-    residue: object
-    resid: object
-    recname: object
-    recid: object
 
 
 def _dicts_to_interaction_records(interactions: list) -> list:

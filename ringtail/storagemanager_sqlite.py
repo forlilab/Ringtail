@@ -1236,64 +1236,6 @@ class StorageManagerSQLite(StorageManager):
     # endregion
 
     # region data
-
-    def fetch_summary_data(
-        self,
-        columns: list[str] = ["docking_score", "leff"],
-        percentiles: list[int] = [1, 10],
-    ) -> dict:
-        """Collect summary data for database:
-            Num Ligands
-            Num stored poses
-            Num unique interactions
-
-            min, max, percentiles for columns in columns
-
-        Args:
-            columns (list (str)): columns to be displayed and used in summary
-            percentiles (list(int)): percentiles to consider
-
-        Returns:
-            dict: of data summary
-        """
-        if self.db_empty():
-            raise StorageError("There is no data in the database.")
-
-        query = """
-        SELECT 
-            (SELECT COUNT(ligand_id) FROM Ligands) AS num_ligands,
-            (SELECT COUNT(pose_id) FROM Results) AS num_poses,
-            (SELECT COUNT(interaction_id) FROM Interaction_indices) AS num_unique_interactions,
-            (SELECT COUNT(*) 
-            FROM (SELECT interaction_id
-                    FROM Interaction_indices 
-                    GROUP BY interaction_type, rec_resid, rec_chain)
-            ) AS num_interacting_residues;"""
-        data = self.db_query(query).fetchone()
-        summary_data = {
-            "num_ligands": data[0],
-            "num_poses": data[1],
-            "num_unique_interactions": data[2],
-            "num_interacting_residues": data[3],
-        }
-
-        allowed_columns = self._fetch_table_column_names("Results")
-        for col in columns:
-            if col not in allowed_columns:
-                logger.warning(
-                    f"Requested column {col} not found in Results table and will not be used for the summary. Allowed columns: {allowed_columns}"
-                )
-                continue
-            data = self.db_query(
-                f"SELECT MIN({col}), MAX({col}) FROM Results"
-            ).fetchone()
-            summary_data[f"min_{col}"] = data[0]
-            summary_data[f"max_{col}"] = data[1]
-            for p in percentiles:
-                summary_data[f"{p}%_{col}"] = self._calc_percentile_cutoff(p, col)
-
-        return summary_data
-
     def fetch_cluster_options(self, ligname: str) -> list[tuple]:
         """Return available clustering groups as (cluster_id, cluster_window, name) tuples.
 
@@ -1370,9 +1312,6 @@ class StorageManagerSQLite(StorageManager):
 
         return ligands, bookmark_name, cluster_name
 
-    def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
-        return super()._calc_percentile_cutoff(percentile, column)
-
     @staticmethod
     def _serialize_pose_coordinates(coords):
         """SQLite has no array type, so pack the [x, y, z] floats into a float32 BLOB
@@ -1431,12 +1370,6 @@ class StorageManagerSQLite(StorageManager):
         if "sqlite_sequence" in tables:
             tables.remove("sqlite_sequence")
         return tables
-
-    def _open_storage(self):
-        """Extend base _open_storage to ensure covering indices exist on existing databases."""
-        super()._open_storage()
-        # if self.tables_in_db():
-        #     self._create_indices()
 
     def clone(self, backup_name: str = None) -> str:
         """Creates a copy of the db

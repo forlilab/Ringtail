@@ -1294,64 +1294,6 @@ class StorageManagerDuckDB(StorageManager):
 
     # region data
 
-    def fetch_summary_data(
-        self,
-        columns: list[str] = ["docking_score", "leff"],
-        percentiles: list[int] = [1, 10],
-    ) -> dict:
-        """Collect summary data for database:
-            Num Ligands
-            Num stored poses
-            Num unique interactions
-
-            min, max, percentiles for columns in columns
-
-        Args:
-            columns (list (str)): columns to be displayed and used in summary
-            percentiles (list(int)): percentiles to consider
-
-        Returns:
-            dict: of data summary
-        """
-        if self.db_empty():
-            raise StorageError("There is no data in the database.")
-
-        query = """
-        SELECT 
-            (SELECT COUNT(ligand_id) FROM Ligands) AS num_ligands,
-            (SELECT COUNT(pose_id) FROM Results) AS num_poses,
-            (SELECT COUNT(interaction_id) FROM Interaction_indices) AS num_unique_interactions,
-            (SELECT COUNT(*) 
-            FROM (SELECT ANY_VALUE(interaction_id) 
-                    FROM Interaction_indices 
-                    GROUP BY interaction_type, rec_resid, rec_chain)
-            ) AS num_interacting_residues;"""
-        data = self.db_query(query).fetchone()
-        summary_data = {
-            "num_ligands": data[0],
-            "num_poses": data[1],
-            "num_unique_interactions": data[2],
-            "num_interacting_residues": data[3],
-        }
-
-        allowed_columns = self._fetch_table_column_names("Results")
-        for col in columns:
-            if col not in allowed_columns:
-                logger.warning(
-                    f"Requested column {col} not found in Results table and will not be used for the summary. Allowed columns: {allowed_columns}"
-                )
-                continue
-            data = self.db_query(
-                f"SELECT MIN({col}), MAX({col}) FROM Results"
-            ).fetchone()
-            summary_data[f"min_{col}"] = data[0]
-            summary_data[f"max_{col}"] = data[1]
-
-            for p in percentiles:
-                summary_data[f"{p}%_{col}"] = self._calc_percentile_cutoff(p, col)
-
-        return summary_data
-
     def fetch_cluster_options(self, ligname: str) -> list[tuple]:
         """Return available clustering groups as (cluster_id, cluster_window, name) tuples.
 
@@ -1428,9 +1370,6 @@ class StorageManagerDuckDB(StorageManager):
 
         return ligands, bookmark_name, cluster_name
 
-    def _calc_percentile_cutoff(self, percentile: float, column="docking_score"):
-        return super()._calc_percentile_cutoff(percentile, column)
-
     def _execute_to_df(self, sql: str) -> pd.DataFrame:
         return self.conn.execute(sql).df()
 
@@ -1501,6 +1440,20 @@ class StorageManagerDuckDB(StorageManager):
             "This DuckDB database stores pose_coordinates as JSON text, which only "
             "pre-release v3-alpha files do. Converting requires recreating the "
             "database; ask your package administrator for rt_upgrade_from_v3alpha.py."
+        )
+    def update_database_version(self, new_version, backup=False):
+        '''
+        duckdb currently up to date with code version major 3
+
+        Args:
+            new_version (_type_): _description_
+            backup (bool, optional): _description_. Defaults to False.
+        '''
+        # opening the database checks its schema version
+        with self:
+            pass
+        logger.info(
+            f"{self.db_file} database is compatible and no migration was performed."
         )
 
     def _create_connection(self):
