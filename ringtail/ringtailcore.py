@@ -31,7 +31,7 @@ from .ringtailoptions import (
     num_poses_to_store,
     validate_bookmark_name,
 )
-from .schema import OUTFIELD_BY_TABLE, CANDIDATES_NAME, RECALC_TRACKING_TABLE
+from .schema import CANDIDATES_NAME, RECALC_TRACKING_TABLE
 from .exceptions import (
     RTCoreError,
     OutputError,
@@ -1467,9 +1467,13 @@ class RingtailCore:
         if bookmark_name is None:
             raise OptionError("A bookmark name has to be provided")
         with self.storageman:
-            new_data = self.storageman.fetch_data_for_passing_results(
-                bookmark_name, outfields, order_results
+            query = self.storageman.get_bookmark_selection(
+                bookmark_name,
+                selection=outfields,
+                group_by="ligand_id",
+                order_results=order_results,
             )
+            new_data = self.storageman.db_query(query).fetchall()
             with OutputManager(output_log) as opm:
                 opm.write_filter_results_in_log(new_data)
 
@@ -1644,27 +1648,19 @@ class RingtailCore:
 
     @_wrap_exceptions
     def get_exportable_columns(self) -> dict[str, dict[str, str]]:
-        """Return exportable columns grouped by table with descriptions.
-        Includes custom columns/properties, which will not have descriptions
+        """
+        Gets exportable columns grouped by table, including custom pose columns,
+        with descriptions if available
 
         Returns:
-            dict[str, dict[str, str]]: ``{table_name: {col_name: description}}``
-                for Results, Ligands, and Interaction_indices.
-                No database connection is required.
+            dict[str, dict[str, str]]: {table: {column: description}}
         """
         with self.storageman as sm:
-            column_to_table = sm.get_queryable_columns()
+            metadata = sm.get_column_metadata()
 
-        descriptions = {
-            (table.lower(), name.lower()): col.description
-            for table, cols in OUTFIELD_BY_TABLE.items()
-            for name, col in cols.items()
-        }
         grouped = {}
-        for column, table in column_to_table.items():
-            grouped.setdefault(table, {})[column] = (
-                descriptions.get((table.lower(), column.lower())) or ""
-            )
+        for name, column in metadata.items():
+            grouped.setdefault(column["table"], {})[name] = column["description"]
 
         return grouped
 

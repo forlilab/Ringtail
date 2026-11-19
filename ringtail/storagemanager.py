@@ -47,7 +47,6 @@ from .schema import (
     CANDIDATES_SUBQ,
     CANDIDATES_NAME,
     LIGANDS_ONLY_COLS,
-    TABLE_SCHEMAS,
     LIGANDS_SCHEMA,
     RESULTS_SCHEMA,
     DB_PROPERTIES_SCHEMA,
@@ -1185,7 +1184,6 @@ class StorageManager(ABC):
             result.setdefault(pose_id, []).append(interaction)
         return result
 
-    # TODO this looks like one where i hav eto unify column/selection handling
     def get_bookmark_selection(
         self,
         bookmark_name: str,
@@ -1199,11 +1197,11 @@ class StorageManager(ABC):
         Args:
             bookmark_name (str): bookmark name from which to get the passing poses
             selection (list | str): what columns to have in the output query
-            group_by (str, optional): whether or not to group the output by a column
+            group_by (str, optional): if set, gets the best passing pose per ligand
             order_results (str, optional): Whether or not to order by a column
 
         Raises:
-            OptionError: _description_
+            OptionError: if selection is '*' or the bookmark is not valid
 
         Returns:
             str: sql string that describes selection of data from bookmark
@@ -1212,19 +1210,26 @@ class StorageManager(ABC):
             raise OptionError(
                 "Output fields/columns cannot be 'all'/'*', please select one or more specific columns, or use the default."
             )
-        outfields_list = self._format_output_fields(selection, "R", "L")
-        # start formatting write query
-        query = self.QueryBuilder()
-        # select stuff from results where pose id in filter poses join ligands for extra fields
-        query.SELECT(*outfields_list).FROM("Results", "R").JOIN(
-            "Ligands", "L", "ligand_id"
-        ).WHERE(f"R.pose_id IN ({self._get_scope_poses_query(bookmark_name)})")
+        column_to_table = self.get_queryable_columns()
+        outfields = self._format_output_fields(selection)
+        sources = {col: column_to_table[col.lower()] for col in outfields}
+
+        # Include the ordering column's table even if the column is not selected.
+        order_column = None
+        if order_results and order_results.lower() in column_to_table:
+            order_column = order_results
+            sources[order_column] = column_to_table[order_column.lower()]
+
+        query, fields = self._prepare_column_query(sources, bookmark_name)
+        query.SELECT(*(fields[col] for col in outfields))
         if group_by:
-            query.WHERE(self._get_best_pose_per_ligand_condition(bookmark_name))
-        if order_results:
-            order_by = self._format_orderby(order_results)
-            if order_by:
-                query.ORDER_BY(order_by)
+            query.WHERE(
+                self._get_best_pose_per_ligand_condition(
+                    bookmark_name, results_alias="Results"
+                )
+            )
+        if order_column:
+            query.ORDER_BY(fields[order_column])
         return query.build()[0]
 
     def to_dataframe(self, requested_data: str, table=True) -> pd.DataFrame:
@@ -1513,42 +1518,6 @@ class StorageManager(ABC):
             counts[bin_idx] = count
         bin_edges = [min_val + i * bin_width for i in range(num_bins + 1)]
         return bin_edges, counts
-
-    #TODO custom cols
-    def fetch_data_for_passing_results(
-        self, bookmark_name: str, outfields: str| list, order_results: str = None
-    ) -> Any:
-        """Will return cursor with requested data for outfields for poses that passed filter in bookmark_name
-
-        Args:
-            bookmark_name (str): bookmark for which to retrieve data
-            outfields (str| list): columns to include
-            order_results (str, optional): if ordering by a column. Defaults to None.
-
-        Returns:
-            Any: cursor of data from passing data
-
-        Raises:
-            OptionError
-        """
-        outfields_list = self._format_output_fields(
-            outfields, ligands_alias="L", results_alias="R"
-        )
-
-        bookmark_selection = self._get_scope_poses_query(bookmark_name)
-
-        query = self.QueryBuilder()
-        query.SELECT(*outfields_list).FROM("Results", "R").WHERE(
-            f"R.pose_id IN ({bookmark_selection})"
-        ).WHERE(self._get_best_pose_per_ligand_condition(bookmark_name)).JOIN(
-            "ligands", "L", "ligand_id", "results"
-        )
-        if order_results:
-            order_by = self._format_orderby(order_results)
-            if order_by:
-                query.ORDER_BY(order_by)
-
-        return self.db_query(query.build()[0]).fetchall()
 
     def fetch_filters_from_bookmark(self, bookmark_name: str) -> dict:
         """Method that will retrieve filter values used to construct bookmark
@@ -2039,43 +2008,61 @@ class StorageManager(ABC):
         )
         self.db_update("DELETE FROM Maybe WHERE pose_id = ?;", pose_ids, commit=False)
         self.db_update("DELETE FROM Rejected WHERE pose_id = ?;", pose_ids, commit=True)
-    #NOTE use this method for lots of goodness
-    def get_queryable_columns(self) -> dict[str, str]:
-        """
-        Returns any columns that are currently supported in Ringtail queries
-        and for output options, will check for and include custom properties/columns
-        if any
+    
+    def get_column_metadata(self) -> dict[str, dict[str, str]]:
+        '''
+        Describe queryable columns, including any custom pose properties
 
         Returns:
-            dict[str, str]: {column: table}
-        """
-        column_to_table = {
-            col.lower(): table
-            for table, cols in OUTFIELD_BY_TABLE.items()
-            for col in cols
-        }
-        # check for custom table, get columns
-        if self._is_table("custom_pose_data"):
-            custom_cols = list(
-                self.fetch_dynamic_table_column_names("custom_pose_data").keys()
-            )
-            column_to_table.update(
-                {
-                    col.lower(): "custom_pose_data"
-                    for col in custom_cols
-                    if col != "pose_id"
-                }
-            )
-        # ensure primary keys from primary tables
-        column_to_table.update(
-            {
-                "pose_id": "Results",
-                "ligand_id": "Ligands",
+            dict[str, dict[str, str]]: colum:{table,sql type, description if any}
+        '''
+        columns = {
+            name.lower(): {
+                "table": table,
+                "sql_type": column.sql_type,
+                "description": column.description or "",
             }
-        )
+            for table, table_columns in OUTFIELD_BY_TABLE.items()
+            for name, column in table_columns.items()
+        }
 
-        return column_to_table
-    #NOTE this method also good
+        if self._is_table("custom_pose_data"):
+            for name, sql_type in self.fetch_dynamic_table_column_names(
+                "custom_pose_data"
+            ).items():
+                if name.lower() != "pose_id":
+                    columns[name.lower()] = {
+                        "table": "custom_pose_data",
+                        "sql_type": sql_type,
+                        "description": "",
+                    }
+
+        # Resolve shared identifiers to their primary tables.
+        for name, table, schema in (
+            ("pose_id", "Results", RESULTS_SCHEMA),
+            ("ligand_id", "Ligands", LIGANDS_SCHEMA),
+        ):
+            column = schema.columns[name]
+            columns[name] = {
+                "table": table,
+                "sql_type": column.sql_type,
+                "description": column.description or "",
+            }
+
+        return columns
+
+    def get_queryable_columns(self) -> dict[str, str]:
+        '''
+        Return column-to-table mappings, including custom pose properties
+
+        Returns:
+            dict[str, str]: {col:name}
+        '''
+        return {
+            name: metadata["table"]
+            for name, metadata in self.get_column_metadata().items()
+        }
+
     def prepare_column_export_query(
         self,
         columns: dict[str, str] | list[str],
@@ -2095,63 +2082,34 @@ class StorageManager(ABC):
         Returns:
             str: SQL query string
         """
-        # Accept either form, so callers that do not rename anything can pass a list
         headers = (
             dict(columns)
             if isinstance(columns, dict)
             else {col: None for col in columns}
         )
 
-        # Build a flat map of column_name -> table from all queryable tables
         column_to_table = self.get_queryable_columns()
-
-        included_tables = set()
-
-        query = self.QueryBuilder()
-        for col, header in headers.items():
+        sources = {}
+        for col in headers:
             table = column_to_table.get(col.lower())
             if table is None:
                 raise OptionError(f"Column '{col}' not found in any queryable table.")
+            sources[col] = table
 
-            included_tables.add(table.lower())
+        query, fields = self._prepare_column_query(sources, bookmark)
 
-            quoted_col = self._safe_quoting(col)
-            field = f"{table}.{quoted_col}"
+        for col, header in headers.items():
+            field = fields[col]
             if header is None:
                 query.SELECT(field)
                 continue
 
-            # The header is interpolated into the SQL, so hold it to an identifier
             if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", str(header)):
                 raise OptionError(
                     f"'{header}' is not usable as a column name. Use letters, "
                     "digits and underscores, and do not start with a digit."
                 )
             query.SELECT(f'{field} AS "{header}"')
-
-        query.FROM("Results")
-
-        # join to tables that are represented in the columns
-        if "ligands" in included_tables:
-            query.JOIN("Ligands", "Ligands", on="ligand_id", to="Results")
-        if "interaction_indices" in included_tables:
-            query.JOIN("Interactions", "Interactions", "pose_id", "Results")
-            query.JOIN(
-                "Interaction_indices",
-                "Interaction_indices",
-                "interaction_id",
-                "Interactions",
-            )
-        if "custom_pose_data" in included_tables:
-            query.JOIN(
-                "custom_pose_data",
-                "custom_pose_data",
-                "pose_id",
-                "Results",
-                kind="LEFT",
-            )
-
-        self._apply_table_filter(query, bookmark)
 
         return query.build()[0]
 
@@ -2437,7 +2395,7 @@ class StorageManager(ABC):
         ...
 
     @abstractmethod
-    def get_pose_comment(self, pose_id: int) -> "str | None":
+    def get_pose_comment(self, pose_id: int) -> str | None:
         """Return the comment for a pose, or None if none exists."""
         ...
 
@@ -2747,39 +2705,20 @@ class StorageManager(ABC):
         query.DROP_IF_EXISTS(name)
         return self.db_query(query.build()[0])
 
-    #NOTE this is a good method, updated
     def _get_numeric_columns(self) -> dict[str, str]:
-        """
-        Gets all numeric Results columns and numeric custom columns, and the table each one is in
+        '''
+        Return numeric Results and custom columns, excluding identifiers
 
         Returns:
-            dict[str, str]: lowercase column name: table
-        """
-        columns = {
-            name.lower(): "Results"
-            for name, col in RESULTS_SCHEMA.columns.items()
-            if col.sql_type in NUMERIC_TYPES
+            dict[str, str]: {col:table}
+        '''
+        return {
+            name: metadata["table"]
+            for name, metadata in self.get_column_metadata().items()
+            if metadata["table"] in {"Results", "custom_pose_data"}
+            and metadata["sql_type"] in NUMERIC_TYPES
+            and name not in {"pose_id", "ligand_id"}
         }
-        if self._is_table("custom_pose_data"):
-            custom_columns = self.fetch_dynamic_table_column_names("custom_pose_data")
-            for col, sql_type in custom_columns.items():
-                if col.lower() != "pose_id" and sql_type in NUMERIC_TYPES:
-                    columns[col.lower()] = "custom_pose_data"
-        return columns
-    #TODO custom cols
-    def _fetch_table_column_names(self, table: str) -> list:
-
-        """
-        Get all column names in a table
-
-        Args:
-            table (str)
-
-        Returns:
-            list: column names in table schema
-        """
-        return list(TABLE_SCHEMAS[table.lower()].columns)
-
     #TODO check for duplicity
     def _apply_table_filter(self, query: QueryBuilder, table: str) -> QueryBuilder:
         """Restricts a query on Results to the poses of a bookmark, status table or candidates.
@@ -2800,22 +2739,65 @@ class StorageManager(ABC):
             f"{query.aliased('Results')}.pose_id IN ({self._get_scope_poses_query(table)})"
         )
 
+    def _prepare_column_query(
+        self, sources: dict[str, str], table: str | None = None
+    ) -> tuple[QueryBuilder, dict[str, str]]:
+        """
+        Makes a Results query, joining tables as needed for the requested columns
+        and restricting poses to given selection
+
+        Args:
+            sources (dict[str, str]): {column: source table}
+            table (str | None): bookmark, status table, Candidates, or
+                None/"Results" for all results
+
+        Returns:
+            tuple[QueryBuilder, dict[str, str]]: query without SELECT, and
+                {column: quoted source.column}
+        """
+        query = self.QueryBuilder().FROM("Results")
+        included_tables = {source.lower() for source in sources.values()}
+
+        if "ligands" in included_tables:
+            query.JOIN("Ligands", "Ligands", "ligand_id", "Results")
+
+        if "interaction_indices" in included_tables:
+            query.JOIN("Interactions", "Interactions", "pose_id", "Results")
+            query.JOIN(
+                "Interaction_indices",
+                "Interaction_indices",
+                "interaction_id",
+                "Interactions",
+            )
+
+        if "custom_pose_data" in included_tables:
+            query.JOIN(
+                "custom_pose_data", "custom_pose_data", "pose_id", "Results",
+                kind="LEFT",
+            )
+
+        self._apply_table_filter(query, table)
+        fields = {
+            col: f"{source}.{self._safe_quoting(col)}"
+            for col, source in sources.items()
+        }
+        return query, fields
+
     def _numeric_column_query(
         self, columns: list[str], table: str
     ) -> tuple[QueryBuilder, dict[str, str]]:
         """
-        Will start a query on Results for numeric Results or custom columns, joining custom_pose_data if needed
-        and restricting it to table. Columns that are not numeric are left out.
+        Will make a query in Results for numeric Results or custom columns, including custom data if any
 
         Args:
-            columns (list[str]): column names, any case
+            columns (list[str]): column names
             table (str): bookmark, status table, candidates, or None/"Results" for all results
 
         Raises:
             OptionError: if table is not a valid selection
 
         Returns:
-            tuple[QueryBuilder, dict[str, str]]: query with FROM, JOIN and WHERE but no SELECT, and column: quoted source.column field
+            tuple[QueryBuilder, dict[str, str]]: sql query without SELECT: quoted source.column field
         """
         numeric_columns = self._get_numeric_columns()
         sources = {
@@ -2824,17 +2806,7 @@ class StorageManager(ABC):
             if col.lower() in numeric_columns
         }
 
-        query = self.QueryBuilder().FROM("Results")
-        if "custom_pose_data" in sources.values():
-            query.JOIN(
-                "custom_pose_data", "custom_pose_data", "pose_id", "Results", "LEFT"
-            )
-        self._apply_table_filter(query, table)
-        fields = {
-            col: f"{source}.{self._safe_quoting(col)}" for col, source in sources.items()
-        }
-        return query, fields
-
+        return self._prepare_column_query(sources, table)
 
     def _is_statustable(self, table: str) -> bool:
         """
@@ -2862,27 +2834,6 @@ class StorageManager(ABC):
                 bool: if this is candidates table or not
         """
         return table.lower() == CANDIDATES_NAME
-
-    #TODO may need update for custom
-    def _format_orderby(self, column_name: str) -> str | None:
-        """
-        Ensures chosen order by column is a valid choice
-
-        Args:
-            column_name (str): column to order by
-
-        Returns:
-            str: column to order by with appropriate alias
-        """
-        columns, aliased_columns = self._get_possible_output_columns()
-        if column_name.lower() in columns:
-            index = columns.index(column_name.lower())
-            order_by = aliased_columns[index].format(
-                Ligands_alias="L", Results_alias="R"
-            )
-            return order_by
-        else:
-            return None
 
     #TODO future: allow custom column filtering
     def _generate_filtering_query(
@@ -3758,32 +3709,6 @@ class StorageManager(ABC):
 
         self.conn.commit()
         return 1
-    #TODO custom cols
-    def _get_possible_output_columns(self, tables=["Results", "Ligands"]):
-        """
-        Gets all column names from given tables
-
-        Args:
-            tables (list, optional): Defaults to ["Results", "Ligands"].
-
-        Returns:
-            columns (list[str]): list of column names for all listed tables
-            columns_with_tablename (list[str.format]): needs formatted with table_alias (one per table) for use
-        """
-        columns = []
-        columns_with_tablename = []
-        for table in tables:
-            columns_info = self._fetch_table_column_names(table)
-            columns.extend(columns_info)
-            columns_with_tablename.extend(
-                [
-                    ("{{{table_alias}_alias}}.{col}".format(col=col, table_alias=table))
-                    for col in columns_info
-                ]
-            )
-
-        return columns, columns_with_tablename
-
     def _stream_query(self, query: str, batch_size: int = 1000):
         """
         cursor stream generator
@@ -4008,25 +3933,21 @@ class StorageManager(ABC):
         logger.debug(f"{column} percentile cutoff is {cutoff}")
         return cutoff
 
-
-   #TODO custom cols
-    def _format_output_fields(
-        self, outfields: str | list, results_alias="R", ligands_alias="L"
-    ) -> list:
-        """Handles string or list input of column names to be outputted, will make sure ligname
+    def _format_output_fields(self, outfields: str | list) -> list[str]:
+        """
+        Handles string or list input of column names to be outputted, will make sure ligname
         is in the list, and make sure all options are valid
 
-        Returns:
-            list: column names formatted with table aliases
+        Args:
+            outfields (str | list): column names, or None for ligname and docking_score
 
-        Raises:
-            OptionError
+        Returns:
+            list[str]: valid column names, including custom pose columns
         """
         if outfields is None:
             outfields_list = ["ligname", "docking_score"]
         elif isinstance(outfields, str):
-            outfields = outfields.replace(" ", "")
-            outfields_list = outfields.split(",")
+            outfields_list = [col.strip() for col in outfields.split(",")]
         elif isinstance(outfields, (list, tuple)):
             outfields_list = list(outfields)
         else:
@@ -4037,21 +3958,16 @@ class StorageManager(ABC):
             outfields_list = ["ligname", "docking_score"]
         if "ligname" not in [field.lower() for field in outfields_list]:
             outfields_list.insert(0, "ligname")
-        possible_columns, table_formatted_columns = self._get_possible_output_columns()
-        table_formatted_outfields = []
+        possible_columns = self.get_queryable_columns()
+        valid_outfields = []
         for outfield in outfields_list:
             if outfield.lower() in possible_columns:
-                table_formatted_outfields.append(
-                    table_formatted_columns[possible_columns.index(outfield.lower())]
-                )
+                valid_outfields.append(outfield)
             else:
                 logger.warning(
                     f"{outfield} is not a valid output option, and will be removed from the output columns. Please see rt_process_vs.py --help for allowed options"
                 )
-        return [
-            outfield.format(Ligands_alias=ligands_alias, Results_alias=results_alias)
-            for outfield in table_formatted_outfields
-        ]
+        return valid_outfields
 
     def _db_compatible_for_merge(self, merging_db_alias: str) -> bool:
         """Whether the database being merged in is compatible with this one.
