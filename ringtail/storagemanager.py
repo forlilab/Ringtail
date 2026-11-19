@@ -46,7 +46,6 @@ from .schema import (
     OUTFIELD_BY_TABLE,
     CANDIDATES_SUBQ,
     CANDIDATES_NAME,
-    LIGANDS_ONLY_COLS,
     LIGANDS_SCHEMA,
     RESULTS_SCHEMA,
     DB_PROPERTIES_SCHEMA,
@@ -1591,7 +1590,50 @@ class StorageManager(ABC):
             )
         return residues, atomnames
 
-    #TODO check for duplicity #TODO if this is used in building custom Mols it also need sthe custom properties? 
+    def fetch_custom_pose_properties(
+        self, pose_ids: int | list[int]
+    ) -> dict[int, dict[str, object]]:
+        """
+        Gets custom properties for the given poses, excluding missing values.
+
+        Args:
+            pose_ids (int | list[int]): one or more pose ids
+
+        Returns:
+            dict[int, dict[str, object]]: {pose_id: {property: value}}
+        """
+        if isinstance(pose_ids, int):
+            pose_ids = [pose_ids]
+        if not pose_ids or not self._is_table("custom_pose_data"):
+            return {}
+
+        columns = [
+            name
+            for name in self.fetch_dynamic_table_column_names("custom_pose_data")
+            if name.lower() != "pose_id"
+        ]
+        if not columns:
+            return {}
+
+        placeholders = ",".join("?" for _ in pose_ids)
+        query = self.QueryBuilder()
+        query.SELECT(
+            "pose_id",
+            *(self._safe_quoting(col) for col in columns),
+        ).FROM("custom_pose_data").WHERE(
+            f"pose_id IN ({placeholders})", *pose_ids
+        )
+
+        rows = self.db_query(*query.build()).fetchall()
+        return {
+            row[0]: {
+                col: value
+                for col, value in zip(columns, row[1:])
+                if value is not None
+            }
+            for row in rows
+        }
+
     def fetch_rdkit_pose_properties(
         self,
         pose_ids,
@@ -1664,6 +1706,172 @@ class StorageManager(ABC):
                 )
             )
         return result
+    
+    def fetch_columns_from_table_as_dicts(
+        self, table: str, columns: list, length: int = None, starting_rowid: int = 0
+    ) -> tuple[list[str], list[dict]]:
+        """
+        Gets requested columns as dictionaries from a table or a selection of poses.
+        For Results, bookmarks, status tables and Candidates, joins tables as needed
+        to include custom properties and other requested columns.
+
+        Args:
+            table (str): table name, bookmark name, or Candidates
+            columns (list): column names to select. For pose selections, "*" includes
+                Results and custom columns, and "status" includes pose status.
+            length (int, optional): max rows to return. Defaults to None (all rows).
+            starting_rowid (int, optional): rowid lower bound. Defaults to 0.
+
+        Returns:
+            tuple[list[str], list[dict]]: column names and list of row dicts
+        """
+        if (
+            self._is_table(table)
+            and not self.is_bookmark(table)
+            and not self._is_statustable(table)
+            and table.lower() != "results"
+        ):
+            naive = self.QueryBuilder()
+            naive.SELECT(",".join(columns)).FROM(table)
+            if length:
+                naive.LIMIT(length)
+            if starting_rowid:
+                naive.WHERE(f"{table}.rowid >= {starting_rowid}")
+            return self.get_query_data_as_dicts(naive.build()[0])
+
+        column_to_table = self.get_queryable_columns()
+        include_status = any(col.lower() == "status" for col in columns)
+
+        data_cols = []
+        for col in columns:
+            if col.lower() == "status":
+                continue
+            if col == "*":
+                data_cols.extend(RESULTS_SCHEMA.columns)
+                data_cols.extend(
+                    name
+                    for name, source in column_to_table.items()
+                    if source == "custom_pose_data"
+                )
+            else:
+                data_cols.append(col)
+
+        sources = {}
+        for col in data_cols:
+            source = column_to_table.get(col.lower())
+            if source is None:
+                raise OptionError(f"Column '{col}' not found in any queryable table.")
+            sources[col] = source
+
+        query, fields = self._prepare_column_query(sources, table)
+        query.SELECT(*fields.values())
+
+        if include_status:
+            if self._is_statustable(table):
+                query.SELECT(f"'{table.lower()}' AS status")
+            else:
+                query.SELECT_STATUS()
+        if length:
+            query.LIMIT(length)
+        if starting_rowid:
+            query.WHERE(f"Results.rowid >= {starting_rowid}")
+        if length or starting_rowid:
+            query.ORDER_BY("Results.rowid")
+
+        return self.get_query_data_as_dicts(query.build()[0])
+
+    def fetch_pose_page(
+        self, table: str, length: int, starting_rowid: int = 0, reverse=False
+    ) -> dict[list[str], list]:
+        """
+        Gets a page of poses with status, comments, and a paging key.
+        Custom columns are included after leff and before the comment.
+
+        Args:
+            table (str): Results, bookmark, status table, or Candidates
+            length (int): maximum number of rows to return
+            starting_rowid (int): paging key to start from, inclusive
+            reverse (bool): whether to get rows in descending order
+
+        Returns:
+            dict: headers and data, with the paging key last in each row
+        """
+
+        if reverse:
+            where_operator = "<="
+        else:
+            where_operator = ">="
+        query = self.QueryBuilder()
+        query.FROM("Results", "R")
+
+        if table.lower() == "results":
+            rowid = "R.rowid"
+
+        elif self._is_statustable(table):
+            query.JOIN(table, "T", "pose_id")
+            rowid = "T.rowid"
+
+        elif self._is_candidates_table(table):
+            query.JOIN(CANDIDATES_SUBQ, "T", "pose_id")
+            rowid = "R.rowid"
+
+        elif self.is_bookmark(table):
+            query.JOIN("filtered_poses", "fp", "pose_id").JOIN(
+                "filters", "f", "filter_id", "filtered_poses"
+            ).WHERE("f.name = ?", table)
+            # SQLite's Filtered_poses is WITHOUT ROWID, pose_id is unique within a bookmark
+            rowid = "fp.rowid" if self.dialect == "duckdb" else "fp.pose_id"
+
+        else:
+            raise ValueError(
+                f"Table '{table}' is not a results table, status table, or bookmark."
+            )
+
+        if self._is_statustable(table):
+            query.SELECT(f"'{table.lower()}' AS status")
+        else:
+            query.SELECT_STATUS()
+
+        query.JOIN("Pose_comments", "Pc", "pose_id", kind="LEFT")
+        query.JOIN("Ligands", "L", "ligand_id", "Results")
+
+        column_to_table = self.get_queryable_columns()
+        custom_columns = [
+            name for name, source in column_to_table.items()
+            if source == "custom_pose_data" and name not in {"status", "comment"}
+        ]
+        if custom_columns:
+            query.JOIN("custom_pose_data", "CT", "pose_id", "Results", kind="LEFT")
+
+        ordered_columns = [
+            "ligname", "pose_id", "pose_rank", "docking_score", "leff",
+            *custom_columns,
+            "comment", "cluster_size", "cluster_rmsd", "num_hb", "receptor",
+            "run_number", "delta", "num_interactions", "unbound_energy",
+            "reference_RMSD", "energies_inter", "energies_vdw", "energies_electro",
+            "energies_flexlig", "energies_flexlr", "energies_intra", "energies_torsional",
+        ]
+        selected_columns = set()
+        for column in ordered_columns:
+            name = column.lower()
+            if name in selected_columns:
+                continue
+            selected_columns.add(name)
+            if name == "comment":
+                query.SELECT("COALESCE(Pc.comment, '') AS comment")
+            else:
+                source = query.aliased(column_to_table[name])
+                query.SELECT(f"{source}.{self._safe_quoting(column)}")
+
+        query.SELECT(rowid)
+        query.WHERE(
+            f"{rowid} {where_operator} ?", starting_rowid
+        ).ORDER_BY(rowid).LIMIT(length).DESC(reverse)
+
+        cursor = self.db_query(*query.build())
+        headers = [desc[0] for desc in cursor.description]
+        data = cursor.fetchall()
+        return {"headers": headers, "data": data}
 
     def fetch_tracked_cutoffs(self, track_table_name: str):
         """
@@ -1714,140 +1922,6 @@ class StorageManager(ABC):
         query.LIMIT(limit)
         sql, params = query.build()
         return self.db_query(sql, params).fetchall()
-    #TODO duplicity in fetching stuff? also wont fetch custom columns
-    def fetch_columns_from_table_as_dicts(
-        self, table: str, columns: list, length: int = None, starting_rowid: int = 0
-    ) -> tuple[list[str], list[dict]]:
-        """Get requested columns from Results, a bookmark, or a status table.
-
-        Automatically JOINs Ligands when Ligands-only columns (ligname, ligand_smile,
-        rdmol) are requested, and applies the appropriate WHERE/JOIN for bookmarks and
-        status tables. Pass "status" as a column name to include pose status.
-
-        Args:
-            table (str): Results table name, bookmark name, or status table name
-            columns (list): column names to select, "status" is a special sentinel
-            length (int, optional): max rows to return. Defaults to None (all rows).
-            starting_rowid (int, optional): R.rowid lower bound. Defaults to 0.
-
-        Returns:
-            tuple[list[str], list[dict]]: column names and list of row dicts
-        """
-        # Direct physical table that is not Results/bookmark/status — naive query
-        if (
-            self._is_table(table)
-            and not self.is_bookmark(table)
-            and not self._is_statustable(table)
-            and table.lower() != "results"
-        ):
-            naive = self.QueryBuilder()
-            naive.SELECT(",".join(columns)).FROM(table)
-            if length:
-                naive.LIMIT(length)
-            if starting_rowid:
-                naive.WHERE(f"{table}.rowid >= {starting_rowid}")
-            return self.get_query_data_as_dicts(naive.build()[0])
-
-        include_status = "status" in columns
-        data_cols = [c for c in columns if c != "status"]
-        needs_ligands = any(c in LIGANDS_ONLY_COLS for c in data_cols)
-
-        def _qualify(col):
-            return f"L.{col}" if col in LIGANDS_ONLY_COLS else f"R.{col}"
-
-        query = self.QueryBuilder()
-        for col in data_cols:
-            query.SELECT(_qualify(col))
-        query.FROM(RESULTS_SCHEMA.name, "R")
-        if needs_ligands:
-            query.JOIN(LIGANDS_SCHEMA.name, "L", "ligand_id")
-
-        if include_status:
-            if self._is_statustable(table):
-                query.SELECT(f"'{table.lower()}' as status")
-            else:
-                query.SELECT_STATUS()
-        self._apply_table_filter(query, table)
-
-        if length:
-            query.LIMIT(length)
-        if starting_rowid:
-            query.WHERE(f"R.rowid >= {starting_rowid}")
-
-        return self.get_query_data_as_dicts(query.build()[0])
-    #TODO duplicity in fetching stuff? also wont fetch custom columns
-    def fetch_viewable_data_columns_from(
-        self, table: str, length: int, starting_rowid: int = 0, reverse=False
-    ) -> dict[list[str], list]:
-        """
-        Makes a selection of columns and includes the status of the pose, paged by rowid
-        (for a SQLite bookmark by pose_id, its Filtered_poses has no rowid)
-
-        Returns:
-            dict[list[str], list]: dict of headers and data
-        """
-
-        if reverse:
-            where_operator = "<="
-        else:
-            where_operator = ">="
-        query = self.QueryBuilder()
-        query.FROM("Results", "R")
-        status_assignement = """CASE
-            WHEN EXISTS (SELECT 1 FROM Accepted s WHERE s.pose_id = R.pose_id) THEN 'accepted'
-            WHEN EXISTS (SELECT 1 FROM Rejected s WHERE s.pose_id = R.pose_id) THEN 'rejected'
-            WHEN EXISTS (SELECT 1 FROM Maybe s WHERE s.pose_id = R.pose_id) THEN 'maybe'
-            ELSE ''
-        END AS status,"""
-
-        if table.lower() == "results":
-            rowid = "R.rowid"
-
-        elif self._is_statustable(table):
-            query.JOIN(table, "T", "pose_id")
-            rowid = "T.rowid"
-            # status assignement doesn't make sense for status tables
-            status_assignement = f"""'{table.lower()}' AS status,"""
-
-        elif self._is_candidates_table(table):
-            query.JOIN(CANDIDATES_SUBQ, "T", "pose_id")
-            rowid = "R.rowid"
-            # keep CASE status_assignement — shows real accepted/maybe per row
-
-        elif self.is_bookmark(table):
-            query.JOIN("filtered_poses", "fp", "pose_id").JOIN(
-                "filters", "f", "filter_id", "filtered_poses"
-            ).WHERE("f.name = ?", table)
-            # SQLite's Filtered_poses is WITHOUT ROWID, pose_id is unique within a bookmark
-            rowid = "fp.rowid" if self.dialect == "duckdb" else "fp.pose_id"
-
-        else:
-            raise ValueError(
-                f"Table '{table}' is not a results table, status table, or bookmark."
-            )
-
-        query.JOIN("Pose_comments", "Pc", "pose_id", kind="LEFT")
-
-        ordered_columns = f"""
-        {status_assignement}
-        L.ligname, R.pose_id,  R.pose_rank,
-        R.docking_score, R.leff, COALESCE(Pc.comment, '') AS comment, R.cluster_size,
-        R.cluster_rmsd, R.num_hb, R.receptor, R.run_number,
-        R.delta, R.num_interactions, R.unbound_energy,
-        R.reference_RMSD, R.energies_inter, R.energies_vdw,
-        R.energies_electro, R.energies_flexlig, R.energies_flexlr,
-        R.energies_intra, R.energies_torsional, {rowid}"""
-
-        query.SELECT(ordered_columns)
-
-        query.JOIN("Ligands", "L", "ligand_id", "results").WHERE(
-            f"{rowid} {where_operator} ?", starting_rowid
-        ).ORDER_BY(rowid).LIMIT(length).DESC(reverse)
-
-        cursor = self.db_query(*query.build())
-        headers = [desc[0] for desc in cursor.description]
-        data = cursor.fetchall()
-        return {"headers": headers, "data": data}
 
     def fetch_lignames_and_poses_for_selection(
         self,
@@ -2719,7 +2793,6 @@ class StorageManager(ABC):
             and metadata["sql_type"] in NUMERIC_TYPES
             and name not in {"pose_id", "ligand_id"}
         }
-    #TODO check for duplicity
     def _apply_table_filter(self, query: QueryBuilder, table: str) -> QueryBuilder:
         """Restricts a query on Results to the poses of a bookmark, status table or candidates.
 
@@ -3333,7 +3406,7 @@ class StorageManager(ABC):
                 filtered_ligands[ligandict["ligand_id"]] = [ligandict["pose_id"]]
 
         return filtered_ligands
-    #TODO reevaluate later, it is used in two places, needs the ascending handling
+    
     def _get_best_pose_per_ligand_condition(
         self, bookmark_name: str, results_alias: str = "R"
     ) -> str:
@@ -3377,10 +3450,6 @@ class StorageManager(ABC):
             prefix = f"{alias}." if alias else ""
             return f"SELECT pose_id FROM {prefix}Accepted UNION SELECT pose_id FROM {prefix}Maybe"
         if self._is_statustable(scope_name):
-            # _is_statustable only returns True for the three known
-            # statuses.values(), so the interpolation below is injection-safe.
-            # Status tables are created capitalized, .capitalize() maps the
-            # lowercased status value back to the real table name.
             prefix = f"{alias}." if alias else ""
             return f"SELECT pose_id FROM {prefix}{scope_name.capitalize()}"
         db_name = None if alias in ("", "main") else alias

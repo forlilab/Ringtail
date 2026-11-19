@@ -57,10 +57,17 @@ class QueryBuilder:
         return self
 
     def SELECT_STATUS(self):
-        status_case = """CASE
-            WHEN EXISTS (SELECT 1 FROM Accepted s WHERE s.pose_id = R.pose_id) THEN 'accepted'
-            WHEN EXISTS (SELECT 1 FROM Rejected s WHERE s.pose_id = R.pose_id) THEN 'rejected'
-            WHEN EXISTS (SELECT 1 FROM Maybe s WHERE s.pose_id = R.pose_id) THEN 'maybe'
+        """
+        Adds the status of each pose to the selected columns.
+
+        Returns:
+            QueryBuilder: the same query, modified
+        """
+        results_alias = self.aliased("Results")
+        status_case = f"""CASE
+            WHEN EXISTS (SELECT 1 FROM Accepted s WHERE s.pose_id = {results_alias}.pose_id) THEN 'accepted'
+            WHEN EXISTS (SELECT 1 FROM Rejected s WHERE s.pose_id = {results_alias}.pose_id) THEN 'rejected'
+            WHEN EXISTS (SELECT 1 FROM Maybe s WHERE s.pose_id = {results_alias}.pose_id) THEN 'maybe'
             ELSE ''
         END AS status"""
         self.selects.append(status_case)

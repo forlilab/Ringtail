@@ -1727,7 +1727,7 @@ class RingtailCore:
         with self.storageman as sm:
             if starting_row_id is None:
                 starting_row_id = sm.get_starting_rowid(table)
-            return sm.fetch_viewable_data_columns_from(
+            return sm.fetch_pose_page(
                 table, length, starting_row_id, reverse
             )
 
@@ -2064,7 +2064,9 @@ class RingtailCore:
         include_interactions: bool = True,
         include_comment: bool = False,
     ) -> list[PoseMol]:
-        """Create one RDKit mol per pose_id
+        """
+        Create one RDKit mol per pose_id, including custom pose properties.
+        Custom properties replace generated properties with the same name.
 
         Flexible-residue mols are built only when flexres_data is provided (and
         the flexres coordinates are fetched only then); the pose comment is
@@ -2091,6 +2093,7 @@ class RingtailCore:
                 include_flexres=flexres_data is not None,
                 include_comment=include_comment,
             )
+            custom_by_pose = sm.fetch_custom_pose_properties(pose_ids)
             interactions_by_pose = (
                 sm.fetch_pose_interactions(pose_ids) if include_interactions else {}
             )
@@ -2112,6 +2115,7 @@ class RingtailCore:
                 self._interactions_str(interactions) if interactions else None
             )
             properties = self._pose_properties(pose, interactions_str, include_comment)
+            properties.update(custom_by_pose.get(pose.pose_id, {}))
             flexres_mols = self._build_pose_flexres(
                 flexres_mols_tmpl, flexres_info, pose.flexres_coordinates, pose.pose_id
             )
@@ -2129,7 +2133,10 @@ class RingtailCore:
         include_interactions: bool = True,
         include_comment: bool = False,
     ):
-        """One multi-conformer mol per ligand; all poses become conformers.
+        """
+        One multi-conformer mol per ligand, all poses become conformers.
+        Custom properties are collected in conformer order, with None for missing
+        values, and replace generated properties with the same name.
 
         Parses rdmol_binary once per ligand; subsequent poses reuse an in-memory
         topology copy instead of re-deserializing the binary. Yields one ligand
@@ -2156,6 +2163,7 @@ class RingtailCore:
                 include_flexres=flexres_data is not None,
                 include_comment=include_comment,
             )
+            custom_by_pose = sm.fetch_custom_pose_properties(all_pose_ids)
             interactions_by_pose = (
                 sm.fetch_pose_interactions(all_pose_ids) if include_interactions else {}
             )
@@ -2182,6 +2190,7 @@ class RingtailCore:
             if include_comment:
                 merged_props["Comment"] = []
             all_flexres = []
+            custom_per_conformer = []
 
             for pose in poses:
                 # copy the in-memory topology (no binary re-parse for poses 2..N)
@@ -2194,6 +2203,10 @@ class RingtailCore:
                     base_mol.SetProp("_Name", ligname)
                 else:
                     base_mol.AddConformer(mol.GetConformer(), assignId=True)
+
+                custom_per_conformer.append(
+                    custom_by_pose.get(pose.pose_id, {})
+                )
 
                 interactions = interactions_by_pose.get(pose.pose_id, [])
                 interactions_str = (
@@ -2216,6 +2229,18 @@ class RingtailCore:
                 )
 
             if base_mol is not None:
+                custom_names = dict.fromkeys(
+                    name
+                    for properties in custom_per_conformer
+                    for name in properties
+                )
+                merged_props.update({
+                    name: [
+                        properties.get(name)
+                        for properties in custom_per_conformer
+                    ]
+                    for name in custom_names
+                })
                 yield LigandMol(
                     ligname, base_mol, all_flexres, merged_props, flexres_residues
                 )
