@@ -96,7 +96,9 @@ class StorageManagerSQLite(StorageManager):
     ):
         """
         Creates temporary tables for results and interactions, which will be
-        used for staging incoming data.
+        used for staging incoming data, uncluding custom data if provided in the docking files.
+        Args:
+            custom_columns (dict[str, type] | None, optional): col: type if any custom columns. Defaults to None.
         """
 
         create_temp_results = """
@@ -181,6 +183,7 @@ class StorageManagerSQLite(StorageManager):
         Args:
             results_array (list): list of result rows
             interactions_array (list): list of interaction rows
+            custom_data (list | None, optional): custom data if any. Defaults to None.
         """
         temp_results_insert = """
             INSERT INTO Results_temp(
@@ -358,46 +361,6 @@ class StorageManagerSQLite(StorageManager):
         self.db_query("DELETE FROM Results_temp")
         if has_custom:
             self.db_query("DELETE FROM Custom_temp")
-
-    def _check_for_custom_data(self) -> bool:
-        """
-        Checks if there is custom data in the current active insert session
-        """
-        if self._is_table(
-            "Custom_temp", temp=True
-        ):  # does temp tables show up in table list?
-            # ensure custom table exists
-            self._create_custom_pose_table()
-            self._ensure_custom_columns()
-            return True
-        return False
-
-    def _ensure_custom_columns(self):
-        """
-        Adds columns if necessary to permanent custom table from temporary custom table
-        """
-        identifiers = {"ligname", "run_number", "pose_rank"}
-
-        permanent_columns = self.fetch_dynamic_table_column_names("custom_pose_data")
-        existing = {name.lower() for name in permanent_columns}
-
-        tmeporary_columns = self.fetch_dynamic_table_column_names("Custom_temp")
-
-        missing_columns = {
-            name: sql_type
-            for name, sql_type in tmeporary_columns.items()
-            if name.lower() not in existing | identifiers
-        }
-        if missing_columns:
-            self._update_custom_columns("custom_pose_data", missing_columns)
-
-    def _update_custom_columns(self, table: str, columns: dict[str, str]):
-        for col, type in columns.items():
-            quoted_col = self._safe_quoting(col)
-            self.db_query(f"""
-                ALTER TABLE {table} 
-                ADD COLUMN {quoted_col} {type};
-                """)
 
     def _delete_new_duplicate_results(self):
         """Checks if a pose is uniquely represented in the Results table,
@@ -791,7 +754,9 @@ class StorageManagerSQLite(StorageManager):
         )
 
     def _remove_screening_tables(self):
-        # TODO add pose comment table, status tables
+        '''
+        Deletes all data included in screening such as clusters, filtered data, status assignments, and comments
+        '''
         self._delete_table(POSE_CLUSTERS_SCHEMA.name)
         self._delete_table(CLUSTER_GROUPS_SCHEMA.name)
         self._delete_table(CLUSTERS_SCHEMA.name)
@@ -801,14 +766,6 @@ class StorageManagerSQLite(StorageManager):
         self._delete_table("Maybe")
         self._delete_table("Rejected")
         self._delete_table("Pose_comments")
-
-    def _create_screening_tables(self):
-        """
-        Create the filtering, status and GUI tables a screening session needs.
-        """
-        self._create_filtering_tables()
-        self._create_status_tables()
-        self.ensure_gui_tables()
 
     # endregion
 
@@ -1236,82 +1193,7 @@ class StorageManagerSQLite(StorageManager):
     # endregion
 
     # region data
-    def fetch_cluster_options(self, ligname: str) -> list[tuple]:
-        """Return available clustering groups as (cluster_id, cluster_window, name) tuples.
-
-        Args:
-            ligname (str): ligname for ligand to find similarity with
-
-        Returns:
-            list[tuple]: list of (cluster_id, cluster_window, name)
-        """
-        return self.db_query(
-            "SELECT cluster_id, cluster_window, name FROM Clusters;"
-        ).fetchall()
-
-    def fetch_clustered_similars(
-        self, ligname: str, cluster_id: int
-    ) -> tuple[list, str, str]:
-        """Given ligname and a chosen cluster_id, return similar ligands.
-
-        Args:
-            ligname (str): ligname for ligand to find similarity with
-            cluster_id (int): cluster to search within
-
-        Returns:
-            tuple[list, str, str]: (ligands, bookmark_name, cluster_name)
-
-        Raises:
-            DatabaseQueryError
-        """
-        # get group(s) that poses of that ligand belongs to, make set so unique groups only
-        groups = {
-            row[0]
-            for row in self.db_query(
-                """
-                SELECT cluster_group FROM pose_clusters
-                    WHERE cluster_id = ?
-                    AND pose_id IN (
-                        SELECT pose_id FROM Results
-                        WHERE ligand_id = (
-                            SELECT ligand_id FROM Ligands
-                                WHERE ligname = ?));
-                """,
-                (
-                    cluster_id,
-                    ligname,
-                ),
-            ).fetchall()
-        }
-        # group with those poses
-        input_params = [cluster_id, *groups]
-        placeholders = ",".join(["?"] * len(groups))
-        ligands = self.db_query(
-            f"""
-            SELECT L.ligname FROM Results AS R
-            JOIN Ligands AS L
-                ON R.ligand_id = L.ligand_id
-            WHERE R.pose_id IN (
-                SELECT pose_id FROM Pose_clusters
-                WHERE cluster_id = ?
-                AND cluster_group IN ({placeholders}))
-            GROUP BY L.ligname;
-            """,
-            input_params,
-        ).fetchall()
-
-        cluster_name = (
-            self.db_query(
-                "SELECT name FROM Clusters WHERE cluster_id = ?;", [cluster_id]
-            )
-            .fetchone()[0]
-            .replace(".", "p")
-        )
-
-        bookmark_name = f"similar_{ligname}_{cluster_name}"
-
-        return ligands, bookmark_name, cluster_name
-
+   
     @staticmethod
     def _serialize_pose_coordinates(coords):
         """SQLite has no array type, so pack the [x, y, z] floats into a float32 BLOB

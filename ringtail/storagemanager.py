@@ -268,6 +268,83 @@ class StorageManager(ABC):
 
         return count
 
+    def fetch_cluster_options(self, ligname: str) -> list[tuple]:
+        """
+        Gets clustering sessions that contain one or more poses of the ligand.
+
+        Args:
+            ligname (str): ligand name
+
+        Returns:
+            list[tuple]: list of (cluster_id, cluster_window, name)
+        """
+        membership = self.QueryBuilder()
+        membership.SELECT("PC.cluster_id").FROM("Pose_clusters", "PC")
+        membership.JOIN("Results", "R", "pose_id", "Pose_clusters")
+        membership.JOIN("Ligands", "L", "ligand_id", "Results")
+        membership.WHERE("L.ligname = ?", ligname)
+        membership_sql, params = membership.build()
+
+        query = self.QueryBuilder()
+        query.SELECT(
+            "C.cluster_id", "C.cluster_window", "C.name"
+        ).FROM("Clusters", "C")
+        query.WHERE(f"C.cluster_id IN ({membership_sql})", *params)
+        query.ORDER_BY("C.cluster_id")
+
+        return self.db_query(*query.build()).fetchall()
+
+    def fetch_clustered_similars(
+        self, ligname: str, cluster_id: int
+    ) -> tuple[list, str, str]:
+        """
+        Gets ligands sharing a cluster group with the given ligand.
+
+        Args:
+            ligname (str): ligand to find similar ligands for
+            cluster_id (int): clustering session to search within
+
+        Returns:
+            tuple[list, str, str]: (ligands, bookmark_name, cluster_name)
+
+        Raises:
+            OptionError: if the clustering session does not exist or the ligand
+                has no poses in it
+        """
+        query = self.QueryBuilder()
+        query.SELECT("name").FROM("Clusters").WHERE(
+            "cluster_id = ?", cluster_id
+        )
+        row = self.db_query(*query.build()).fetchone()
+        if row is None:
+            raise OptionError(f"Clustering session {cluster_id} does not exist.")
+        cluster_name = row[0].replace(".", "p")
+
+        query = self.QueryBuilder()
+        query.SELECT("DISTINCT PC.cluster_group").FROM("Pose_clusters", "PC")
+        query.JOIN("Results", "R", "pose_id", "Pose_clusters")
+        query.JOIN("Ligands", "L", "ligand_id", "Results")
+        query.WHERE("PC.cluster_id = ?", cluster_id)
+        query.WHERE("L.ligname = ?", ligname)
+        groups = [row[0] for row in self.db_query(*query.build()).fetchall()]
+
+        if not groups:
+            raise OptionError(
+                f"Ligand '{ligname}' has no poses in clustering session {cluster_id}."
+            )
+
+        placeholders = ",".join("?" for _ in groups)
+        query = self.QueryBuilder()
+        query.SELECT("DISTINCT L.ligname").FROM("Pose_clusters", "PC")
+        query.JOIN("Results", "R", "pose_id", "Pose_clusters")
+        query.JOIN("Ligands", "L", "ligand_id", "Results")
+        query.WHERE("PC.cluster_id = ?", cluster_id)
+        query.WHERE(f"PC.cluster_group IN ({placeholders})", *groups)
+        ligands = self.db_query(*query.build()).fetchall()
+
+        bookmark_name = f"similar_{ligname}_{cluster_name}"
+        return ligands, bookmark_name, cluster_name
+    
     def get_all_bookmark_names(
         self, db_name: str = None, db_path: str = None
     ) -> list[str]:
@@ -2396,33 +2473,6 @@ class StorageManager(ABC):
         ...
 
     @abstractmethod
-    def fetch_cluster_options(self, ligname: str) -> list[tuple]:
-        """Return available clustering groups for selection.
-
-        Args:
-            ligname (str): ligname for ligand to find similarity with
-
-        Returns:
-            list[tuple]: list of (cluster_id, cluster_window, name) tuples
-        """
-        ...
-
-    @abstractmethod
-    def fetch_clustered_similars(
-        self, ligname: str, cluster_id: int
-    ) -> tuple[list, str, str]:
-        """Given ligname and a chosen cluster_id, return similar ligands.
-
-        Args:
-            ligname (str): ligname for ligand to find similarity with
-            cluster_id (int): cluster to search within
-
-        Returns:
-            tuple[list, str, str]: (ligands, bookmark_name, cluster_name)
-        """
-        ...
-
-    @abstractmethod
     def pose_row_in_table(self, table: str, pose_id: int) -> int | None:
         """
         Find the row id of a pose in a given table
@@ -2620,6 +2670,14 @@ class StorageManager(ABC):
                 self.db_query(sql)
         self.conn.commit()
 
+    def _create_screening_tables(self):
+        """
+        Create the filtering, status and GUI tables a screening session needs.
+        """
+        self._create_filtering_tables()
+        self._create_status_tables()
+        self.ensure_gui_tables()
+
     def _insert_docking_data(
         self,
         results: list[list],
@@ -2728,6 +2786,46 @@ class StorageManager(ABC):
         self.conn.commit()
 
         return cluster_bookmark
+
+    def _check_for_custom_data(self) -> bool:
+        """
+        Checks if there is custom data in the current active insert session
+        """
+        if self._is_table(
+            "Custom_temp", temp=True
+        ):  # does temp tables show up in table list?
+            # ensure custom table exists
+            self._create_custom_pose_table()
+            self._ensure_custom_columns()
+            return True
+        return False
+
+    def _ensure_custom_columns(self):
+        """
+        Adds columns if necessary to permanent custom table from temporary custom table
+        """
+        identifiers = {"ligname", "run_number", "pose_rank"}
+
+        permanent_columns = self.fetch_dynamic_table_column_names("custom_pose_data")
+        existing = {name.lower() for name in permanent_columns}
+
+        tmeporary_columns = self.fetch_dynamic_table_column_names("Custom_temp")
+
+        missing_columns = {
+            name: sql_type
+            for name, sql_type in tmeporary_columns.items()
+            if name.lower() not in existing | identifiers
+        }
+        if missing_columns:
+            self._update_custom_columns("custom_pose_data", missing_columns)
+
+    def _update_custom_columns(self, table: str, columns: dict[str, str]):
+        for col, sql_type in columns.items():
+            quoted_col = self._safe_quoting(col)
+            self.db_query(f"""
+                ALTER TABLE {table} 
+                ADD COLUMN {quoted_col} {sql_type};
+                """)
 
     def _is_table(self, table: str, temp: bool = False) -> bool:
         """
@@ -4504,11 +4602,5 @@ class StorageManager(ABC):
             str: formatted sql
         """
         ...
-
-    @abstractmethod
-    def _remove_screening_tables(self): ...
-
-    @abstractmethod
-    def _create_screening_tables(self): ...
 
     # endregion
