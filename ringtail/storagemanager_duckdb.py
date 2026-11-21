@@ -9,7 +9,6 @@ import pandas as pd
 from .logutils import get_logger
 
 logger = get_logger(__name__)
-from typing import Union
 from .exceptions import (
     StorageError,
     DatabaseInsertionError,
@@ -391,122 +390,7 @@ class StorageManagerDuckDB(StorageManager):
         if has_custom:
             self.db_query("DELETE FROM Custom_temp")
 
-    def _delete_new_duplicate_results(self):
-        """Checks if a pose is uniquely represented in the Results table,
-        and deletes it from the staged incoming data if duplicated.
-        Based on the following columns:
-        ligname,
-        receptor,
-        pose_coordinates
-        flexible_res_coordinates
-        """
-        delete_int_sql = """
-        DELETE FROM Interactions_temp
-        WHERE EXISTS (
-            SELECT 1
-            FROM Results_temp AS RT
-            JOIN Results AS R
-                ON (RT.receptor = R.receptor
-                    OR (RT.receptor IS NULL AND R.receptor IS NULL))
-                AND RT.pose_coordinates = R.pose_coordinates
-                AND (RT.flexible_res_coordinates = R.flexible_res_coordinates
-                    OR (RT.flexible_res_coordinates IS NULL
-                        AND R.flexible_res_coordinates IS NULL))
-            JOIN Ligands AS L
-                ON RT.ligname = L.ligname
-                AND R.ligand_id = L.ligand_id
-            WHERE 
-                RT.ligname   = Interactions_temp.ligname
-                AND RT.pose_rank = Interactions_temp.pose_rank
-                AND RT.run_number = Interactions_temp.run_number
-        );
-        """
-        delete_res_sql = """
-        DELETE FROM Results_temp AS RT
-        WHERE EXISTS (
-            SELECT 1
-            FROM Results AS R
-            JOIN Ligands AS L
-                ON RT.ligname = L.ligname
-            WHERE 
-                (RT.receptor = R.receptor
-                    OR (RT.receptor IS NULL AND R.receptor IS NULL))
-                AND RT.pose_coordinates = R.pose_coordinates
-                AND (RT.flexible_res_coordinates = R.flexible_res_coordinates
-                    OR (RT.flexible_res_coordinates IS NULL
-                        AND R.flexible_res_coordinates IS NULL))
-                AND L.ligand_id    = R.ligand_id);
-        """
-        delete_custom_sql = """
-                DELETE FROM Custom_temp
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM Results_temp AS RT
-                    JOIN Results AS R
-                        ON (RT.receptor = R.receptor
-                            OR (RT.receptor IS NULL AND R.receptor IS NULL))
-                        AND RT.pose_coordinates = R.pose_coordinates
-                        AND (RT.flexible_res_coordinates = R.flexible_res_coordinates
-                            OR (RT.flexible_res_coordinates IS NULL
-                                AND R.flexible_res_coordinates IS NULL))
-                    JOIN Ligands AS L
-                        ON RT.ligname = L.ligname
-                        AND R.ligand_id = L.ligand_id
-                    WHERE 
-                        RT.ligname   = Custom_temp.ligname
-                        AND RT.pose_rank = Custom_temp.pose_rank
-                        AND RT.run_number = Custom_temp.run_number
-                );
-                """
-        self.db_query(delete_int_sql)
-        if self._is_table("Custom_temp"):
-            self.db_query(delete_custom_sql)
-        self.db_query(delete_res_sql)
 
-    def _delete_old_duplicate_results(self):
-        """Checks if a pose is uniquely represented in the Results table,
-        and deletes it from Results if duplicated.
-        Based on the following columns:
-        ligname,
-        receptor,
-        pose_coordinates
-        flexible_res_coordinates
-        """
-        duplicate_pose_sql = """
-        SELECT DISTINCT R.pose_id
-        FROM Results AS R
-        JOIN Results_temp AS RT
-            ON (RT.receptor = R.receptor
-                OR (RT.receptor IS NULL AND R.receptor IS NULL))
-            AND RT.pose_coordinates = R.pose_coordinates
-            AND (RT.flexible_res_coordinates = R.flexible_res_coordinates
-                OR (RT.flexible_res_coordinates IS NULL
-                    AND R.flexible_res_coordinates IS NULL))
-        JOIN Ligands AS L
-            ON RT.ligname = L.ligname
-            AND R.ligand_id = L.ligand_id;
-        """
-        delete_pose_ids_list = {
-            row[0] for row in self.db_query(duplicate_pose_sql).fetchall()
-        }
-        placeholders = ",".join("?" for _ in delete_pose_ids_list)
-        if delete_pose_ids_list:
-            # status and comment rows reference the pose (a foreign key in DuckDB),
-            # so they go first; bookmarks were already cleared before adding results
-            self._delete_pose_screening_data(delete_pose_ids_list)
-            self.db_query(
-                f"""DELETE FROM Interactions WHERE pose_id IN ({placeholders});""",
-                tuple(delete_pose_ids_list),
-            )
-            self.db_query(
-                f"""DELETE FROM Results WHERE pose_id IN ({placeholders});""",
-                tuple(delete_pose_ids_list),
-            )
-            if delete_pose_ids_list and self._is_table("custom_pose_data"):
-                self.db_query(
-                    f"""DELETE FROM custom_pose_data WHERE pose_id IN ({placeholders});""",
-                    tuple(delete_pose_ids_list),
-                )
 
     def _insert_interactions(self, interactions: list[tuple]):
         """
@@ -584,50 +468,8 @@ class StorageManagerDuckDB(StorageManager):
             WHERE Results.pose_id = u.pose_id;
         """)
 
-    def _insert_completed_poses(self, pose_ids: list[tuple], tracking_table: str):
-        """
-        Inserts processed poses into process tracking table
 
-        Args:
-            pose_ids (list[int]): _description_
-        """
-        query = f"""
-        INSERT INTO {tracking_table} (
-        pose_id, hb_cutoff, vdw_cutoff) VALUES (?, ?, ?);
-        """
-        self.db_update(query, pose_ids, commit=False)
 
-    def _insert_receptors(self, receptor_array: list):
-        """Takes array of receptor rows, inserts into Receptors table
-
-        Args:
-            receptor_array (list): List of lists
-                containing formatted receptor rows
-        """
-        sql_insert = """INSERT INTO Receptors (
-        recname,
-        box_dim,
-        box_center,
-        grid_spacing,
-        flexible_residues,
-        flexres_atomnames
-        ) VALUES
-        (?,?,?,?,?,?)"""
-
-        self.db_query(sql_insert, receptor_array, commit=True)
-
-    def _insert_db_properties(self, docking_mode: str, number_of_poses: str):
-        """Insert db properties into database properties table
-
-        Args:
-            docking_mode (str): docking mode for the current dataset being written
-            number_of_poses (str): number of poses written to database in current session, either "all" or specified max_poses
-        """
-        sql_insert = """INSERT INTO db_properties (
-        docking_mode,
-        number_of_poses
-        ) VALUES (?,?);"""
-        self.db_query(sql_insert, [docking_mode, number_of_poses], commit=True)
 
     def _insert_interaction_index_rows(self, interactions: list[dict]):
         """
@@ -649,125 +491,10 @@ class StorageManagerDuckDB(StorageManager):
                     """
         self.db_query(alt_sql_insert)
 
-    def create_transaction_tracking_table(self, table_name: str = "tracking_table"):
-        """
-        Creates a table to track pose ids to which are part of a multiple transaction
-        database operation, which may occur over multiple commits and database connections.
 
-        Args:
-            table_name (str, optional): Name of the table. Defaults to "tracking_table".
-        """
-        # check if interaction calcs have been started (and not completed)
-        exists = bool(
-            self.db_query(
-                f"""SELECT table_name FROM information_schema.tables WHERE table_name='{table_name}';"""
-            ).fetchone()
-        )
-        if exists:
-            logger.info(
-                "Interaction calculations have been started in a previous database connection, and not yet finished."
-            )
 
-        table_sql = f"""CREATE TABLE IF NOT EXISTS {table_name} (
-        pose_id INTEGER,
-        hb_cutoff DOUBLE,
-        vdw_cutoff DOUBLE,
-        FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
-        );"""
-        self.db_query(table_sql, commit=True)
 
-    def _cluster_exists(
-        self, cluster_name: str, cluster_window: str
-    ) -> Union[int, None]:
-        """
-        Checks if a cluster already exists, based on what window was clustered over,
-        and the standardized cluster name. Method will not work if cluster name starts
-        to be non-standardized
 
-        Args:
-            cluster_name (str):
-            cluster_window (str):
-
-        Returns:
-            int: number of clusters in that cluster if any, else None
-        """
-        return self.db_query(
-            "SELECT cluster_id FROM Clusters WHERE name=? and cluster_window=?",
-            (
-                cluster_name,
-                cluster_window,
-            ),
-        ).fetchone()
-
-    def _insert_new_cluster_info(
-        self, name: str, description: str, cluster_window: str, length: int
-    ) -> int:
-        """
-        Inserts the basic info about a clustering exercise, but not the clustered data itself
-
-        Args:
-            name (str): name of cluster (standardized)
-            description (str): placeholder for if/when more info is needed about clusters
-            cluster_window (str): what was clustered over, bookmark or all results
-            length (int): number of clusters
-
-        Returns:
-            int: cluster id of the new inserted cluster
-        """
-        return self.db_query(
-            """
-            INSERT INTO Clusters (name, description, cluster_window, num_clusters)
-                       VALUES (?,?,?,?) RETURNING cluster_id;""",
-            (
-                name,
-                description,
-                cluster_window,
-                length,
-            ),
-        ).fetchone()[0]
-
-    def _insert_clusters(self, cluster_groups: list, pose_rows: list):
-        """
-        Inserts all cluster data, including each grouping and its representative
-        pose, and all poses involved and which clusters they belong to
-
-        Args:
-            cluster_groups (list): each cluster from the clustering exercise
-            pose_rows (list): pose and cluster id and group id
-        """
-        self.db_update(
-            """INSERT INTO Cluster_groups VALUES (?,?,?);""",
-            cluster_groups,
-            commit=False,
-        )
-
-        self.db_update(
-            """
-                INSERT INTO Pose_clusters VALUES (?,?,?);
-                """,
-            pose_rows,
-            commit=False,
-        )
-
-    def _delete_cluster(self, cluster_id):
-        # delete all poses and cluster groups associated with cluster id
-        self.conn.execute(
-            """
-            DELETE FROM Pose_clusters WHERE cluster_id = ?;""",
-            (cluster_id,),
-        )
-        # delete representative pose id for each cluster group
-        self.conn.execute(
-            """
-            DELETE FROM Cluster_groups WHERE cluster_id = ?;""",
-            (cluster_id,),
-        )
-        # delete the cluster information
-        self.conn.execute(
-            """
-            DELETE FROM Clusters WHERE cluster_id = ?;""",
-            (cluster_id,),
-        )
 
     def _delete_nontables(self):
         """
@@ -810,41 +537,6 @@ class StorageManagerDuckDB(StorageManager):
         # explicit IDs but sequences were initialized starting at 1
         self._sync_auto_increment_state()
 
-    def _get_merge_id(self, mergingdb_path: str) -> int:
-        """
-        Gets the merge id for the databse in given path
-
-        Args:
-            mergingdb_path (str): path to merging (secondary) database
-
-        Returns:
-            int: merge id returend by database
-        """
-        return self.conn.execute(
-            """INSERT INTO merged_tables(dbfile) VALUES (?) RETURNING merge_id""",
-            [mergingdb_path],
-        ).fetchone()[0]
-
-    def _merging_receptors_compatible(self) -> bool:
-        """
-        Checks if the receptor names in the two databases are a mathc
-
-        Returns:
-            bool: True if receptor allows merging
-        """
-        receptorcheck_sql = """
-        SELECT CASE 
-            WHEN Receptors.recname = merging_receptors.recname THEN 'True'
-            ELSE 'False'
-        END AS comparison_result 
-        FROM Receptors 
-        JOIN merging.Receptors AS merging_receptors 
-            ON Receptors.receptor_id = merging_receptors.receptor_id;"""
-        receptor_comp = self.db_query(receptorcheck_sql).fetchone()
-        if receptor_comp:
-            if receptor_comp[0] == "True":
-                return True
-        return False
 
     def _create_merge_tables(self):
         """
@@ -876,305 +568,8 @@ class StorageManagerDuckDB(StorageManager):
         except Exception as e:
             raise MergeError(e) from e
 
-    def _merge_db_properties_table(self, merge_id: int):
-        """
-        Merges database properties table, but importantly will not check for property compatibility
 
-        Args:
-            merge_id (int): merge session id
 
-        Raises:
-            MergeError
-        """
-        try:
-            convert_dbprop_sql = """INSERT INTO PK_conversions (
-                merge_id,
-                table_name,
-                original_pk,
-                merged_pk) SELECT 
-                ?,
-                'db_properties', 
-                DB_write_session,
-                DB_write_session + (SELECT MAX(DB_write_session) FROM db_properties) 
-                FROM merging.db_properties;"""
-            self.conn.execute(
-                convert_dbprop_sql,
-                [merge_id],
-            )
-            insert_dbprops_sql = """INSERT INTO db_properties (
-                DB_write_session,
-                docking_mode,
-                number_of_poses)
-                SELECT 
-                    (SELECT merged_pk FROM PK_conversions WHERE original_pk = DB_write_session and merge_id = ? and table_name = 'db_properties'),
-                    docking_mode,
-                    number_of_poses
-                FROM merging.db_properties;"""
-            self.conn.execute(insert_dbprops_sql, [merge_id])
-
-        except Exception as e:
-            raise MergeError(
-                f"Error encountered while merging db_properties table: {str(e)}"
-            ) from e
-
-    def _merge_ligands_and_results_tables(self, merge_id: int):
-        """
-        Merges first the Ligands table, then the Results table, maintaining ligand_id and pose_id as primary keys,
-        where their relationship to the original PK is kept track of in the mering datble. Duplicate ligands will maintain
-        the ligand_id from the main database.
-
-        Args:
-            merge_id (int): merge session id
-
-        Raises:
-            MergeError
-        """
-        # convert ligand_ids and log
-        convert_ligand_ids_sql = """INSERT INTO PK_conversions (
-        merge_id,
-        table_name,
-        original_pk,
-        merged_pk) SELECT
-        ?,
-        'Ligands',
-        ligand_id,
-            CASE
-                WHEN EXISTS (
-                    SELECT 1
-                    FROM Ligands
-                    WHERE
-                        merging.Ligands.ligname = Ligands.ligname
-                    ) 
-                THEN (
-                    SELECT main.Ligands.ligand_id
-                    FROM main.Ligands
-                    WHERE
-                        merging.Ligands.ligname = Ligands.ligname
-                    )
-                ELSE merging.Ligands.ligand_id + (SELECT MAX(ligand_id) FROM Ligands)
-            END AS new_ligand_id
-        FROM merging.Ligands;"""
-
-        # then inserting only those that aren't already in the table
-        insert_new_ligands = """INSERT INTO Ligands (
-        ligand_id,
-        ligname,
-        ligand_smile,
-        rdmol)
-        SELECT 
-            (SELECT merged_pk FROM PK_conversions WHERE original_pk = ligand_id and merge_id = ? AND table_name = 'Ligands') new_id,
-            ligname,
-            ligand_smile,
-            rdmol
-        FROM merging.Ligands WHERE new_id > (SELECT MAX(ligand_id) FROM Ligands);
-        """
-
-        # convert pose_id
-        convert_poseid_sql = """INSERT INTO PK_conversions (
-        merge_id,
-        table_name,
-        original_pk,
-        merged_pk) SELECT 
-        ?,
-        'Results', 
-        pose_id,
-        pose_id + (SELECT MAX(pose_id) FROM Results) 
-        FROM merging.Results;"""
-
-        # insert results with updated pose_ids
-        insert_Results = """INSERT INTO Results (
-            pose_id,
-            ligand_id,
-            receptor,
-            pose_rank,
-            run_number,
-            docking_score,
-            leff,
-            delta,
-            cluster_rmsd,
-            cluster_size,
-            reference_rmsd,
-            energies_inter,
-            energies_vdw,
-            energies_electro,
-            energies_flexlig,
-            energies_flexlr,
-            energies_intra,
-            energies_torsional,
-            unbound_energy,
-            num_interactions,
-            num_hb,
-            pose_coordinates,
-            flexible_res_coordinates) 
-        SELECT 
-            pose.merged_pk as pose_id,
-            ligand.merged_pk as ligand_id,
-            mr.receptor,
-            mr.pose_rank,
-            mr.run_number,
-            mr.docking_score,
-            mr.leff,
-            mr.delta,
-            mr.cluster_rmsd,
-            mr.cluster_size,
-            mr.reference_rmsd,
-            mr.energies_inter,
-            mr.energies_vdw,
-            mr.energies_electro,
-            mr.energies_flexlig,
-            mr.energies_flexlr,
-            mr.energies_intra,
-            mr.energies_torsional,
-            mr.unbound_energy,
-            mr.num_interactions,
-            mr.num_hb,
-            mr.pose_coordinates,
-            mr.flexible_res_coordinates
-        FROM merging.Results mr
-        LEFT JOIN (
-            SELECT original_pk, merged_pk 
-            FROM PK_conversions 
-            WHERE table_name = 'Results' 
-            AND merge_id = ?
-            ) pose 
-        ON pose.original_pk = mr.pose_id
-        LEFT JOIN (
-            SELECT original_pk, merged_pk 
-            FROM PK_conversions 
-            WHERE table_name = 'Ligands' 
-            AND merge_id = ?
-            ) ligand
-        ON (mr.ligand_id = ligand.original_pk);"""
-
-        try:
-            cur = self.conn.cursor()
-            # insert and get new ligand ids
-            cur.execute(
-                convert_ligand_ids_sql,
-                (merge_id,),
-            )
-            cur.execute(insert_new_ligands, (merge_id,))
-            # get new pose_ids
-            cur.execute(
-                convert_poseid_sql,
-                (merge_id,),
-            )
-            # insert results with new pose_ids and ligand_ids
-            cur.execute(
-                insert_Results,
-                (
-                    merge_id,
-                    merge_id,
-                ),
-            )
-
-        except Exception as e:
-            raise MergeError(
-                f"Error encountered while merging Ligands and Results tables: \n{str(e)}"
-            ) from e
-
-    def _merge_interaction_tables(self, merge_id: int):
-        """
-        Merges the interaction tables. Interaction definitions are unique and independent of the Results table, so we only
-        insert those that are new with updated PK, and assign existing interaction_ids to those already described in primary db
-
-        Args:
-            merge_id (int): merge session id
-
-        Raises:
-            MergeError
-        """
-        convert_ii_sql = """INSERT INTO PK_conversions (
-        merge_id,
-        table_name,
-        original_pk,
-        merged_pk) SELECT 
-        ?,
-        'Interaction_indices', 
-        interaction_id,
-            CASE 
-                WHEN EXISTS (
-                    SELECT 1
-                    FROM Interaction_indices
-                    WHERE 
-                        merging.Interaction_indices.interaction_type = Interaction_indices.interaction_type
-                        AND merging.Interaction_indices.rec_chain = Interaction_indices.rec_chain
-                        AND merging.Interaction_indices.rec_resname = Interaction_indices.rec_resname
-                        AND merging.Interaction_indices.rec_resid = Interaction_indices.rec_resid
-                        AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
-                        AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
-                    ) 
-                THEN (
-                    SELECT main.Interaction_indices.interaction_id
-                    FROM main.Interaction_indices
-                    WHERE 
-                        merging.Interaction_indices.interaction_type = Interaction_indices.interaction_type
-                        AND merging.Interaction_indices.rec_chain = Interaction_indices.rec_chain
-                        AND merging.Interaction_indices.rec_resname = Interaction_indices.rec_resname
-                        AND merging.Interaction_indices.rec_resid = Interaction_indices.rec_resid
-                        AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
-                        AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
-                    )
-                ELSE merging.Interaction_indices.interaction_id + (SELECT COALESCE(MAX(interaction_id), 0) FROM Interaction_indices)
-            END AS new_interaction_id
-        FROM merging.Interaction_indices;"""
-
-        # then inserting only those that aren't already in the table
-        insert_interaction_indices = """INSERT INTO Interaction_indices (
-        interaction_id,
-        interaction_type,
-        rec_chain,
-        rec_resname,
-        rec_resid,
-        rec_atom,
-        rec_atomid)
-        SELECT 
-            (SELECT merged_pk FROM PK_conversions WHERE original_pk = interaction_id and merge_id = ? AND table_name = 'Interaction_indices') new_id,
-            interaction_type,
-            rec_chain,
-            rec_resname,
-            rec_resid,
-            rec_atom,
-            rec_atomid
-        FROM merging.Interaction_indices WHERE new_id > (SELECT COALESCE(MAX(interaction_id), 0) FROM Interaction_indices);
-        """
-
-        # Adding new data to Interactions table with (updated) pose_id and interaction_id
-        insert_interactions = """
-        INSERT INTO Interactions (
-        pose_id,
-        interaction_id
-        )    SELECT P.merged_pk as pose_id, II.merged_pk as interaction_id
-                FROM merging.Interactions I
-                LEFT JOIN (SELECT original_pk, merged_pk
-                FROM PK_conversions
-                WHERE table_name = 'Results' 
-                AND merge_id = ?) P ON (I.pose_id = P.original_pk)
-            LEFT JOIN (SELECT original_pk, merged_pk
-                FROM PK_conversions
-                WHERE table_name = 'Interaction_indices' 
-                AND merge_id = ?) II ON (I.interaction_id = II.original_pk);"""
-
-        try:
-            cur = self.conn.cursor()
-            cur.execute(
-                convert_ii_sql,
-                (merge_id,),
-            )
-            cur.execute(insert_interaction_indices, (merge_id,))
-
-            cur.execute(
-                insert_interactions,
-                (
-                    merge_id,
-                    merge_id,
-                ),
-            )
-
-        except Exception as e:
-            raise MergeError(
-                f"Error during update and insertion of interactions: {e}"
-            ) from e
 
     def _sync_auto_increment_state(self):
         """Advance sequences that lag behind the MAX id in their table."""
@@ -1226,26 +621,6 @@ class StorageManagerDuckDB(StorageManager):
             f"SELECT CAST(column0 AS VARCHAR) AS ligandname FROM read_csv('{csv_path}', header=false)"
         )
 
-    def _crossref_bookmark_builder(self, ligand_list: list[str]) -> str:
-        """
-        creates formatted sql selecting all poses of the given ligands, for the crossreferencing bookmark
-
-        Args:
-            ligand_list (list[str]): list of ligand names to be considered
-
-        Returns:
-            str: formatted sql
-        """
-        ligand_sql_string = ", ".join(
-            "'" + l.replace("'", "''") + "'" for l in ligand_list
-        )
-        return f"""
-            SELECT pose_id FROM Results
-            WHERE ligand_id IN (
-                SELECT ligand_id FROM Ligands
-                WHERE ligname IN ({ligand_sql_string})
-                )
-                """
 
     # endregion
 
@@ -1253,11 +628,9 @@ class StorageManagerDuckDB(StorageManager):
 
     def _begin_transaction(self):
         """
-        Begin a transaction
+        Currently not implemented in duckdb
         """
         pass
-        # begin transaction can block with big chunks during results insert
-        # self.conn.execute("BEGIN TRANSACTION;")
 
     def _rollback(self):
         """
@@ -1315,6 +688,7 @@ class StorageManagerDuckDB(StorageManager):
             "pre-release v3-alpha files do. Converting requires recreating the "
             "database; ask your package administrator for rt_upgrade_from_v3alpha.py."
         )
+    
     def update_database_version(self, new_version, backup=False):
         '''
         duckdb currently up to date with code version major 3
@@ -1376,48 +750,6 @@ class StorageManagerDuckDB(StorageManager):
         """
         if attached_db_alias is not None:
             self.detach_db(attached_db_alias)
-
-    def table_length(self, table: str, distinct_column: str = None) -> int:
-        """
-        Get length of table or bookmark
-
-        Args:
-            table (str): name of table or bookmark
-            distinct_column (str, optional): count distinct values of this Results
-                column instead of counting rows, e.g. "ligand_id" for how many
-                ligands the poses belong to. Counted through Results, so it works
-                for bookmarks, the status tables and Candidates alike — all of
-                which store nothing but pose_id. Defaults to None.
-
-        Returns:
-            int: number of poses in table/bookmark, or of distinct values
-        """
-        if self._is_table(table):
-            pose_ids = f"SELECT pose_id FROM {table}"
-            rows = f"SELECT COUNT(*) FROM {table};"
-            params = ()
-        elif self.is_bookmark(table) or self._is_candidates_table(table):
-            pose_ids = self._get_scope_poses_query(table)
-            rows = f"SELECT COUNT(*) FROM ({pose_ids});"
-            params = ()
-        else:
-            logger.error(f"Table -{table}- does not exist in the database.")
-            return None
-
-        if distinct_column is None:
-            query = rows
-        else:
-            # Whitelisted against the schema: the name goes into the SQL text
-            if distinct_column not in RESULTS_SCHEMA.columns:
-                raise StorageError(
-                    f"{distinct_column} is not a Results column, cannot count it."
-                )
-            query = (
-                f"SELECT COUNT(DISTINCT R.{distinct_column}) FROM Results R "
-                f"WHERE R.pose_id IN ({pose_ids});"
-            )
-
-        return self.db_query(query, params).fetchone()[0]
 
     def _attach_db(self, new_db: str, new_db_alias: str = "attached_db") -> str:
         """Attaches new database file to current database
@@ -1496,78 +828,8 @@ class StorageManagerDuckDB(StorageManager):
 
     # region GUI specific API
 
-    def pose_row_in_table(self, table: str, pose_id: int) -> Union[None, int]:
-        """
-        Find the row id of a pose in a given table, for a bookmark its rowid in Filtered_poses
 
-        Args:
-            table (str)
-            pose_id (int)
 
-        Returns:
-            Union[None, int]: rowid if any
-        """
-        query = self.QueryBuilder()
-        query.SELECT("rowid")
-        if self.is_bookmark(table):
-            query.FROM("Filtered_poses").WHERE(
-                "filter_id = (SELECT filter_id from Filters WHERE name = ?)", table
-            )
-        elif self._is_candidates_table(table):
-            query.FROM("Results").WHERE(f"pose_id IN {CANDIDATES_SUBQ}")
-        else:
-            query.FROM(table)
-        query.WHERE("pose_id = ?", pose_id)
-        row = self.db_query(*query.build()).fetchone()
-        if row:
-            return row[0]
-        else:
-            return None
 
-    def get_starting_rowid(self, table: str) -> int:
-        """
-        Lowest row id of a table, for a bookmark the lowest rowid of its rows in Filtered_poses
-
-        Args:
-            table (str): table or bookmark name
-
-        Returns:
-            int: first row id belonging to that selection
-        """
-        query = self.QueryBuilder()
-        query.SELECT("MIN(rowid)")
-
-        if self._is_table(table):
-            query.FROM(table)
-        elif self.is_bookmark(table):
-            query.FROM("Filtered_poses").WHERE(
-                "filter_id = (SELECT filter_id FROM Filters WHERE name = ?)", table
-            )
-        elif self._is_candidates_table(table):
-            query.FROM("Results").WHERE(f"pose_id IN {CANDIDATES_SUBQ}")
-        else:
-            logger.error(f"Table -{table}- does not exist in the database.")
-            return None
-        return self.db_query(*query.build()).fetchone()[0]
-
-    def set_pose_comment(self, pose_id: int, comment: str) -> None:
-        self.ensure_gui_tables()
-        if comment:
-            self.db_query(
-                "INSERT INTO Pose_comments (pose_id, comment) VALUES (?, ?)"
-                " ON CONFLICT(pose_id) DO UPDATE SET comment = excluded.comment",
-                (pose_id, comment),
-            )
-        else:
-            self.db_query("DELETE FROM Pose_comments WHERE pose_id = ?", (pose_id,))
-        self.conn.commit()
-
-    def get_pose_comment(self, pose_id: int) -> "str | None":
-        if not self._is_table("Pose_comments"):
-            return None
-        row = self.db_query(
-            "SELECT comment FROM Pose_comments WHERE pose_id = ?", (pose_id,)
-        ).fetchone()
-        return row[0] if row else None
 
     # endregion

@@ -139,6 +139,131 @@ class StorageManager(ABC):
 
     # region public api
 
+    def get_pose_comment(self, pose_id: int) -> str | None:
+        """
+        Gets the comment for a pose.
+
+        Args:
+            pose_id (int): pose to get the comment for
+
+        Returns:
+            str | None: comment, or None if no comment or comment table exists
+        """
+        if not self._is_table("Pose_comments"):
+            return None
+
+        query = self.QueryBuilder()
+        query.SELECT("comment").FROM("Pose_comments")
+        query.WHERE("pose_id = ?", pose_id)
+        row = self.db_query(*query.build()).fetchone()
+        return row[0] if row else None
+
+    def set_pose_comment(self, pose_id: int, comment: str) -> None:
+        """
+        Sets the comment for a pose, or removes it if empty.
+
+        Args:
+            pose_id (int): pose to update
+            comment (str): comment to store
+        """
+        self.ensure_gui_tables()
+        query = self.QueryBuilder()
+
+        if comment:
+            query.INSERT_INTO("Pose_comments", "pose_id", "comment")
+            sql = (
+                query.build()[0]
+                + " ON CONFLICT(pose_id) DO UPDATE SET comment = excluded.comment"
+            )
+            self.db_query(sql, (pose_id, comment))
+        else:
+            query.DELETE_FROM("Pose_comments").WHERE("pose_id = ?", pose_id)
+            self.db_query(*query.build())
+
+        self.conn.commit()
+
+    def create_transaction_tracking_table(self, table_name: str = "tracking_table"):
+        """
+        Creates a table to track pose ids to which are part of a multiple transaction
+        database operation, which may occur over multiple commits and database connections.
+
+        Args:
+            table_name (str, optional): Name of the table. Defaults to "tracking_table".
+        """
+        if self._is_table(table_name):
+            logger.info(
+                "Interaction calculations have been started in a previous "
+                "database connection, and not yet finished."
+            )
+
+        table_sql = f"""
+            CREATE TABLE IF NOT EXISTS {self._safe_quoting(table_name)} (
+                pose_id INTEGER,
+                hb_cutoff DOUBLE,
+                vdw_cutoff DOUBLE,
+                FOREIGN KEY (pose_id) REFERENCES Results(pose_id)
+            );
+        """
+        self.db_query(table_sql, commit=True)
+
+    def pose_row_in_table(self, table: str, pose_id: int) -> int | None:
+        """
+        Gets the paging key of a pose in a table or selection.
+
+        Args:
+            table (str): table, bookmark, or Candidates
+            pose_id (int): pose to locate
+
+        Returns:
+            int | None: paging key, or None if the pose is not in the selection
+        """
+        query = self.QueryBuilder()
+        if self.is_bookmark(table):
+            key = "pose_id" if self.dialect == "sqlite" else "rowid"
+            query.SELECT(key).FROM("Filtered_poses").WHERE(
+                "filter_id = (SELECT filter_id FROM Filters WHERE name = ?)",
+                table,
+            )
+        elif self._is_candidates_table(table):
+            query.SELECT("rowid").FROM("Results")
+            self._apply_table_filter(query, table)
+        else:
+            query.SELECT("rowid").FROM(self._safe_quoting(table))
+
+        query.WHERE("pose_id = ?", pose_id)
+        row = self.db_query(*query.build()).fetchone()
+        return row[0] if row else None
+
+    def get_starting_rowid(self, table: str) -> int | None:
+        """
+        Gets the lowest paging key in a table or selection.
+
+        Args:
+            table (str): table, bookmark, or Candidates
+
+        Returns:
+            int | None: lowest paging key, or None if empty or not found
+        """
+        query = self.QueryBuilder()
+
+        if self._is_table(table):
+            query.SELECT("MIN(rowid)").FROM(self._safe_quoting(table))
+        elif self.is_bookmark(table):
+            key = "pose_id" if self.dialect == "sqlite" else "rowid"
+            query.SELECT(f"MIN({key})").FROM("Filtered_poses").WHERE(
+                "filter_id = (SELECT filter_id FROM Filters WHERE name = ?)",
+                table,
+            )
+        elif self._is_candidates_table(table):
+            query.SELECT("MIN(rowid)").FROM("Results")
+            self._apply_table_filter(query, table)
+        else:
+            logger.error(f"Table -{table}- does not exist in the database.")
+            return None
+
+        return self.db_query(*query.build()).fetchone()[0]
+
+
     def insert_data(self, docking_data: dict, duplicate_handling: str = None):
         """Inserts data from all arrays returned from results manager. Can have one or more ligands in docking_data
 
@@ -344,6 +469,62 @@ class StorageManager(ABC):
 
         bookmark_name = f"similar_{ligname}_{cluster_name}"
         return ligands, bookmark_name, cluster_name
+
+    def table_length(self, table: str, distinct_column: str = None) -> int:
+        """
+        Gets the number of rows or distinct values in a table or pose selection.
+
+        Args:
+            table (str): table name, bookmark, status table, or Candidates
+            distinct_column (str, optional): column whose distinct values to count.
+                Pose selections support queryable columns, including custom properties.
+
+        Returns:
+            int: number of rows, or distinct non-null values
+
+        Raises:
+            OptionError: if the selection or column is not valid
+        """
+        physical_table = (
+            self._is_table(table)
+            and table.lower() != "results"
+            and not self._is_statustable(table)
+            and not self._is_candidates_table(table)
+        )
+
+        field = None
+        if physical_table:
+            query = self.QueryBuilder().FROM(self._safe_quoting(table))
+            if distinct_column is not None:
+                columns = {
+                    name.lower(): name
+                    for name in self.fetch_dynamic_table_column_names(table)
+                }
+                column = columns.get(distinct_column.lower())
+                if column is None:
+                    raise OptionError(
+                        f"Column '{distinct_column}' not found in table '{table}'."
+                    )
+                field = self._safe_quoting(column)
+        else:
+            sources = {}
+            if distinct_column is not None:
+                column_to_table = self.get_queryable_columns()
+                source = column_to_table.get(distinct_column.lower())
+                if source is None:
+                    raise OptionError(
+                        f"Column '{distinct_column}' not found in any queryable table."
+                    )
+                sources[distinct_column] = source
+
+            query, fields = self._prepare_column_query(sources, table)
+            if distinct_column is not None:
+                field = fields[distinct_column]
+
+        query.SELECT(
+            "COUNT(*)" if field is None else f"COUNT(DISTINCT {field})"
+        )
+        return self.db_query(*query.build()).fetchone()[0]
     
     def get_all_bookmark_names(
         self, db_name: str = None, db_path: str = None
@@ -386,11 +567,12 @@ class StorageManager(ABC):
         Returns:
             list: of dependent bookmark names
         """
-        cur = self.conn.execute(
-            "SELECT name FROM Filters WHERE LOWER(filter_window) = ?",
-            (bookmark_name.lower(),),
-        )
-        return [row[0].lower() for row in cur.fetchall()]
+        query = self.QueryBuilder()
+        query.SELECT("name").FROM("Filters")
+        query.WHERE("LOWER(filter_window) = ?", bookmark_name.lower())
+
+        rows = self.db_query(*query.build()).fetchall()
+        return [row[0].lower() for row in rows]
 
     def fetch_bookmarks_with_interaction_filters(self) -> list[str]:
         """
@@ -434,9 +616,9 @@ class StorageManager(ABC):
                 return any(uses_interactions(item) for item in node)
             return False
 
-        rows = self.conn.execute(
-            "SELECT name, filters, filter_window FROM Filters"
-        ).fetchall()
+        query = self.QueryBuilder()
+        query.SELECT("name", "filters", "filter_window").FROM("Filters")
+        rows = self.db_query(*query.build()).fetchall()
         affected = set()
         for name, filters, _ in rows:
             if not filters:
@@ -2050,18 +2232,20 @@ class StorageManager(ABC):
         Returns:
             pd.DataFrame: interactions presented as a dataframe
         """
-        query = f"""
-        SELECT DISTINCT
-            II.interaction_type,
-            II.rec_chain,
-            II.rec_resname,
-            II.rec_resid,
-            II.rec_atom
-        FROM Interaction_indices AS II
-        JOIN Interactions AS I ON I.interaction_id=II.interaction_id
-        WHERE I.pose_id IN ({self._get_scope_poses_query(bookmark_name)});"""
+        query = self.QueryBuilder()
+        query.SELECT(
+            "DISTINCT II.interaction_type",
+            "II.rec_chain",
+            "II.rec_resname",
+            "II.rec_resid",
+            "II.rec_atom",
+        ).FROM("Interaction_indices", "II")
+        query.JOIN("Interactions", "I", "interaction_id", "Interaction_indices")
+        query.WHERE(
+            f"I.pose_id IN ({self._get_scope_poses_query(bookmark_name)})"
+        )
         # iterable of tuples
-        interactions = self.db_query(query).fetchall()
+        interactions = self.db_query(*query.build()).fetchall()
         interactions_df = pd.DataFrame(
             interactions,
             columns=[
@@ -2397,17 +2581,6 @@ class StorageManager(ABC):
         ...
 
     @abstractmethod
-    def create_transaction_tracking_table(self, table_name: str = "tracking_table"):
-        """
-        Creates a table to track pose ids to which are part of a multiple transaction
-        database operation, which may occur over multiple commits and database connections.
-
-        Args:
-            table_name (str, optional): Name of the table. Defaults to "tracking_table".
-        """
-        ...
-
-    @abstractmethod
     def update_database_version(self, new_version: str, backup=False):
         """Only SQLite databases from Ringtail 1.x/2.x can be upgraded, others are only checked to be current.
 
@@ -2457,36 +2630,6 @@ class StorageManager(ABC):
         ...
 
     @abstractmethod
-    def table_length(self, table: str, distinct_column: str = None) -> int:
-        """
-        Get length of table or bookmark
-
-        Args:
-            table (str): name of table or bookmark
-            distinct_column (str, optional): count distinct values of this Results
-                column instead of counting rows, e.g. "ligand_id" for how many
-                ligands the poses belong to. Defaults to None.
-
-        Returns:
-            int: number of poses in table/bookmark, or of distinct values
-        """
-        ...
-
-    @abstractmethod
-    def pose_row_in_table(self, table: str, pose_id: int) -> int | None:
-        """
-        Find the row id of a pose in a given table
-
-        Args:
-            table (str)
-            pose_id (int)
-
-        Returns:
-            int | None: rowid if any
-        """
-        ...
-
-    @abstractmethod
     def tables_in_db(self, temp: bool = False) -> list:
         """
         Returns a list of all table names in the database
@@ -2497,30 +2640,6 @@ class StorageManager(ABC):
         Returns:
             list: list of table names
         """
-        ...
-
-    @abstractmethod
-    def get_starting_rowid(self, table: str) -> int:
-        """
-        Starting row id for a table, will be 1 for regular tables, and 1 or non-1 for bookmarks
-        (whose rows are inside Filtered_poses)
-
-        Args:
-            table (str): table or bookmark name
-
-        Returns:
-            int: first row id belonging to that selection
-        """
-        ...
-
-    @abstractmethod
-    def set_pose_comment(self, pose_id: int, comment: str) -> None:
-        """Write (or clear) a user comment for a pose."""
-        ...
-
-    @abstractmethod
-    def get_pose_comment(self, pose_id: int) -> str | None:
-        """Return the comment for a pose, or None if none exists."""
         ...
 
     @abstractmethod
@@ -2554,6 +2673,605 @@ class StorageManager(ABC):
 
     # region private api
 
+    def _cluster_exists(
+        self, cluster_name: str, cluster_window: str
+    ) -> tuple[int] | None:
+        """
+        Gets the id of an existing clustering session with the given name and window.
+
+        Args:
+            cluster_name (str): standardized cluster name
+            cluster_window (str): selection that was clustered
+
+        Returns:
+            tuple[int] | None: row containing cluster_id, or None if not found
+        """
+        query = self.QueryBuilder()
+        query.SELECT("cluster_id").FROM("Clusters")
+        query.WHERE("name = ?", cluster_name)
+        query.WHERE("cluster_window = ?", cluster_window)
+        return self.db_query(*query.build()).fetchone()
+
+    def _insert_new_cluster_info(
+        self, name: str, description: str, cluster_window: str, length: int
+    ) -> int:
+        """
+        Inserts the basic info about a clustering exercise, but not the clustered data itself
+
+        Args:
+            name (str): name of cluster (standardized)
+            description (str): placeholder for if/when more info is needed about clusters
+            cluster_window (str): what was clustered over, bookmark or all results
+            length (int): number of clusters
+
+        Returns:
+            int: cluster id of the new inserted cluster
+        """
+        query = self.QueryBuilder()
+        query.INSERT_INTO(
+            "Clusters",
+            "name",
+            "description",
+            "cluster_window",
+            "num_clusters",
+        ).RETURNING("cluster_id")
+        return self.db_query(
+            query.build()[0],
+            (name, description, cluster_window, length),
+        ).fetchone()[0]
+
+    def _insert_clusters(self, cluster_groups: list, pose_rows: list):
+        """
+        Inserts all cluster data, including each grouping and its representative
+        pose, and all poses involved and which clusters they belong to
+
+        Args:
+            cluster_groups (list): each cluster from the clustering exercise
+            pose_rows (list): pose and cluster id and group id
+        """
+        query = self.QueryBuilder()
+        query.INSERT_INTO(
+            "Cluster_groups", "cluster_id", "cluster_group", "representative"
+        )
+        self.db_update(query.build()[0], cluster_groups, commit=False)
+
+        query = self.QueryBuilder()
+        query.INSERT_INTO(
+            "Pose_clusters", "cluster_id", "cluster_group", "pose_id"
+        )
+        self.db_update(query.build()[0], pose_rows, commit=False)
+
+    def _delete_cluster(self, cluster_id: int):
+        """
+        Deletes all data associated with a clustering session.
+
+        Args:
+            cluster_id (int): clustering session to delete
+        """
+        for table in ("Pose_clusters", "Cluster_groups", "Clusters"):
+            query = self.QueryBuilder()
+            query.DELETE_FROM(table).WHERE("cluster_id = ?", cluster_id)
+            self.db_query(*query.build())
+
+    def _insert_completed_poses(
+        self, pose_ids: list[tuple], tracking_table: str
+    ):
+        """
+        Inserts processed poses and interaction cutoffs into the tracking table.
+
+        Args:
+            pose_ids (list[tuple]): rows of (pose_id, hb_cutoff, vdw_cutoff)
+            tracking_table (str): table tracking poses with calculated interactions
+        """
+        query = self.QueryBuilder()
+        query.INSERT_INTO(
+            self._safe_quoting(tracking_table),
+            "pose_id",
+            "hb_cutoff",
+            "vdw_cutoff",
+        )
+        self.db_update(query.build()[0], pose_ids, commit=False)
+
+    def _insert_receptors(self, receptor_array: list):
+        """Takes array of receptor rows, inserts into Receptors table
+
+        Args:
+            receptor_array (list): List of lists
+                containing formatted receptor rows
+        """
+        query = self.QueryBuilder()
+        query.INSERT_INTO(
+            "Receptors",
+            "recname",
+            "box_dim",
+            "box_center",
+            "grid_spacing",
+            "flexible_residues",
+            "flexres_atomnames",
+        )
+        self.db_query(query.build()[0], receptor_array, commit=True)
+
+    def _insert_db_properties(self, docking_mode: str, number_of_poses: str):
+        """Insert db properties into database properties table
+
+        Args:
+            docking_mode (str): docking mode for the current dataset being written
+            number_of_poses (str): number of poses written to database in current session, either "all" or specified max_poses
+        """
+        query = self.QueryBuilder()
+        query.INSERT_INTO(
+            "db_properties", "docking_mode", "number_of_poses"
+        )
+        self.db_query(
+            query.build()[0],
+            [docking_mode, number_of_poses],
+            commit=True,
+        )
+
+    def _merging_receptors_compatible(self) -> bool:
+        """
+        Checks if the receptor names in the two databases match.
+
+        Returns:
+            bool: True if matching receptor rows have the same non-null name
+        """
+        query = self.QueryBuilder()
+        query.SELECT("R.recname = M.recname").FROM("Receptors", "R")
+        query.JOIN("merging.Receptors", "M", "receptor_id", "Receptors")
+        row = self.db_query(*query.build()).fetchone()
+        return bool(row and row[0])
+
+    def _get_merge_id(self, mergingdb_path: str) -> int:
+        """
+        Creates a merge record for the given database and gets its id.
+
+        Args:
+            mergingdb_path (str): path to merging database
+
+        Returns:
+            int: id of the new merge record
+        """
+        query = self.QueryBuilder()
+        query.INSERT_INTO("merged_tables", "dbfile").RETURNING("merge_id")
+        return self.db_query(query.build()[0], [mergingdb_path]).fetchone()[0]
+
+    def _delete_old_duplicate_results(self):
+        """Checks if a pose is uniquely represented in the Results table,
+        and deletes it from Results if duplicated.
+        Based on the following columns:
+        ligname,
+        receptor,
+        pose_coordinates,
+        flexible_res_coordinates
+        """
+        query = self.QueryBuilder()
+        query.SELECT("DISTINCT R.pose_id").FROM("Results", "R")
+        query.JOIN(
+            "Results_temp", "RT",
+            condition="""
+                (RT.receptor = R.receptor
+                 OR (RT.receptor IS NULL AND R.receptor IS NULL))
+                AND RT.pose_coordinates = R.pose_coordinates
+                AND (RT.flexible_res_coordinates = R.flexible_res_coordinates
+                     OR (RT.flexible_res_coordinates IS NULL
+                         AND R.flexible_res_coordinates IS NULL))
+            """,
+        )
+        query.JOIN(
+            "Ligands", "L",
+            condition="RT.ligname = L.ligname AND R.ligand_id = L.ligand_id",
+        )
+        delete_pose_ids_list = {
+            row[0] for row in self.db_query(*query.build()).fetchall()
+        }
+        placeholders = ",".join("?" for _ in delete_pose_ids_list)
+        if delete_pose_ids_list:
+            self._delete_pose_screening_data(delete_pose_ids_list)
+
+            tables = ["Interactions", "Results"]
+            if self._is_table("custom_pose_data"):
+                tables.append("custom_pose_data")
+
+            for table in tables:
+                query = self.QueryBuilder()
+                query.DELETE_FROM(table).WHERE(
+                    f"pose_id IN ({placeholders})", *delete_pose_ids_list
+                )
+                self.db_query(*query.build())
+
+    def _delete_new_duplicate_results(self):
+        """Checks if a pose is uniquely represented in the Results table,
+        and deletes it from the staged incoming data if duplicated.
+        Based on the following columns:
+        ligname,
+        receptor,
+        pose_coordinates,
+        flexible_res_coordinates
+        """
+        tables = ["Interactions_temp"]
+        if self._is_table("Custom_temp", temp=True):
+            tables.append("Custom_temp")
+
+        for table in tables:
+            matching = self.QueryBuilder()
+            matching.SELECT("1").FROM("Results_temp", "RT")
+            matching.JOIN(
+                "Results", "R",
+                condition="""
+                    (RT.receptor = R.receptor
+                     OR (RT.receptor IS NULL AND R.receptor IS NULL))
+                    AND RT.pose_coordinates = R.pose_coordinates
+                    AND (RT.flexible_res_coordinates = R.flexible_res_coordinates
+                         OR (RT.flexible_res_coordinates IS NULL
+                             AND R.flexible_res_coordinates IS NULL))
+                """,
+            )
+            matching.JOIN(
+                "Ligands", "L",
+                condition="RT.ligname = L.ligname AND R.ligand_id = L.ligand_id",
+            )
+            matching.WHERE(f"RT.ligname = {table}.ligname")
+            matching.WHERE(f"RT.pose_rank = {table}.pose_rank")
+            matching.WHERE(f"RT.run_number = {table}.run_number")
+            matching_sql, params = matching.build()
+
+            query = self.QueryBuilder()
+            query.DELETE_FROM(table).WHERE(f"EXISTS ({matching_sql})", *params)
+            self.db_query(*query.build())
+
+        matching = self.QueryBuilder()
+        matching.SELECT("1").FROM("Results", "R")
+        matching.JOIN(
+            "Ligands", "L",
+            condition="RT.ligname = L.ligname",
+        )
+        matching.WHERE("""
+            (RT.receptor = R.receptor
+             OR (RT.receptor IS NULL AND R.receptor IS NULL))
+            AND RT.pose_coordinates = R.pose_coordinates
+            AND (RT.flexible_res_coordinates = R.flexible_res_coordinates
+                 OR (RT.flexible_res_coordinates IS NULL
+                     AND R.flexible_res_coordinates IS NULL))
+            AND L.ligand_id = R.ligand_id
+        """)
+        matching_sql, params = matching.build()
+
+        query = self.QueryBuilder()
+        query.DELETE_FROM("Results_temp AS RT").WHERE(
+            f"EXISTS ({matching_sql})", *params
+        )
+        self.db_query(*query.build())
+
+    def _crossref_bookmark_builder(self, ligand_list: list[str]) -> str:
+        """
+        creates formatted sql selecting all poses of the given ligands, for the crossreferencing bookmark
+
+        Args:
+            ligand_list (list[str]): list of ligand names to be considered
+
+        Returns:
+            str: formatted sql
+        """
+        query = self.QueryBuilder()
+        query.SELECT("R.pose_id").FROM("Results", "R")
+        if self.dialect == "sqlite":
+            query.SELECT("R.ligand_id")
+
+        query.JOIN("Ligands", "L", "ligand_id", "Results")
+
+        if ligand_list:
+            ligand_names = ", ".join(
+                "'" + name.replace("'", "''") + "'"
+                for name in ligand_list
+            )
+            query.WHERE(f"L.ligname IN ({ligand_names})")
+        else:
+            query.WHERE("1 = 0")
+
+        return query.build()[0]
+
+    def _merge_db_properties_table(self, merge_id: int):
+        """
+        Merges database properties table, but importantly will not check for property compatibility
+
+        Args:
+            merge_id (int): merge session id
+
+        Raises:
+            MergeError
+        """
+        try:
+            convert_dbprop_sql = """INSERT INTO PK_conversions (
+                merge_id,
+                table_name,
+                original_pk,
+                merged_pk) SELECT 
+                ?,
+                'db_properties', 
+                DB_write_session,
+                DB_write_session + (SELECT MAX(DB_write_session) FROM db_properties) 
+                FROM merging.db_properties;"""
+            self.db_query(
+                convert_dbprop_sql,
+                [merge_id],
+            )
+            insert_dbprops_sql = """INSERT INTO db_properties (
+                DB_write_session,
+                docking_mode,
+                number_of_poses)
+                SELECT 
+                    (SELECT merged_pk FROM PK_conversions WHERE original_pk = DB_write_session and merge_id = ? and table_name = 'db_properties'),
+                    docking_mode,
+                    number_of_poses
+                FROM merging.db_properties;"""
+            self.db_query(insert_dbprops_sql, [merge_id])
+
+        except Exception as e:
+            raise MergeError(
+                f"Error encountered while merging db_properties table: {str(e)}"
+            ) from e
+
+    def _merge_ligands_and_results_tables(self, merge_id: int):
+        """
+        Merges first the Ligands table, then the Results table, maintaining ligand_id and pose_id as primary keys,
+        where their relationship to the original PK is kept track of in the mering datble. Duplicate ligands will maintain
+        the ligand_id from the main database.
+
+        Args:
+            merge_id (int): merge session id
+
+        Raises:
+            StorageError: if merging fails in SQLite
+            MergeError: if merging fails in DuckDB
+        """
+        # convert ligand_ids and log
+        convert_ligand_ids_sql = """INSERT INTO PK_conversions (
+        merge_id,
+        table_name,
+        original_pk,
+        merged_pk) SELECT
+        ?,
+        'Ligands',
+        ligand_id,
+            CASE
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM Ligands
+                    WHERE
+                        merging.Ligands.ligname = Ligands.ligname
+                    ) 
+                THEN (
+                    SELECT main.Ligands.ligand_id
+                    FROM main.Ligands
+                    WHERE
+                        merging.Ligands.ligname = Ligands.ligname
+                    )
+                ELSE merging.Ligands.ligand_id + (SELECT MAX(ligand_id) FROM Ligands)
+            END AS new_ligand_id
+        FROM merging.Ligands;"""
+
+        # then inserting only those that aren't already in the table
+        insert_new_ligands = """INSERT INTO Ligands (
+        ligand_id,
+        ligname,
+        ligand_smile,
+        rdmol)
+        SELECT 
+            (SELECT merged_pk FROM PK_conversions WHERE original_pk = ligand_id and merge_id = ? AND table_name = 'Ligands') new_id,
+            ligname,
+            ligand_smile,
+            rdmol
+        FROM merging.Ligands WHERE new_id > (SELECT MAX(ligand_id) FROM Ligands);
+        """
+
+        # convert pose_id
+        convert_poseid_sql = """INSERT INTO PK_conversions (
+        merge_id,
+        table_name,
+        original_pk,
+        merged_pk) SELECT 
+        ?,
+        'Results', 
+        pose_id,
+        pose_id + (SELECT MAX(pose_id) FROM Results) 
+        FROM merging.Results;"""
+
+        # insert results with updated pose_ids
+        insert_Results = """INSERT INTO Results (
+            pose_id,
+            ligand_id,
+            receptor,
+            pose_rank,
+            run_number,
+            docking_score,
+            leff,
+            delta,
+            cluster_rmsd,
+            cluster_size,
+            reference_rmsd,
+            energies_inter,
+            energies_vdw,
+            energies_electro,
+            energies_flexlig,
+            energies_flexlr,
+            energies_intra,
+            energies_torsional,
+            unbound_energy,
+            num_interactions,
+            num_hb,
+            pose_coordinates,
+            flexible_res_coordinates) 
+        SELECT 
+            pose.merged_pk as pose_id,
+            ligand.merged_pk as ligand_id,
+            mr.receptor,
+            mr.pose_rank,
+            mr.run_number,
+            mr.docking_score,
+            mr.leff,
+            mr.delta,
+            mr.cluster_rmsd,
+            mr.cluster_size,
+            mr.reference_rmsd,
+            mr.energies_inter,
+            mr.energies_vdw,
+            mr.energies_electro,
+            mr.energies_flexlig,
+            mr.energies_flexlr,
+            mr.energies_intra,
+            mr.energies_torsional,
+            mr.unbound_energy,
+            mr.num_interactions,
+            mr.num_hb,
+            mr.pose_coordinates,
+            mr.flexible_res_coordinates
+        FROM merging.Results mr
+        LEFT JOIN (
+            SELECT original_pk, merged_pk 
+            FROM PK_conversions 
+            WHERE table_name = 'Results' 
+            AND merge_id = ?
+            ) pose 
+        ON pose.original_pk = mr.pose_id
+        LEFT JOIN (
+            SELECT original_pk, merged_pk 
+            FROM PK_conversions 
+            WHERE table_name = 'Ligands' 
+            AND merge_id = ?
+            ) ligand
+        ON (mr.ligand_id = ligand.original_pk);"""
+
+        try:
+            cur = self.conn.cursor()
+            # insert and get new ligand ids
+            cur.execute(
+                convert_ligand_ids_sql,
+                (merge_id,),
+            )
+            cur.execute(insert_new_ligands, (merge_id,))
+            # get new pose_ids
+            cur.execute(
+                convert_poseid_sql,
+                (merge_id,),
+            )
+            # insert results with new pose_ids and ligand_ids
+            cur.execute(
+                insert_Results,
+                (
+                    merge_id,
+                    merge_id,
+                ),
+            )
+
+        except Exception as e:
+            error_type = StorageError if self.dialect == "sqlite" else MergeError
+            raise error_type(
+                f"Error encountered while merging Ligands and Results tables: \n{str(e)}"
+            ) from e
+
+    def _merge_interaction_tables(self, merge_id: int):
+        """
+        Merges the interaction tables. Interaction definitions are unique and independent of the Results table, so we only
+        insert those that are new with updated PK, and assign existing interaction_ids to those already described in primary db
+
+        Args:
+            merge_id (int): merge session id
+
+        Raises:
+            MergeError
+        """
+        convert_ii_sql = """INSERT INTO PK_conversions (
+        merge_id,
+        table_name,
+        original_pk,
+        merged_pk) SELECT 
+        ?,
+        'Interaction_indices', 
+        interaction_id,
+            CASE 
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM Interaction_indices
+                    WHERE 
+                        merging.Interaction_indices.interaction_type = Interaction_indices.interaction_type
+                        AND merging.Interaction_indices.rec_chain = Interaction_indices.rec_chain
+                        AND merging.Interaction_indices.rec_resname = Interaction_indices.rec_resname
+                        AND merging.Interaction_indices.rec_resid = Interaction_indices.rec_resid
+                        AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
+                        AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
+                    ) 
+                THEN (
+                    SELECT main.Interaction_indices.interaction_id
+                    FROM main.Interaction_indices
+                    WHERE 
+                        merging.Interaction_indices.interaction_type = Interaction_indices.interaction_type
+                        AND merging.Interaction_indices.rec_chain = Interaction_indices.rec_chain
+                        AND merging.Interaction_indices.rec_resname = Interaction_indices.rec_resname
+                        AND merging.Interaction_indices.rec_resid = Interaction_indices.rec_resid
+                        AND merging.Interaction_indices.rec_atom = Interaction_indices.rec_atom
+                        AND merging.Interaction_indices.rec_atomid = Interaction_indices.rec_atomid
+                    )
+                ELSE merging.Interaction_indices.interaction_id + (SELECT COALESCE(MAX(interaction_id), 0) FROM Interaction_indices)
+            END AS new_interaction_id
+        FROM merging.Interaction_indices;"""
+
+        # then inserting only those that aren't already in the table
+        insert_interaction_indices = """INSERT INTO Interaction_indices (
+        interaction_id,
+        interaction_type,
+        rec_chain,
+        rec_resname,
+        rec_resid,
+        rec_atom,
+        rec_atomid)
+        SELECT 
+            (SELECT merged_pk FROM PK_conversions WHERE original_pk = interaction_id and merge_id = ? AND table_name = 'Interaction_indices') new_id,
+            interaction_type,
+            rec_chain,
+            rec_resname,
+            rec_resid,
+            rec_atom,
+            rec_atomid
+        FROM merging.Interaction_indices WHERE new_id > (SELECT COALESCE(MAX(interaction_id), 0) FROM Interaction_indices);
+        """
+
+        # Adding new data to Interactions table with (updated) pose_id and interaction_id
+        insert_interactions = """
+        INSERT INTO Interactions (
+        pose_id,
+        interaction_id
+        )    SELECT P.merged_pk as pose_id, II.merged_pk as interaction_id
+                FROM merging.Interactions I
+                LEFT JOIN (SELECT original_pk, merged_pk
+                FROM PK_conversions
+                WHERE table_name = 'Results' 
+                AND merge_id = ?) P ON (I.pose_id = P.original_pk)
+            LEFT JOIN (SELECT original_pk, merged_pk
+                FROM PK_conversions
+                WHERE table_name = 'Interaction_indices' 
+                AND merge_id = ?) II ON (I.interaction_id = II.original_pk);"""
+
+        try:
+            cur = self.conn.cursor()
+            cur.execute(
+                convert_ii_sql,
+                (merge_id,),
+            )
+            cur.execute(insert_interaction_indices, (merge_id,))
+
+            cur.execute(
+                insert_interactions,
+                (
+                    merge_id,
+                    merge_id,
+                ),
+            )
+
+        except Exception as e:
+            raise MergeError(
+                f"Error during update and insertion of interactions: {e}"
+            ) from e
+        
     def _create_tables(self, commit:bool=True):
         """
         Creates all tables needed for a Ringtail database
@@ -3793,15 +4511,16 @@ class StorageManager(ABC):
             logger.warning(
                 f"The bookmark {name} already exists, and will be overwritten by the current filter."
             )
-            old_filter_id = self.conn.execute(
-                "SELECT filter_id FROM Filters WHERE name = ?", (name.lower(),)
-            ).fetchone()[0]
+            lookup = self.QueryBuilder()
+            lookup.SELECT("filter_id").FROM("Filters")
+            lookup.WHERE("name = ?", name.lower())
+            old_filter_id = self.conn.execute(*lookup.build()).fetchone()[0]
 
         last_ids = self.last_row_ids()
         self._begin_transaction()
-        new_filter_id = self.conn.execute(
-            "SELECT COALESCE(MAX(filter_id), 0) + 1 FROM Filters"
-        ).fetchone()[0]
+        lookup = self.QueryBuilder()
+        lookup.SELECT("COALESCE(MAX(filter_id), 0) + 1").FROM("Filters")
+        new_filter_id = self.conn.execute(*lookup.build()).fetchone()[0]
 
         insert_query = self.QueryBuilder()
         insert_query.INSERT_INTO(
@@ -3848,34 +4567,27 @@ class StorageManager(ABC):
             self.delete_rows_after(last_ids)
             raise
 
-        row = self.conn.execute(
-            "SELECT 1 FROM Filtered_poses WHERE filter_id = ? LIMIT 1", (filter_id,)
-        ).fetchone()
+        lookup = self.QueryBuilder()
+        lookup.SELECT("1").FROM("Filtered_poses")
+        lookup.WHERE("filter_id = ?", filter_id).LIMIT(1)
+        row = self.conn.execute(*lookup.build()).fetchone()
 
         if row is None:
             # reusing a bookmark name still means replacement
-            self.conn.execute("DELETE FROM Filters WHERE filter_id = ?", (filter_id,))
-            if old_filter_id is not None:
-                self.conn.execute(
-                    "DELETE FROM Filtered_poses WHERE filter_id = ?", (old_filter_id,)
-                )
-                self.conn.execute(
-                    "DELETE FROM Filters WHERE filter_id = ?", (old_filter_id,)
-                )
-            self.conn.commit()
-            return 0
+            delete = self.QueryBuilder()
+            delete.DELETE_FROM("Filters").WHERE("filter_id = ?", filter_id)
+            self.conn.execute(*delete.build())
 
         # remove the old bookmark atomically
         if old_filter_id is not None:
-            self.conn.execute(
-                "DELETE FROM Filtered_poses WHERE filter_id = ?", (old_filter_id,)
-            )
-            self.conn.execute(
-                "DELETE FROM Filters WHERE filter_id = ?", (old_filter_id,)
-            )
+            for table in ("Filtered_poses", "Filters"):
+                delete = self.QueryBuilder()
+                delete.DELETE_FROM(table).WHERE("filter_id = ?", old_filter_id)
+                self.conn.execute(*delete.build())
 
         self.conn.commit()
-        return 1
+        return 0 if row is None else 1
+    
     def _stream_query(self, query: str, batch_size: int = 1000):
         """
         cursor stream generator
@@ -4289,16 +5001,6 @@ class StorageManager(ABC):
         ...
 
     @abstractmethod
-    def _insert_db_properties(self, docking_mode: str, number_of_poses: str):
-        """Insert db properties into database properties table
-
-        Args:
-            docking_mode (str): docking mode for the current dataset being written
-            number_of_poses (str): number of poses written to database in current session, either "all" or specified max_poses
-        """
-        ...
-
-    @abstractmethod
     def _create_temporary_results_tables(self):
         """
         Creates temporary tables for results and interactions, which will be
@@ -4327,28 +5029,6 @@ class StorageManager(ABC):
         ...
 
     @abstractmethod
-    def _delete_new_duplicate_results(self):
-        """Checks if a pose is uniquely represented in the Results table,
-        and deletes it from the staged incoming data if duplicated.
-        Based on the following columns:
-        ligname,
-        receptor,
-        """
-        ...
-
-    @abstractmethod
-    def _delete_old_duplicate_results(self):
-        """Checks if a pose is uniquely represented in the Results table,
-        and deletes it from Results if duplicated.
-        Based on the following columns:
-        ligname,
-        receptor,
-        pose_coordinates,
-        flexible_res_coordinates
-        """
-        ...
-
-    @abstractmethod
     def _insert_interactions(self, interactions: list[tuple]):
         """
         Inserts interaction tuples with pose_id s (IMPORTANT) into the interaction table.
@@ -4369,29 +5049,6 @@ class StorageManager(ABC):
         ...
 
     @abstractmethod
-    def _insert_completed_poses(self, pose_ids: list[tuple], tracking_table: str):
-        """
-        Inserts processed poses into process tracking table
-
-        Args:
-            pose_ids (list[int]): _description_
-        """
-        ...
-    
-    def _set_ringtail_db_schema_version(self, db_version: str = "3.0.0"):
-        """
-        Will check current storage manager db schema version and only set if it
-        is compatible with the code base version (i.e., version(ringtail)).
-
-        Args:
-            db_version (str, optional): _description_. Defaults to "3.0.0".
-
-        Raises:
-            StorageError: _description_
-        """
-        pass
-
-    @abstractmethod
     def _insert_ligands(self, ligands: list):
         """Takes array of ligand rows, inserts into Ligands table.
 
@@ -4406,16 +5063,6 @@ class StorageManager(ABC):
         Creates specific indices on tables for those databases that use indices
         """
         pass
-
-    @abstractmethod
-    def _insert_receptors(self, receptor_array: list):
-        """Takes array of receptor rows, inserts into Receptors table
-
-        Args:
-            receptor_array (list): List of lists
-                containing formatted receptor rows
-        """
-        ...
 
     @abstractmethod
     def _insert_interaction_index_rows(self, interactions: list):
@@ -4434,65 +5081,6 @@ class StorageManager(ABC):
         pass
 
     @abstractmethod
-    def _cluster_exists(
-        self, cluster_name: str, cluster_window: str
-    ) -> int| None:
-        """
-        Checks if a cluster already exists, based on what window was clustered over,
-        and the standardized cluster name. Method will not work if cluster name starts
-        to be non-standardized
-
-        Args:
-            cluster_name (str):
-            cluster_window (str):
-
-        Returns:
-            int: number of clusters in that cluster if any, else None
-        """
-        ...
-
-    @abstractmethod
-    def _insert_new_cluster_info(
-        self, name: str, description: str, cluster_window: str, length: int
-    ) -> int:
-        """
-        Inserts the basic info about a clustering exercise, but not the clustered data itself
-
-        Args:
-            name (str): name of cluster (standardized)
-            description (str): placeholder for if/when more info is needed about clusters
-            cluster_window (str): what was clustered over, bookmark or all results
-            length (int): number of clusters
-
-        Returns:
-            int: cluster id of the new inserted cluster
-        """
-        ...
-
-    @abstractmethod
-    def _insert_clusters(self, cluster_groups: list, pose_rows: list):
-        """
-        Inserts all cluster data, including each grouping and its representative
-        pose, and all poses involved and which clusters they belong to
-
-        Args:
-            cluster_groups (list): each cluster from the clustering exercise
-            pose_rows (list): pose and cluster id and group id
-        """
-        ...
-
-    @abstractmethod
-    def _delete_cluster(self, cluster_id: int):
-        """
-        Deletes all data associated with a cluster: Pose_clusters,
-        Cluster_groups, and Clusters rows for the given cluster_id.
-
-        Args:
-            cluster_id (int): cluster id to delete
-        """
-        ...
-
-    @abstractmethod
     def _attach_db(self, new_db: str, new_db_alias: str = "attached_db") -> str:
         """Attaches new database file to current database
 
@@ -4500,71 +5088,6 @@ class StorageManager(ABC):
             new_db (str): file name for database to attach
             new_db_name (str): name of new database
 
-        """
-        ...
-
-    @abstractmethod
-    def _get_merge_id(self, mergingdb_path: str) -> int:
-        """
-        Gets the merge id for the databse in given path
-
-        Args:
-            mergingdb_path (str): path to merging (secondary) database
-
-        Returns:
-            int: merge id returend by database
-        """
-        ...
-
-    @abstractmethod
-    def _merging_receptors_compatible(self) -> str:
-        """
-        Checks if the receptor names in the two databases are a mathc
-
-        Returns:
-            str: returns True or False string
-        """
-        ...
-
-    @abstractmethod
-    def _merge_db_properties_table(self, merge_id: int):
-        """
-        Merges database properties table, but importantly will not check for property compatibility
-
-        Args:
-            merge_id (int): merge session id
-
-        Raises:
-            MergeError
-        """
-        ...
-
-    @abstractmethod
-    def _merge_ligands_and_results_tables(self, merge_id: int):
-        """
-        Merges first the Ligands table, then the Results table, maintaining ligand_id and pose_id as primary keys,
-        where their relationship to the original PK is kept track of in the mering datble. Duplicate ligands will maintain
-        the ligand_id from the main database.
-
-        Args:
-            merge_id (int): merge session id
-
-        Raises:
-            MergeError
-        """
-        ...
-
-    @abstractmethod
-    def _merge_interaction_tables(self, merge_id: int):
-        """
-        Merges the interaction tables. Interaction definitions are unique and independent of the Results table, so we only
-        insert those that are new with updated PK, and assign existing interaction_ids to those already described in primary db
-
-        Args:
-            merge_id (int): merge session id
-
-        Raises:
-            MergeError
         """
         ...
 
@@ -4587,19 +5110,6 @@ class StorageManager(ABC):
             vacuum (bool, optional): rebuilds db file to minimize space. Defaults to None.
             reindex (bool, optional): deletes and reruns all indixes. Defaults to False.
 
-        """
-        ...
-
-    @abstractmethod
-    def _crossref_bookmark_builder(self, ligand_list: list[str]) -> str:
-        """
-        creates formatted sql selecting all poses of the given ligands, for the crossreferencing bookmark
-
-        Args:
-            ligand_list (list[str]): list of ligand names to be considered
-
-        Returns:
-            str: formatted sql
         """
         ...
 
