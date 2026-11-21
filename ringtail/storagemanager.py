@@ -1211,6 +1211,11 @@ class StorageManager(ABC):
                 raise MergeError(
                     f"The receptors in the merging databases are not the same. \nThese databases cannot be merged."
                 )
+            conflicts = self._custom_column_conflicts(merging_db_alias)
+            if conflicts:
+                raise MergeError(
+                    f"Custom columns {', '.join(conflicts)} have different types in the two databases. These databases cannot be merged."
+                )
             logger.info(
                 "The two databases have compatible receptors. Merging will proceed."
             )
@@ -1236,6 +1241,11 @@ class StorageManager(ABC):
                 self._merge_ligands_and_results_tables(merge_id)
                 self.conn.commit()
                 logger.info("The 'Ligands' and 'Results' tables have been merged.")
+
+                # merge custom pose data, needs the pose_ids from the Results merge
+                if self._merge_custom_pose_data(merge_id):
+                    self.conn.commit()
+                    logger.info("The 'custom_pose_data' table has been merged.")
 
                 # merge Interactions and Interaction_indices tables
                 self._merge_interaction_tables(merge_id)
@@ -1277,6 +1287,11 @@ class StorageManager(ABC):
                 self.db_query(
                     f"DELETE FROM {table} WHERE {column} > ?", (last_ids[column],)
                 )
+        # custom_pose_data is created on demand, so it is not in ROW_ID_TABLES
+        if self._is_table("custom_pose_data"):
+            self.db_query(
+                "DELETE FROM custom_pose_data WHERE pose_id > ?", (last_ids["pose_id"],)
+            )
         self.conn.commit()
 
     def complete_merging(self):
@@ -1307,11 +1322,27 @@ class StorageManager(ABC):
         new_db = self.__class__(database_name)
         # make tables
         has_comments = self._is_table(POSE_COMMENTS_SCHEMA.name)
+        custom_columns = (
+            self.fetch_dynamic_table_column_names("custom_pose_data")
+            if self._is_table("custom_pose_data")
+            else {}
+        )
         with new_db:
             new_db._create_tables(commit=False)
             if has_comments:
                 # Pose_comments is created lazily
                 new_db.ensure_gui_tables()
+            if custom_columns:
+                # custom_pose_data is created lazily too, here with the same columns as this database
+                new_db._create_custom_pose_table()
+                new_db._update_custom_columns(
+                    "custom_pose_data",
+                    {
+                        name: sql_type
+                        for name, sql_type in custom_columns.items()
+                        if name.lower() != "pose_id"
+                    },
+                )
         logger.debug(f"Created a new database with empty tables: {database_name}.")
         # attach the incoming database
         alias = "subset"
@@ -1383,6 +1414,13 @@ class StorageManager(ABC):
             WHERE main.{POSE_COMMENTS_SCHEMA.name}.pose_id IN ({scope_poses});"""
             self.db_query(comments)
             logger.debug("Pose comments have been copied into the new subset database.")
+        if custom_columns:
+            custom_cols = ", ".join(self._safe_quoting(name) for name in custom_columns)
+            self.db_query(f"""
+            INSERT INTO {alias}.custom_pose_data ({custom_cols})
+            SELECT {custom_cols} FROM main.custom_pose_data
+            WHERE main.custom_pose_data.pose_id IN ({scope_poses});""")
+            logger.debug("Custom pose data has been copied into the new subset database.")
         # receptor
         dbprop = f"""
         INSERT INTO {alias}.db_properties ({cols(DB_PROPERTIES_SCHEMA)})
@@ -2448,22 +2486,30 @@ class StorageManager(ABC):
 
         return query.build()[0]
 
-    def fetch_dynamic_table_column_names(self, table: str) -> dict[str, str]:
+    def fetch_dynamic_table_column_names(
+        self, table: str, db_alias: str = None
+    ) -> dict[str, str]:
         '''
         Get columns from tables that may have user defined and dynamic columns
 
         Args:
             table (str): table
+            db_alias (str, optional): alias of an attached database, empty dict if the table is not in it. Defaults to None (current database).
 
         Returns:
             dict[str, str]: col_name: SQL type
         '''
-        return dict(
-            self.db_query(
-                "SELECT name, type FROM pragma_table_info(?)",
-                [table],
-            ).fetchall()
-        )
+        if db_alias is None:
+            query, params = "SELECT name, type FROM pragma_table_info(?)", [table]
+        elif self.dialect == "sqlite":
+            query, params = "SELECT name, type FROM pragma_table_info(?, ?)", [table, db_alias]
+        else:
+            query, params = (
+                "SELECT column_name, data_type FROM duckdb_columns() "
+                "WHERE database_name = ? AND lower(table_name) = lower(?)",
+                [db_alias, table],
+            )
+        return dict(self.db_query(query, params).fetchall())
 
     def clear_interaction_tables(self) -> bool:
         """
@@ -2813,13 +2859,13 @@ class StorageManager(ABC):
         Checks if the receptor names in the two databases match.
 
         Returns:
-            bool: True if matching receptor rows have the same non-null name
+            bool: True if the receptor names match, or if either database has no receptor
         """
         query = self.QueryBuilder()
         query.SELECT("R.recname = M.recname").FROM("Receptors", "R")
         query.JOIN("merging.Receptors", "M", "receptor_id", "Receptors")
         row = self.db_query(*query.build()).fetchone()
-        return bool(row and row[0])
+        return row is None or bool(row[0])
 
     def _get_merge_id(self, mergingdb_path: str) -> int:
         """
@@ -3168,6 +3214,50 @@ class StorageManager(ABC):
             raise error_type(
                 f"Error encountered while merging Ligands and Results tables: \n{str(e)}"
             ) from e
+
+    def _merge_custom_pose_data(self, merge_id: int) -> bool:
+        """
+        Will merge custom pose data from the merging database, adding any custom columns this database lacks,
+        and giving each row the pose_id its pose got in the Results merge
+
+        Args:
+            merge_id (int): merge session id
+
+        Returns:
+            bool: True if the merging database had custom pose data
+        """
+        merging_columns = self.fetch_dynamic_table_column_names(
+            "custom_pose_data", "merging"
+        )
+        data_columns = [name for name in merging_columns if name.lower() != "pose_id"]
+        if not data_columns:
+            return False
+
+        self._create_custom_pose_table()
+        existing = {
+            name.lower()
+            for name in self.fetch_dynamic_table_column_names("custom_pose_data")
+        }
+        missing = {
+            name: merging_columns[name]
+            for name in data_columns
+            if name.lower() not in existing
+        }
+        if missing:
+            self._update_custom_columns("custom_pose_data", missing)
+
+        quoted = [self._safe_quoting(name) for name in data_columns]
+        self.db_query(
+            f"""INSERT INTO custom_pose_data (pose_id, {", ".join(quoted)})
+            SELECT pose.merged_pk, {", ".join(f"mc.{col}" for col in quoted)}
+            FROM merging.custom_pose_data mc
+            JOIN PK_conversions pose
+            ON pose.original_pk = mc.pose_id
+            AND pose.table_name = 'Results'
+            AND pose.merge_id = ?""",
+            (merge_id,),
+        )
+        return True
 
     def _merge_interaction_tables(self, merge_id: int):
         """
@@ -4884,6 +4974,34 @@ class StorageManager(ABC):
             )
             return False
         return True
+
+    def _custom_column_conflicts(self, merging_db_alias: str) -> list[str]:
+        """
+        Will return custom pose columns that both databases have, but with different types
+
+        Args:
+            merging_db_alias (str): alias under which the merging database is attached
+
+        Returns:
+            list[str]: names of the clashing columns, empty if there are none
+        """
+        if not self._is_table("custom_pose_data"):
+            return []
+        main_columns = {
+            name.lower(): sql_type.upper()
+            for name, sql_type in self.fetch_dynamic_table_column_names(
+                "custom_pose_data"
+            ).items()
+        }
+        merging_columns = self.fetch_dynamic_table_column_names(
+            "custom_pose_data", merging_db_alias
+        )
+        return [
+            name
+            for name, sql_type in merging_columns.items()
+            if name.lower() in main_columns
+            and main_columns[name.lower()] != sql_type.upper()
+        ]
 
     def _rollback_merge(self, merge_id: int, last_ids: dict):
         """

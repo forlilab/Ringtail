@@ -1470,3 +1470,81 @@ class TestCustomFields:
         assert {
             name: int(row["pose_id"]) for name, row in by_name.items()
         } == expected_ids
+
+    def test_custom_fields_subset(self, tmp_db: RingtailCore, make_ad6_sdf, tmp_path):
+        """Make sure a subset database keeps the custom fields of the poses it copies"""
+        custom = make_ad6_sdf(
+            ligname="custom_ligand",
+            docking_score=-13,
+            custom={"supplier": "fischer", "special_score": 2.1},
+        )
+        plain = make_ad6_sdf(
+            smiles="O=C(O)c1ccccc1C(=O)O", ligname="plain_ligand", docking_score=-12
+        )
+        left_out = make_ad6_sdf(
+            smiles="CCO",
+            ligname="left_out_ligand",
+            docking_score=-6,
+            custom={"supplier": "sigma-aldrich", "special_score": 8.5},
+        )
+        tmp_db.add_results_from_files(
+            docking_results=[custom, plain, left_out],
+            docking_mode="ad6",
+            calculate_interactions=False,
+        )
+        tmp_db.filter(eworst=-10, output_bookmark="best")
+
+        subset = tmp_db.export_bookmark_db("best", str(tmp_path / "subset.db"))
+        rows = RingtailCore(subset).db_query("""
+            SELECT L.ligname, C.supplier, C.special_score
+            FROM Results AS R
+            JOIN Ligands AS L ON L.ligand_id = R.ligand_id
+            LEFT JOIN custom_pose_data AS C ON C.pose_id = R.pose_id
+        """)
+        assert {ligname: (supplier, score) for ligname, supplier, score in rows} == {
+            "custom_ligand": ("fischer", 2.1),
+            "plain_ligand": (None, None),
+        }
+
+    @pytest.mark.slow  # merges one database into another
+    def test_custom_fields_merge(self, tmp_path, storage_type, make_ad6_sdf):
+        """Make sure merged poses keep their custom fields under their new pose_ids,
+        and custom columns only the merging database has are added"""
+        primary = RingtailCore(str(tmp_path / "primary.db"), storage_type=storage_type)
+        primary.add_results_from_files(
+            docking_results=make_ad6_sdf(
+                ligname="primary_ligand",
+                custom={"supplier": "fischer", "special_score": 2.1},
+            ),
+            docking_mode="ad6",
+            calculate_interactions=False,
+        )
+        secondary_db = str(tmp_path / "secondary.db")
+        RingtailCore(secondary_db, storage_type=storage_type).add_results_from_files(
+            docking_results=[
+                make_ad6_sdf(
+                    smiles="CCO",
+                    ligname="secondary_ligand",
+                    custom={"supplier": "sigma-aldrich", "category": "active"},
+                ),
+                make_ad6_sdf(smiles="O=C(O)c1ccccc1C(=O)O", ligname="secondary_plain"),
+            ],
+            docking_mode="ad6",
+            calculate_interactions=False,
+        )
+
+        assert primary.merge_databases([secondary_db], False) == []
+        rows = primary.db_query("""
+            SELECT L.ligname, C.supplier, C.special_score, C.category
+            FROM Results AS R
+            JOIN Ligands AS L ON L.ligand_id = R.ligand_id
+            LEFT JOIN custom_pose_data AS C ON C.pose_id = R.pose_id
+        """)
+        assert {
+            ligname: (supplier, score, category)
+            for ligname, supplier, score, category in rows
+        } == {
+            "primary_ligand": ("fischer", 2.1, None),
+            "secondary_ligand": ("sigma-aldrich", None, "active"),
+            "secondary_plain": (None, None, None),
+        }
