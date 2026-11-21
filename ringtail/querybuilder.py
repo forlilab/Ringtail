@@ -103,12 +103,34 @@ class QueryBuilder:
         self.from_table = (table, alias)
         return self
 
-    def JOIN(self, table, alias=None, on: str = None, to=None, kind="INNER"):
-        if on is None:
-            raise ValueError(f"JOIN on table '{table}' requires an 'on' column")
+    def JOIN(
+        self, table, alias=None, on: str = None, to=None, kind="INNER",
+        condition: str | None = None,
+    ):
+        """
+        Joins a table using a shared column name or an explicit SQL condition.
+
+        Args:
+            table (str): table to join
+            alias (str, optional): alias for the joined table
+            on (str, optional): column name shared by both tables
+            to (str, optional): table to join against when using on
+            kind (str): join type, defaults to INNER
+            condition (str, optional): SQL condition using the query's table aliases,
+                used instead of on and to
+
+        Returns:
+            QueryBuilder: the same query, modified
+        """
+        if condition is None and on is None:
+            raise ValueError(f"JOIN on table '{table}' requires an 'on' column or condition")
+        if condition is not None and (on is not None or to is not None):
+            raise ValueError("Use either condition or on/to for a JOIN")
         if alias:
             alias = self._add_alias(table, alias)
-        if to:
+        if condition is not None:
+            join_on = condition
+        elif to:
             join_on = self.aliased(to) + "." + on + "=" + alias + "." + on
         else:
             join_on = (
