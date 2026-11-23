@@ -22,23 +22,9 @@ logger = get_logger(__name__)
 from rdkit import Chem
 from meeko import PDBQTMolecule, RDKitMolCreate
 from .interactions import find_interactions, make_interaction_finder
-from .types import InteractionRecord, PoseRecord
+from .types import PoseRecord, dicts_to_interaction_records, dict_to_pose_record, results_row
 
 
-
-def _dicts_to_interaction_records(interactions: list) -> list:
-    """Convert deduplicated interaction dicts to InteractionRecords."""
-    return [InteractionRecord(**d) for d in interactions]
-
-
-def _dict_to_pose_record(d: dict) -> PoseRecord:
-    """Convert a pose dict to a PoseRecord, ignoring any extra keys."""
-    return PoseRecord(*(d[f] for f in PoseRecord._fields))
-
-
-def results_row() -> dict:
-    """Return a dict of default pose field values, derived from PoseRecord."""
-    return PoseRecord()._asdict()
 
 
 def _open_fn_and_name(fname: str) -> tuple:
@@ -265,7 +251,7 @@ class VinaMoleculeSupplier:
             }
         )
         results_rows = [
-            _dict_to_pose_record(dict(zip(results_dict.keys(), values)))
+            dict_to_pose_record(dict(zip(results_dict.keys(), values)))
             for values in zip(*results_dict.values())
         ]
 
@@ -273,7 +259,7 @@ class VinaMoleculeSupplier:
             "ligands": [ligand_row],
             "receptor": generate_receptor_row(receptor_dict),
             "poses": results_rows,
-            "interactions": _dicts_to_interaction_records(interaction_rows),
+            "interactions": dicts_to_interaction_records(interaction_rows),
         }
 
 
@@ -448,7 +434,7 @@ class ADGPUMoleculeSupplier:
             "ligands": [ligand_row],
             "poses": results_rows,
             "receptor": receptor_row,
-            "interactions": _dicts_to_interaction_records(
+            "interactions": dicts_to_interaction_records(
                 generate_interaction_tuples(interaction_dicts)
             ),
         }
@@ -922,8 +908,8 @@ def process_docked_mol(
 
     return {
         "ligands": [ligand_row],
-        "poses": [_dict_to_pose_record(results_dict)],
-        "interactions": _dicts_to_interaction_records(interaction_rows),
+        "poses": [dict_to_pose_record(results_dict)],
+        "interactions": dicts_to_interaction_records(interaction_rows),
         "receptor": [],
         "custom_data": [custom_properties] if custom_properties else [],
     }

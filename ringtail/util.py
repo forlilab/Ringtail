@@ -100,13 +100,12 @@ def compress_file(
     if method not in _COMPRESS_EXT:
         raise ValueError(f"Unknown compression method '{method}'")
 
-    # zstd is a multithreaded shell-out; fall back to stdlib gzip if absent
+    # zstd is a multithreaded shell-out, fall back to stdlib gzip if absent
     if method == "zstd" and shutil.which("zstd") is None:
         logger.warning("zstd binary not found on PATH — falling back to gzip.")
         method = "gzip"
 
-    # normalize dst: strip any known compression suffix, then add the one for the
-    # method actually used (so an explicit dst + gzip fallback can't double-suffix)
+    # normalize dst
     if dst is None:
         dst = src
     for _ext in _COMPRESS_EXT.values():

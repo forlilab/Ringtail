@@ -107,3 +107,17 @@ class InteractionRecord(NamedTuple):
     recname: object
     recid: object
 
+
+def dicts_to_interaction_records(interactions: list) -> list:
+    """Convert deduplicated interaction dicts to InteractionRecords."""
+    return [InteractionRecord(**d) for d in interactions]
+
+
+def dict_to_pose_record(d: dict) -> PoseRecord:
+    """Convert a pose dict to a PoseRecord, ignoring any extra keys."""
+    return PoseRecord(*(d[f] for f in PoseRecord._fields))
+
+
+def results_row() -> dict:
+    """Return a dict of default pose field values, derived from PoseRecord."""
+    return PoseRecord()._asdict()

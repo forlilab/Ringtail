@@ -41,7 +41,7 @@ from .clustermanager import *
 from .querybuilder import QueryBuilder
 from .types import PoseData
 from .schema import (
-    NUMERIC_TYPES,
+    NUMERIC_SQL_TYPES,
     NO_FLEXRES_JSON,
     OUTFIELD_BY_TABLE,
     CANDIDATES_SUBQ,
@@ -3696,7 +3696,7 @@ class StorageManager(ABC):
             name: metadata["table"]
             for name, metadata in self.get_column_metadata().items()
             if metadata["table"] in {"Results", "custom_pose_data"}
-            and metadata["sql_type"] in NUMERIC_TYPES
+            and metadata["sql_type"] in NUMERIC_SQL_TYPES
             and name not in {"pose_id", "ligand_id"}
         }
     def _apply_table_filter(self, query: QueryBuilder, table: str) -> QueryBuilder:

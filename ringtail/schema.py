@@ -8,7 +8,7 @@
 from dataclasses import dataclass, field
 from typing import Union
 
-NUMERIC_TYPES = {"INTEGER", "FLOAT", "DOUBLE"}
+NUMERIC_SQL_TYPES = {"INTEGER", "FLOAT", "DOUBLE"}
 RECALC_TRACKING_TABLE = "recomputed_interactions"
 
 
@@ -42,14 +42,9 @@ class TableSchema:
     # PRIMARY KEY instead of an implicit rowid. Requires primary_key=True on 2+
     # columns with no autoincrement. DuckDB ignores this flag.
     duckdb_no_constraints: bool = False
-    # DuckDB only: create the table with plain columns — no PRIMARY KEY and no
-    # FOREIGN KEY constraints. DuckDB strictly enforces both, which makes bulk
-    # inserts into internal/derived tables (e.g. Filtered_poses) very slow: the
-    # unique PK index is maintained per row and FK validation reads the parent
-    # table off disk. Use for tables Ringtail populates itself, where referential
-    # integrity is guaranteed by construction. SQLite ignores this flag.
+    # DuckDB for speed: create the table with plain columns and no PK/FK
     undo_on_failed_write: bool = False
-    # Rows added by a failed write are deleted again (StorageManager.delete_rows_after).
+    # Rows added by a failed write are deleted again 
 
 
 # ---------------------------------------------------------------------------
@@ -64,8 +59,7 @@ SQLITE_TYPES: dict[str, str] = {
     "DATETIME": "DATETIME",
     "JSON_OR_VARCHAR": "VARCHAR",
     # 2D float array (coordinates). SQLite has no array type, so it is stored as a
-    # packed float32 BLOB; DuckDB uses a native FLOAT[][] (ALP-compressed, ~8x
-    # smaller than the old JSON text). See StorageManager coordinate (de)serializers.
+    # packed float32 BLOB. DuckDB uses a native FLOAT[][] 
     "FLOAT_ARRAY_2D": "BLOB",
 }
 
@@ -175,8 +169,7 @@ RESULTS_SCHEMA = TableSchema(
     ],
 )
 
-#: Stored form of "no flexible residues". Both flexres columns are JSON arrays, so
-#: writers use this rather than NULL or JSON null.
+# what should be written if no flexres data
 NO_FLEXRES_JSON = "[]"
 
 # Results columns where lower is better, so a ligand's best pose has the minimum
@@ -204,18 +197,12 @@ RECEPTORS_SCHEMA = TableSchema(
             primary_key=True,
             autoincrement=True,
             nullable=False,
-            # Ringtail stores one receptor per database, and the insert/update paths all
-            # assume it: they UPDATE ... WHERE receptor_id == 1
             check="receptor_id = 1",
         ),
         "recname": Column("VARCHAR", "receptor name"),
         "box_dim": Column("VARCHAR", "docking box dimensions"),
         "box_center": Column("VARCHAR", "docking box center"),
         "grid_spacing": Column("FLOAT", "grid spacing"),
-        # Both hold a JSON array, defaulting to an empty one so the insert paths that
-        # write only recname and a receptor blob still leave something decodable here.
-        # Deliberately still nullable: subset export copies Receptors row-for-row from
-        # the source, and databases from before this default hold NULL.
         "flexible_residues": Column(
             "VARCHAR", "flexible residue names", default=f"'{NO_FLEXRES_JSON}'"
         ),
@@ -264,7 +251,6 @@ SCHEMA_VERSION_SCHEMA = TableSchema(
         ),
     },
 )
-# Append-only: each create/upgrade adds a row; the latest (max id) is current.
 
 INTERACTION_INDICES_SCHEMA = TableSchema(
     name="Interaction_indices",
@@ -490,7 +476,7 @@ for _status in ("accepted", "maybe", "rejected"):
 ALL_TABLE_NAMES = frozenset(TABLE_SCHEMAS)
 
 _UNDO_SCHEMAS = [s for s in TABLE_SCHEMAS.values() if s.undo_on_failed_write]
-#: growing id column of each table a failed write is undone in, and the table that owns it
+# growing id column of each table a failed write is undone in, and the table that owns it
 ROW_ID_OWNERS = {
     name: s.name
     for s in _UNDO_SCHEMAS
@@ -511,26 +497,14 @@ def _undo_key(schema: TableSchema) -> str:
     )
 
 
-#: (table, id column) to delete a failed write's rows by, children before parents
+# (table, id column) to delete a failed write's rows by, children before parents
 ROW_ID_TABLES = tuple((s.name, _undo_key(s)) for s in reversed(_UNDO_SCHEMAS))
 
 # ---------------------------------------------------------------------------
 # Derived schemas for outfields and order_results
 # ---------------------------------------------------------------------------
 
-# All columns a user can request in output — internal keys excluded.
-OUTFIELD_SCHEMA: dict[str, Column] = {
-    name: col
-    for schema in [
-        RESULTS_SCHEMA,
-        LIGANDS_SCHEMA,
-        INTERACTION_INDICES_SCHEMA,
-    ]
-    for name, col in schema.columns.items()
-    if not col.primary_key and not col.foreign_key
-}
-
-# Same columns grouped by source table — used for export and column-to-table resolution.
+# Built-in output columns grouped by source table, excluding internal keys.
 OUTFIELD_BY_TABLE: dict[str, dict[str, Column]] = {
     "Results": {
         n: c
@@ -549,11 +523,18 @@ OUTFIELD_BY_TABLE: dict[str, dict[str, Column]] = {
     },
 }
 
-# Numeric and text columns can be an ORDER BY key, arrays cannot
+# Built-in output fields for CLI help; custom fields are discovered at runtime.
+OUTFIELD_SCHEMA: dict[str, Column] = {
+    name: col
+    for columns in OUTFIELD_BY_TABLE.values()
+    for name, col in columns.items()
+}
+
+# Built-in numeric and text fields advertised for ordering in CLI help.
 ORDER_RESULT_SCHEMA: dict[str, Column] = {
     name: col
     for name, col in OUTFIELD_SCHEMA.items()
-    if col.sql_type in ("FLOAT", "INTEGER", "VARCHAR")
+    if col.sql_type in NUMERIC_SQL_TYPES | {"VARCHAR"}
 }
 
 # ---------------------------------------------------------------------------
@@ -561,9 +542,7 @@ ORDER_RESULT_SCHEMA: dict[str, Column] = {
 # ---------------------------------------------------------------------------
 
 # Each numeric filter option, mapped to the Results column it constrains and the
-# comparison that turns its value into a cutoff. Filtering reads column names from here
-# rather than restating them, so renaming a column in RESULTS_SCHEMA surfaces at import
-# time instead of as broken SQL at query time.
+# comparison that turns its value into a cutoff
 NUMERIC_FILTER_SCHEMA: dict[str, tuple[str, str]] = {
     "eworst": ("docking_score", "<="),
     "ebest": ("docking_score", ">="),
@@ -573,8 +552,6 @@ NUMERIC_FILTER_SCHEMA: dict[str, tuple[str, str]] = {
     "le_percentile": ("leff", "<"),
 }
 
-# hb_count's operator depends on the sign of the requested count ("at least" vs "no more
-# than"), so only its column is fixed here.
 HB_COUNT_COLUMN = "num_hb"
 
 # How each interaction filter option is encoded in Interaction_indices.interaction_type.

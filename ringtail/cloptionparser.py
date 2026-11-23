@@ -28,7 +28,8 @@ _outfields_opts = "; ".join(
 _outfields_help = (
     "Defines which fields are used when reporting results (to eg output csv or output_log). "
     "Comma-separated, e.g. --outfields=docking_score,leff,num_hb. "
-    f"Available fields: {_outfields_opts}. "
+    f"Built-in fields: {_outfields_opts}. "
+    "Custom pose columns in the database are also accepted. "
     "Ligand name is always returned first."
 )
 
@@ -38,7 +39,8 @@ _order_opts = "; ".join(
 _order_help = (
     "Order results by this single field when e.g., writing to the output log file. "
     "By default ordered by database insertion order. "
-    f"Available fields: {_order_opts}."
+    f"Built-in fields: {_order_opts}. "
+    "Custom pose columns in the database are also accepted."
 )
 from types import SimpleNamespace
 
