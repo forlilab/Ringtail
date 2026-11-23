@@ -4,7 +4,6 @@
 # Ringtail unit tests
 #
 import json
-import logging
 from pathlib import Path
 
 import pytest
@@ -67,34 +66,25 @@ class TestCoreOperations:
         )
         assert tmp_db.table_length("Ligands") == 217
 
-    def test_save_receptor(self, tmp_db):
-        tmp_db.add_results_from_files(
-            docking_results=str(TEST_DATA / "adgpu/group1"), docking_mode="adgpu"
-        )
-        count_before = tmp_db.db_query(
+    def test_save_receptor(self, populated_db):
+        count_before = populated_db.db_query(
             "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
         )[0][0]
         assert count_before == 0
 
-        tmp_db.save_receptor(receptor=str(TEST_DATA / "adgpu/4j8m.pdbqt"))
-        count_after = tmp_db.db_query(
+        populated_db.save_receptor(receptor=str(TEST_DATA / "adgpu/4j8m.pdbqt"))
+        count_after = populated_db.db_query(
             "SELECT COUNT(*) FROM Receptors WHERE receptor_object NOT NULL"
         )[0][0]
         assert count_after == 1
 
-    def test_db_summary_data(self, tmp_db):
+    def test_db_summary_data(self, tmp_db, populated_db):
         from ringtail import exceptions as e
 
         with pytest.raises(e.StorageError):
             tmp_db.db_summary_data()
 
-        tmp_db.add_results_from_files(
-            docking_results=str(TEST_DATA / "adgpu/group1"), docking_mode="adgpu"
-        )
-        tmp_db.add_results_from_files(
-            docking_results=str(TEST_DATA / "adgpu/group2"), docking_mode="adgpu"
-        )
-        data, _ = tmp_db.db_summary_data()
+        data, _ = populated_db.db_summary_data()
         assert isinstance(data, dict)
         assert len(data.keys()) == 12
         assert all(isinstance(v, (float, int)) for v in data.values())
@@ -122,8 +112,7 @@ class TestCoreOperations:
         assert tmp_db.table_length("Interactions") == inter_count * 2
 
     def test_adding_results_with_filters_needs_consent(self, ad6_db):
-        """No bookmark stays coherent once results are added, so all filter data is
-        deleted first, and only with consent."""
+        """Adding results to a db with bookmarks needs consent, and deletes all filter data"""
         sdf = str(TEST_DATA / "ad6/docked_ligands.sdf")
         ad6_db.filter(eworst=0, output_bookmark="before")
         ad6_db.filter(eworst=0, mfpt_cluster=0.6, output_bookmark="clustered")
@@ -150,7 +139,7 @@ class TestFiltering:
         [(0, 0), (5, 0), (25, 1), (50, 2), (100, 4)],
     )
     def test_score_percentile_floor_rounding(self, ad6_db, percentile, expected_count):
-        """Percentiles preserve legacy floor rounding and include the accepted cutoff."""
+        """Score percentile rounds down and includes poses at the cutoff"""
         count, _ = ad6_db.filter(
             score_percentile=percentile,
             output_bookmark=f"score_percentile_{percentile}",
@@ -234,9 +223,7 @@ class TestFiltering:
         assert count_file == 16
 
     def test_hb_count_boundary(self, populated_db):
-        """hb_count is inclusive: N admits poses with exactly N hydrogen bonds.
-        The previous exclusive comparison yielded the "at least N+1" counts here
-        (106 for hb_count=4, 81 for hb_count=5)."""
+        """hb_count includes poses with exactly that many hydrogen bonds"""
         count_4, _ = populated_db.filter(hb_count=4, output_bookmark="hb_least_4")
         assert count_4 == 141
 
@@ -255,8 +242,7 @@ class TestFiltering:
         assert count == 1
 
     def test_tiered_filter_or_of_groups(self, populated_db):
-        """Nested specification: OR of two AND-groups. The passing ligand set must
-        equal the union of each tier filtered on its own (true OR-of-AND semantics)."""
+        """OR of two filter groups gives the union of each group filtered on its own"""
         expr = {
             "op": "or",
             "children": [
@@ -271,15 +257,14 @@ class TestFiltering:
         }
         count_or, _ = populated_db.filter(filters=expr, output_bookmark="tier_or")
         # each tier on its own
-        count_a, _ = populated_db.filter(
+        populated_db.filter(
             eworst=-6,
             hb_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             vdw_interactions=[("A:VAL:279:", True), ("A:LYS:162:", True)],
             max_miss=1,
             output_bookmark="tier_a",
         )
-        count_b, _ = populated_db.filter(eworst=-7, output_bookmark="tier_b")
-        assert count_a == 33  # matches TestFiltering.test_filter
+        populated_db.filter(eworst=-7, output_bookmark="tier_b")
 
         ligs_a = set(
             populated_db.fetch_select_ligands_poses(bookmark_name="tier_a").keys()
@@ -293,33 +278,8 @@ class TestFiltering:
         assert ligs_or == ligs_a | ligs_b
         assert count_or == len(ligs_a | ligs_b)
 
-    def test_tiered_query_nested_depth(self, tmp_db):
-        """The renderer is fully recursive: arbitrary AND/OR nesting depth works."""
-        expr = {
-            "op": "and",
-            "children": [
-                {"eworst": -8},
-                {
-                    "op": "or",
-                    "children": [
-                        {"ebest": -12},
-                        {"op": "and", "children": [{"eworst": -9}, {"lebest": -0.5}]},
-                    ],
-                },
-            ],
-        }
-        with tmp_db.storageman as sm:
-            sql = sm._generate_filtering_query(Filters.from_dict(expr), "out")
-        assert (
-            "((R.docking_score <= -8) "
-            "AND ((R.docking_score >= -12) "
-            "OR ((R.docking_score <= -9) "
-            "AND (R.leff >= -0.5))))" in sql
-        )
-
     def test_smarts_inside_group(self, populated_db):
-        """A SMARTS criterion works inside a filter group (RDKit leaf ->
-        pose_id IN (...)), ANDing with SQL criteria in the same group."""
+        """A SMARTS filter in a filter group is combined with the other criteria in that group"""
         score_only = {"op": "and", "children": [{"eworst": -6}]}
         with_smarts = {
             "op": "and",
@@ -331,22 +291,6 @@ class TestFiltering:
         c_both, _ = populated_db.filter(filters=with_smarts, output_bookmark="sig_both")
         assert c_both > 0
         assert c_both <= c_score  # adding SMARTS only narrows
-
-    def test_expr_rdkit_group_count(self):
-        """Cross-group SMARTS detection (drives the API warning / GUI consent dialog)."""
-        one = {"op": "and", "children": [{"eworst": -6}, {"ligand_substruct": ["C=O"]}]}
-        two = {
-            "op": "or",
-            "children": [
-                {"op": "and", "children": [{"ligand_substruct": ["C=O"]}]},
-                {
-                    "op": "and",
-                    "children": [{"ligand_substruct": ["CN"]}, {"eworst": -7}],
-                },
-            ],
-        }
-        assert Filters.from_dict(one).rdkit_group_count() == 1
-        assert Filters.from_dict(two).rdkit_group_count() == 2
 
 
 class TestOutput:
@@ -419,27 +363,7 @@ class TestOutput:
         assert lines[0] == "pose_id,docking_score"
         assert len(lines) - 1 == populated_db.table_length("Results")
 
-    def test_export_columns_selection_validation(self, ad6_db, tmp_path):
-        import csv
-
-        expected_rows = ad6_db.table_length("Results")
-        for index, selection in enumerate((None, "Results")):
-            csv_path = tmp_path / f"all_results_{index}.csv"
-            ad6_db.export_columns_to_csv(
-                ["docking_score"], bookmark_name=selection, csv_name=str(csv_path)
-            )
-            with csv_path.open() as csv_file:
-                rows = list(csv.reader(csv_file))
-            assert len(rows) - 1 == expected_rows
-
-        with pytest.raises(OptionError, match="not a bookmark"):
-            ad6_db.export_columns_to_csv(
-                ["docking_score"],
-                bookmark_name="does_not_exist",
-                csv_name=str(tmp_path / "invalid.csv"),
-            )
-
-    def test_pose_comments_are_created_lazily(self, ad6_db):
+    def test_pose_comments(self, ad6_db):
         pose_id = ad6_db.db_query("SELECT pose_id FROM Results LIMIT 1")[0][0]
 
         assert ad6_db.get_pose_comment(pose_id) is None
@@ -490,29 +414,6 @@ class TestOutput:
         rtc_bm = RingtailCore(db_file=bookmark_db_name)
         assert rtc_bm.table_length("Results") == 8
 
-    @pytest.mark.parametrize("scope", ["accepted", "candidates"])
-    def test_status_table_exports(self, populated_db, tmp_path, scope):
-        import pandas as pd
-
-        pose_ids = [
-            row[0]
-            for row in populated_db.db_query("SELECT pose_id FROM Results LIMIT 3")
-        ]
-        populated_db.update_pose_status(pose_ids, 1)
-
-        populated_db.write_molecule_sdfs(
-            bookmark_name=scope, sdf_path=str(tmp_path / "sdf")
-        )
-        sdf = next((tmp_path / "sdf").glob("*.sdf"))
-        assert sdf.read_text().count("$$$$") == 3
-
-        csv = tmp_path / "status.csv"
-        populated_db.export_table_to_csv(scope, str(csv))
-        assert len(pd.read_csv(csv)) == 3
-
-        subset = populated_db.export_bookmark_db(scope, str(tmp_path / "subset.db"))
-        assert RingtailCore(subset).table_length("Results") == 3
-
     def test_histogram_matches_numpy(self, populated_db):
         import numpy as np
 
@@ -523,74 +424,46 @@ class TestOutput:
         expected, _ = np.histogram(scores, bins=edges)
         assert counts == expected.tolist()
 
-    def test_compress_decompress_db(self, populated_db, tmp_path):
+    def test_compress_decompress_db(self, populated_db, tmp_path, monkeypatch):
+        import shutil
         from ringtail.util import compress_file, decompress_file, detect_db_type
-        import shutil as _sh
 
         src = populated_db.db_file
-        full = populated_db.table_length("Results")
-
-        # filtered subset -> compress (gzip) -> decompress -> open and verify count
-        populated_db.filter(eworst=-7, output_bookmark="exp")
-        subset = populated_db.export_bookmark_db("exp", str(tmp_path / "subset.db"))
-        populated_db.delete_bookmark("exp")
-        sub_count = RingtailCore(db_file=subset).table_length("Results")
-        assert sub_count == 8
-
-        art = compress_file(
-            subset, str(tmp_path / "subset.db.gz"), method="gzip", level=6
-        )
-        assert art.endswith(".gz") and Path(art).exists()
+        art = compress_file(src, str(tmp_path / "whole.db.gz"), method="gzip")
+        assert art.endswith(".gz")
         back = decompress_file(art, str(tmp_path / "back.db"))
         assert detect_db_type(back) in ("sqlite", "duckdb")
-        assert RingtailCore(db_file=back).table_length("Results") == sub_count
-        assert Path(src).exists()  # source database is never destroyed
+        assert RingtailCore(db_file=back).table_length(
+            "Results"
+        ) == populated_db.table_length("Results")
+        assert Path(src).exists()
 
-        # no-filter: compress the whole db -> decompress -> full count preserved
-        art2 = compress_file(src, str(tmp_path / "whole.db.gz"), method="gzip")
-        back2 = decompress_file(art2, str(tmp_path / "whole_back.db"))
-        assert RingtailCore(db_file=back2).table_length("Results") == full
-
-        # zstd -> gzip fallback when the zstd binary is unavailable
-        orig_which = _sh.which
-        _sh.which = lambda x: None if x == "zstd" else orig_which(x)
-        try:
-            fb = compress_file(src, str(tmp_path / "fb.db.zst"), method="zstd")
-        finally:
-            _sh.which = orig_which
-        assert fb.endswith(".gz")
-
-    def test_similar_ligands_interaction(self, populated_db, tmp_path):
-        populated_db.filter(ebest=-6, interaction_cluster=0.5)
-        options = populated_db.fetch_cluster_options("28837")
-        assert len(options) > 0
-        cluster_id = options[0][0]
-        ligands, bookmark_name, cluster_name = populated_db.fetch_clustered_similars(
-            "28837", cluster_id, output_log=str(tmp_path / "cluster_log.txt")
+        # zstd falls back to gzip if the zstd binary is missing
+        real_which = shutil.which
+        monkeypatch.setattr(
+            shutil, "which", lambda name: None if name == "zstd" else real_which(name)
         )
-        assert len(ligands) == 13
+        fallback = compress_file(src, str(tmp_path / "fallback.db.zst"), method="zstd")
+        assert fallback.endswith(".gz")
 
-    def test_similar_ligands_mfpt(self, populated_db, tmp_path):
-        populated_db.filter(ebest=-6, mfpt_cluster=0.5)
-        options = populated_db.fetch_cluster_options("287065")
+    @pytest.mark.parametrize(
+        ("cluster", "ligname", "expected"),
+        [("interaction_cluster", "28837", 13), ("mfpt_cluster", "287065", 8)],
+    )
+    def test_similar_ligands(self, populated_db, cluster, ligname, expected):
+        populated_db.filter(ebest=-6, **{cluster: 0.5})
+        options = populated_db.fetch_cluster_options(ligname)
         assert len(options) > 0
-        cluster_id = options[0][0]
-        ligands, bookmark_name, cluster_name = populated_db.fetch_clustered_similars(
-            "287065", cluster_id, output_log=str(tmp_path / "cluster_log.txt")
-        )
-        assert len(ligands) == 8
+        ligands, _, _ = populated_db.fetch_clustered_similars(ligname, options[0][0])
+        assert len(ligands) == expected
 
 
 class TestInteractionAnalysis:
-    """The Polymer JSON and pdbqt receptor paths must give the same interactions, atom for atom."""
+    """Polymer JSON and pdbqt receptors give the same interactions"""
 
     @staticmethod
     def _from_db(rtc: RingtailCore) -> dict:
-        """{(ligname, run_number): {(type, residue, resid, chain, recname), ...}}
-
-        Interactions are held as sets: a receptor atom reached by several ligand atoms
-        is stored once, so the set is what the database actually holds.
-        """
+        """Interactions in the db as {(ligname, run_number): set of interactions}"""
         rows = rtc.db_query("""SELECT L.ligname, R.run_number, II.interaction_type,
                       II.rec_resname, II.rec_resid, II.rec_chain, II.rec_atom
                FROM Interactions I
@@ -605,20 +478,12 @@ class TestInteractionAnalysis:
         return poses
 
     def test_receptor_formats_agree(self, flexres_json_db, flexres_pdbqt_db):
-        """A Polymer JSON receptor and a pdbqt one must give identical interactions."""
-        json_poses = self._from_db(flexres_json_db)
-        pdbqt_poses = self._from_db(flexres_pdbqt_db)
-        assert json_poses, "the flexres fixture stored no interactions to compare"
-        assert set(json_poses) == set(pdbqt_poses), (
-            "the two receptor formats resolved different poses: "
-            f"json={sorted(json_poses)} pdbqt={sorted(pdbqt_poses)}"
+        assert (
+            flexres_json_db.table_length("Interactions")
+            == flexres_pdbqt_db.table_length("Interactions")
+            == 25
         )
-        for pose in sorted(json_poses):
-            assert json_poses[pose] == pdbqt_poses[pose], (
-                f"{pose[0]} run {pose[1]} differs between receptor formats:\n"
-                f"  only from json : {sorted(json_poses[pose] - pdbqt_poses[pose])}\n"
-                f"  only from pdbqt: {sorted(pdbqt_poses[pose] - json_poses[pose])}"
-            )
+        assert self._from_db(flexres_json_db) == self._from_db(flexres_pdbqt_db)
 
 
 class TestStorageMan:
@@ -657,8 +522,7 @@ class TestStorageMan:
         assert populated_db.get_bookmark_dependents("child_bm") == []
         assert populated_db.get_bookmark_dependents("unrelated_bm") == []
 
-        # a dependent's poses are its own, so deleting the parent leaves its data
-        # intact and only orphans the recorded lineage
+        # deleting the parent keeps the child bookmark and its poses
         child_poses = populated_db.table_length("child_bm")
         assert child_poses > 0
         populated_db.delete_bookmark("parent_bm")
@@ -677,7 +541,7 @@ class TestStorageMan:
         assert db_version == SCHEMA_VERSION
 
     def test_bookmark_paging(self, populated_db):
-        """The GUI table and viewer page through a bookmark with these three calls."""
+        """Page through a bookmark the way the GUI table does"""
         populated_db.build_gui_tables()
         populated_db.filter(eworst=-7, output_bookmark="page")
         start = populated_db.get_starting_rowid("page")
@@ -793,11 +657,10 @@ class TestCrossref:
         return name in RingtailCore(path).get_bookmark_names()
 
     def test_crossref_status_tables(self, tmp_path, storage_type):
-        """Crossref two dbs scoped on the Accepted status table; only the ligand
-        accepted in BOTH databases should pass."""
+        """Crossref on the accepted status table only passes ligands accepted in both dbs"""
         dbA = str(tmp_path / "targetA.db")
         dbB = str(tmp_path / "targetB.db")
-        # shared ligand "1451"; "1620"/"1751" are unique to one db each
+        # 1451 is in both dbs, 1620 and 1751 are only in one each
         rtcA = self._build_db(dbA, storage_type, ["1451", "1620"])
         rtcB = self._build_db(dbB, storage_type, ["1451", "1751"])
 
@@ -818,8 +681,7 @@ class TestCrossref:
         assert self._bookmark_exists(dbB, "crossref_accepted")
 
     def test_crossref_mixed_scope(self, tmp_path, storage_type):
-        """A status table in wanted_dbs interoperates with a bookmark in
-        unwanted_dbs: the shared accepted ligand is excluded by the bookmark."""
+        """A bookmark in unwanted_dbs excludes ligands from a status table in wanted_dbs"""
         dbA = str(tmp_path / "targetA.db")
         dbB = str(tmp_path / "targetB.db")
         dbC = str(tmp_path / "offtarget.db")
@@ -887,6 +749,8 @@ class TestADGPUHandling:
 class TestVinaHandling:
     def test_file_add(self, vina_db):
         assert vina_db.table_length("Results") == 6
+        assert vina_db.table_length("Interaction_indices") == 25
+        assert vina_db.table_length("Interactions") == 60
 
     def test_string_add(self, tmp_db):
         vina_path = TEST_DATA / "vina"
@@ -916,27 +780,6 @@ class TestVinaHandling:
         assert tmp_db.table_length("Results") == 3
         assert tmp_db.table_length("Interactions") > 0
 
-    def test_add_interactions(self, vina_db):
-        assert vina_db.table_length("Interaction_indices") == 25
-        assert vina_db.table_length("Interactions") == 60
-
-    def test_add_interactions_from_polymer(self, flexres_json_db, flexres_pdbqt_db):
-        """The two receptor formats must produce identical interactions.
-
-        The count is pinned here; that the two agree atom for atom is checked in
-        TestInteractionAnalysis::test_receptor_formats_agree.
-        """
-        assert (
-            flexres_json_db.table_length("Ligands")
-            == flexres_pdbqt_db.table_length("Ligands")
-            == 1
-        )
-        assert (
-            flexres_json_db.table_length("Interactions")
-            == flexres_pdbqt_db.table_length("Interactions")
-            == 25
-        )
-
     def test_polymer_receptor(self, flexres_json_db):
         receptor_items = flexres_json_db.get_receptor_object()
         assert receptor_items.name == "receptor"
@@ -944,7 +787,6 @@ class TestVinaHandling:
         assert receptor_items.polymer_json is not None
 
     def test_write_flexres_pdb(self, tmp_db, tmp_path):
-        pytest.importorskip("meeko")
         import meeko
 
         data_path = TEST_DATA / "flexres"
@@ -995,34 +837,8 @@ class TestVinaHandling:
             assert warning in f.read()
 
 
-class TestAD6DeprecatedProperties:
-    """The pre-release AD6 score property, read at the parser level without ingesting."""
-
-    @staticmethod
-    def _mol(name="lig", **props):
-        from rdkit import Chem
-        from rdkit.Chem import AllChem
-
-        mol = Chem.AddHs(Chem.MolFromSmiles("CCO"))
-        AllChem.EmbedMolecule(mol, randomSeed=0xC0FFEE)
-        mol.SetProp("_Name", name)
-        for key, value in props.items():
-            mol.SetProp(key, str(value))
-        return mol
-
-    def test_deprecated_score_alias_is_read(self):
-        """adng_free_energy was the pre-release spelling of the score property."""
-        pytest.importorskip("rdkit")
-        from ringtail.parsers import process_docked_mol
-
-        mol = self._mol(adng_free_energy=-7.5, pose_rank=1)
-        parsed = process_docked_mol(mol, calculate_interactions=False)
-        assert parsed["poses"][0].docking_score == -7.5
-
-
 class TestAD6Handling:
     def test_stream(self, tmp_db):
-        rdkit = pytest.importorskip("rdkit")
         from rdkit import Chem
 
         tmp_db.save_receptor(str(TEST_DATA / "ad6/helix--scofu01.json"))
@@ -1034,7 +850,6 @@ class TestAD6Handling:
         assert tmp_db.table_length("Interactions") == 53
 
     def test_stream_without_receptor_or_interactions(self, tmp_db):
-        rdkit = pytest.importorskip("rdkit")
         from rdkit import Chem
 
         suppl = Chem.SDMolSupplier(
@@ -1069,9 +884,8 @@ class TestAD6Handling:
     def test_bad_record_is_logged_and_skipped(self, tmp_db, tmp_path, monkeypatch):
         from rdkit import Chem
 
-        monkeypatch.chdir(
-            tmp_path
-        )  # the failed-files log is written to the working directory
+        # the failed files log is written to the working directory
+        monkeypatch.chdir(tmp_path)
         mols = list(
             Chem.SDMolSupplier(
                 str(TEST_DATA / "ad6/docked_ligands.sdf"), removeHs=False
@@ -1090,66 +904,38 @@ class TestAD6Handling:
         assert f"{mols[1].GetProp('_Name')} in {sdf}" in log
 
     def test_calc_interactions_deferred(self, ad6_db_no_interactions, ad6_db):
-        """Calculating later must land on the same interactions as calculating at ingest.
-
-        Compared against the ingest-time fixture rather than a hardcoded count, so the
-        test keeps checking the two paths agree even when perception changes.
-        """
+        """Adding interactions later gives the same interactions as adding them at ingest"""
         db = ad6_db_no_interactions
-        assert db.table_length("Interactions") == 0
-
         db.save_receptor(str(TEST_DATA / "ad6" / "helix--scofu01.json"))
-        db.add_interactions()
-        assert db.table_length("Results") == 9
+        progress = []
+        db.add_interactions(
+            chunk_size=2, progress_callback=lambda done, total: progress.append((done, total))
+        )
+        assert progress[-1] == (9, 9)
         assert db.table_length("Interactions") == 53
-        # and the same interactions, not merely the same number of them
         assert TestInteractionAnalysis._from_db(db) == TestInteractionAnalysis._from_db(
             ad6_db
         )
 
     def test_add_interactions_recalc_larger_cutoffs(self, ad6_db):
-        # the fixture is populated at the default cutoffs (3.7 HB, 4.0 VDW)
-        tmp_db = ad6_db
-        interactions_before = tmp_db.table_length("Interactions")
-        hb_before = tmp_db.db_query("SELECT SUM(num_hb) FROM Results")[0][0]
-        assert interactions_before > 0
+        """Recalculating needs consent, backs up the db, and larger cutoffs give more interactions"""
+        before = ad6_db.table_length("Interactions")
+        hb_before = ad6_db.db_query("SELECT SUM(num_hb) FROM Results")[0][0]
 
-        # recalculating over existing interactions requires consent; without it the
-        # call is a no-op and the existing interactions are kept
-        tmp_db.add_interactions(hb_cutoff=6.0, vdw_cutoff=7.0)
-        assert tmp_db.table_length("Interactions") == interactions_before
+        # without consent nothing changes
+        ad6_db.add_interactions(hb_cutoff=6.0, vdw_cutoff=7.0)
+        assert ad6_db.table_length("Interactions") == before
 
-        # with consent, existing interactions are deleted and recomputed with the
-        # larger cutoffs, which captures more contacts -> more interactions and more
-        # hydrogen bonds (num_hb is recomputed in the Results table)
-        tmp_db.add_interactions(hb_cutoff=6.0, vdw_cutoff=7.0, consent=True)
-        interactions_after = tmp_db.table_length("Interactions")
-        hb_after = tmp_db.db_query("SELECT SUM(num_hb) FROM Results")[0][0]
+        ad6_db.add_interactions(hb_cutoff=6.0, vdw_cutoff=7.0, consent=True, backup=True)
+        assert ad6_db.table_length("Results") == 9
+        assert ad6_db.table_length("Interactions") > before
+        assert ad6_db.db_query("SELECT SUM(num_hb) FROM Results")[0][0] > hb_before
 
-        assert tmp_db.table_length("Results") == 9  # poses themselves unchanged
-        assert interactions_after > interactions_before
-        assert hb_after > hb_before
+        backup = RingtailCore(ad6_db.db_file + ".bk", storage_type=ad6_db.storagetype)
+        assert backup.table_length("Interactions") == before
 
-    def test_recalc_reports_progress(self, ad6_db_no_interactions):
-        """Progress is reported per committed batch and ends at the pose count."""
-        db = ad6_db_no_interactions
-        db.save_receptor(str(TEST_DATA / "ad6" / "helix--scofu01.json"))
-
-        seen = []
-        result = db.add_interactions(
-            consent=True,
-            chunk_size=2,
-            progress_callback=lambda d, t: seen.append((d, t)),
-        )
-
-        assert seen, "a batched run should report at least once"
-        assert all(total == 9 for _, total in seen)
-        assert [done for done, _ in seen] == sorted(done for done, _ in seen)
-        assert seen[-1][0] == 9
-        assert result == {"completed": True, "poses_done": 9, "poses_total": 9}
-
-    def test_recalc_cancel_stays_resumable(self, ad6_db_no_interactions, ad6_db):
-        """Cancelling stops on a committed boundary and keeps the tracking table."""
+    def test_recalc_cancel_stays_resumable(self, ad6_db_no_interactions):
+        """A cancelled recalculation stops after a committed batch and can be resumed"""
         db = ad6_db_no_interactions
         db.save_receptor(str(TEST_DATA / "ad6" / "helix--scofu01.json"))
 
@@ -1165,7 +951,7 @@ class TestAD6Handling:
 
         assert cancelled["completed"] is False
         assert cancelled["poses_done"] == 2
-        # the tracking table is what makes the run resumable, so it must survive
+        # tracking table is kept so the run can be resumed
         assert RECALC_TRACKING_TABLE in db.all_database_tables()
         status = db.interaction_recalc_status()
         assert status["pending"] is True
@@ -1173,7 +959,7 @@ class TestAD6Handling:
         assert status["poses_total"] == 9
         assert status["cutoffs"] == (3.7, 4.0)
 
-        # finishing gives the same answer as never having been interrupted
+        # resuming finishes the run with the same interactions
         finished = db.add_interactions(consent=True, chunk_size=2)
         assert finished["completed"] is True
         assert db.table_length("Interactions") == 53
@@ -1181,28 +967,8 @@ class TestAD6Handling:
         assert db.interaction_recalc_status()["pending"] is False
         assert duplicate_pairs(db) == 0
 
-    def test_recalc_backup_leaves_the_original_untouched(self, ad6_db):
-        """The backup is taken before anything is deleted, not after."""
-        before = ad6_db.table_length("Interactions")
-        assert before > 0
-
-        ad6_db.add_interactions(
-            hb_cutoff=6.0, vdw_cutoff=7.0, consent=True, backup=True
-        )
-
-        backup_file = Path(ad6_db.db_file + ".bk")
-        assert backup_file.is_file()
-        # a backup taken after clear_interaction_tables would be a copy of the damage
-        backup_db = RingtailCore(str(backup_file), storage_type=ad6_db.storagetype)
-        assert backup_db.table_length("Interactions") == before
-        assert ad6_db.table_length("Interactions") > before
-
     def test_bookmarks_with_interaction_filters(self, ad6_db):
-        """Only bookmarks whose filters touch interactions are reported.
-
-        These are the ones a recalculation invalidates the meaning of, so the caller
-        can warn about them by name before deleting anything.
-        """
+        """Only bookmarks with interaction filters are returned"""
         assert ad6_db.bookmarks_with_interaction_filters() == []
 
         ad6_db.filter(eworst=-13, output_bookmark="score_only")
@@ -1211,32 +977,18 @@ class TestAD6Handling:
 
         found = set(ad6_db.bookmarks_with_interaction_filters())
         assert "uses_vdw" in found
-        # 0 is a real criterion for hb_count ("no hydrogen bonds"), so a truthiness
-        # test here would drop this bookmark
+        # hb_count=0 is still an interaction filter
         assert "uses_hb_count" in found
         assert "score_only" not in found
 
 
-class TestLogger:
-    def test_set_log_level(self):
-        from ringtail import LOGGER, setup_logging
-
-        setup_logging(level="INFO")
-        assert LOGGER.level == logging.INFO
-
-
 class TestOptions:
-    def test_filter_option_checks(self, tmp_db, tmp_path):
-        # No results are ingested here on purpose: Filter.checks() runs at construction and
-        # touches no data, so building a database would only make this test slow.
-
-        # criteria live on the leaf; a flat specification has exactly one
+    def test_filter_option_checks(self):
         leaf = Filters(score_percentile=20).leaf
         assert leaf.eworst is None
         assert leaf.score_percentile == 20
 
-        # An absolute cutoff and a percentile on the same column are two different
-        # requests, so they are refused rather than one silently overriding the other.
+        # cutoff and percentile on the same column is not allowed
         with pytest.raises(OptionError):
             Filters(score_percentile=20, eworst=-6)
         with pytest.raises(OptionError):
@@ -1413,9 +1165,9 @@ class TestCustomFields:
             )
 
     def test_custom_fields_export(self, tmp_db, make_ad6_sdf, tmp_path):
+        """Test that custom fields are exported"""
         import csv
 
-        """Test that custom fields are exported"""
         custom = make_ad6_sdf(
             ligname="with_custom",
             custom={

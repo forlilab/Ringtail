@@ -1,101 +1,95 @@
 # Ringtail test suite
 
-## Running
+## Running the tests
 
 ```bash
-pytest -m "not slow"     # quick: 73 cases, API level, duckdb only
-pytest                   # deep:  179 cases, adds sqlite and the CLI integration tests
+pytest -m "not slow"     # quick run, duckdb only, no CLI tests
+pytest                   # full run, adds sqlite and the CLI tests
 ```
 
-`pytest` with no arguments is the full run, on purpose — see "Why `slow` and not `quick`"
-below.
-
-The deep run shells out to Ringtail's console scripts, so **the entry points have to be on
-`PATH`**. Inside the environment that is automatic; if you invoke pytest by absolute path
-without activating the env, every CLI test errors with
-`FileNotFoundError: 'rt_process_vs'`.
+The CLI tests call `rt_process_vs`, so run pytest with your Ringtail environment activated.
 
 ```bash
-conda activate <your_ringtail_env> && pytest
+conda activate <your_ringtail_env>
+pytest
 ```
+
+The 10 slowest tests are printed at the end of each run.
+
+## Running specific tests
+
+From the Ringtail folder, add a file, class or test to the path with `::`.
+
+```bash
+pytest test/test_units.py
+pytest test/test_units.py::TestFiltering
+pytest test/test_units.py::TestCoreOperations::test_append_to_database
+```
+
+Most tests run once per storage backend, and the backend is part of the test id. Pick one with `-k`, or add the id in brackets.
+
+```bash
+pytest test/test_units.py::TestFiltering -k duckdb
+pytest test/test_units.py -k "TestAD6Handling and sqlite"
+pytest "test/test_units.py::TestCoreOperations::test_append_to_database[sqlite]"
+```
+
+`-k` also matches test and class names, so you can run every test with a given word in the name.
+
+```bash
+pytest -k bookmark
+pytest -m "not slow" -k TestCustomFields
+```
+
+The sqlite cases are marked slow, so `-m "not slow"` will skip them even if you ask for sqlite with `-k`.
+
+Other useful options:
+
+| option | what it does |
+|---|---|
+| `-x` | stop at the first failure |
+| `-v` | print each test id and its result |
+| `-s` | show print output from the tests |
+| `--lf` | rerun only the tests that failed last time |
+| `--collect-only -q` | list the test ids without running them |
 
 ## Layout
 
-| File | What it covers |
+| file | what it covers |
 |---|---|
-| `conftest.py` | shared fixtures: `tmp_db`, `populated_db`, `cli`, `storage_type` |
-| `test_units.py` | the `RingtailCore` API, both storage backends |
-| `test_cmdline.py` | the same ground through `rt_process_vs` and friends — all `slow` |
+| `conftest.py` | shared fixtures, see below |
+| `test_units.py` | the `RingtailCore` API, for both storage backends |
+| `test_cmdline.py` | the command line scripts, all marked slow |
 | `test_data/` | adgpu, vina and ad6 docking results, receptors, file lists |
 
-Every fixture that touches a database is parametrized over **duckdb and sqlite**, so a dialect-specific bug in one backend fails the suite rather than waiting for a user to find it. The sqlite cases are marked `slow`, so the quick run covers only the default backend.
+## Fixtures
 
-## Why `slow` and not `quick`
+Every fixture that uses a database runs once for duckdb and once for sqlite, through `storage_type`.
 
-Marking the *expensive* tests, and selecting with `-m "not slow"`, means a newly added test
-is in the quick run **by default**. The inverse — marking the essential ones `quick` — looks
-equivalent but fails in the worse direction: a new test is silently excluded until someone
-remembers to mark it, so the quick run slowly stops meaning anything, invisibly. Here the
-worst case is a quick run that gets slower, which you notice immediately.
-
-`--strict-markers` is set in `pyproject.toml` so a typo'd marker is an error rather than a
-decorator that does nothing.
-
-## What is `slow`
-
-- **all of `test_cmdline.py`** — a subprocess per call, each with its own import and ingest,
-  re-covering through the CLI what `test_units.py` covers through the API.
-- **`TestMergeDB`, `TestCrossref`** — clone databases and attach extra ones.
-- **every sqlite case** — through the `storage_type` fixture in `conftest.py`.
-
-Deliberately *not* marked slow: the ingest tests in `TestCoreOperations`,
-`TestVinaHandling` and `TestAD6Handling`. They do cost seconds each, but the write path is
-where the bugs are, and a quick run with no ingest coverage would be false comfort.
-
-## The expensive thing is ingest
-
-Two things keep the suite fast, and they are worth understanding before adding tests.
-
-**1. Shared templates.** Many tests ingest byte-identical data and differ only in what they
-assert. Those datasets are built **once per backend per session** and each test gets a copy
-of the file — measured at 3 ms against 6.7 s, roughly 2000x cheaper, with identical
-isolation, since every test still gets a private file it can write bookmarks into.
-
-| fixture | dataset |
+| fixture | what you get |
 |---|---|
-| `populated_db` | 217-ligand adgpu (group1 + group2) |
-| `vina_db` | 6-pose vina with receptor and interactions |
-| `ad6_db` | 9-pose ad6 with receptor and interactions |
-| `ad6_db_no_interactions` | the same, ingested with `calculate_interactions=False` |
-| `flexres_json_db` / `flexres_pdbqt_db` | one flexible-residue pose, receptor as Polymer JSON vs pdbqt |
+| `tmp_db` | empty db |
+| `populated_db` | 217 adgpu ligands (group1 + group2) |
+| `vina_db` | 6 vina poses with receptor and interactions |
+| `ad6_db` | 9 ad6 poses with receptor and interactions |
+| `ad6_db_no_interactions` | the ad6 poses without interactions |
+| `flexres_json_db` / `flexres_pdbqt_db` | 1 flexible-residue pose, receptor as meeko Polymer JSON or pdbqt |
+| `make_ad6_sdf` | writes an ad6 sdf for one ligand, with optional custom properties |
+| `cli` | runs `rt_process_vs` write and read on a duckdb output db |
 
-If you add one, note the ordering constraint: a session-scoped fixture may only depend on
-fixtures of session scope or wider, which is why `storage_type` is session-scoped. And let
-the connection close before copying — DuckDB holds a single-writer lock and keeps a
-write-ahead log beside the file.
+The populated databases are built once per backend per session, and each test gets its own copy. To add a new one, build it with `_template` and hand out copies with `_copy_of` in `conftest.py`. Tests about adding results should use `tmp_db` and add the results in the test.
 
-Tests that are *about* ingest still ingest for real. `test_add_folder` and
-`test_append_to_database` would test nothing if handed a prebuilt database.
+Ingest is capped at `TEST_MAX_PROC` processes for the whole session.
 
-**2. Capped ingest parallelism** (`TEST_MAX_PROC`, and `--max_proc` for the CLI helper). See
-the gotcha below.
+## Slow tests
 
-## Gotchas
+Tests marked slow are left out of the quick run:
 
-**Ingest cannot run from a piped script (macOS and Windows).** Ringtail uses the `spawn`
-start method there (`fork` on Linux), and spawned children re-import `__main__`; from `python - <<EOF` that is `<stdin>`, which does
-not exist, and you get a wall of `FileNotFoundError` from the child processes. Put the code
-in a real file under `if __name__ == "__main__":`.
+- all of `test_cmdline.py`
+- `TestMergeDB` and `TestCrossref`
+- `test_custom_fields_merge` in `TestCustomFields`
+- every sqlite case
 
-**`max_proc` defaults to `cpu_count()` regardless of input size.** A 3-file ingest measured
-4.67 s with the default 11 readers against 1.93 s with one reader — the same work, the
-difference being 11 interpreter startups under the `spawn` method (macOS and Windows). `conftest.py` caps
-this session-wide via `TEST_MAX_PROC`, and passes `--max_proc` to the CLI helper because a
-subprocess cannot see the in-process patch.
+New tests are in the quick run unless you mark them with `@pytest.mark.slow`. A mistyped marker is an error, since `--strict-markers` is set in `pyproject.toml`.
 
-This is worth knowing beyond the tests: a user importing a handful of files pays the same
-overhead, so scaling the default by input size would be a real improvement to Ringtail
-itself.
-
-**`--durations=10` is on by default** so the slowest tests are always printed. If that list
-starts growing, something has regressed.
+The ingest tests in `TestCoreOperations`, `TestVinaHandling` and `TestAD6Handling` are not marked slow, so the quick run still covers adding results.
