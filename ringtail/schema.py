@@ -118,6 +118,18 @@ CUSTOM_POSE_DATA_SCHEMA = TableSchema(
     },
 )
 
+CALCULATIONS_SCHEMA = TableSchema(
+    name="calculations",
+    undo_on_failed_write=True,
+    columns={
+        "calc_id":Column("INTEGER","custom calculation id", primary_key=True, autoincrement=True),
+        "name":Column("VARCHAR", "custom calculations", unique=True),
+        "expression":Column("VARCHAR","expression of calculation"),
+        "columns":Column("VARCHAR", "columns involved in calculation"),
+        "output_type":Column("VARCHAR","type of output")
+    }
+)
+
 CUSTOM_LIGAND_DATA_SCHEMA = TableSchema(
     name="custom_ligand_data",
     undo_on_failed_write=True,

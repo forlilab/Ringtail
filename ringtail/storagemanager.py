@@ -61,6 +61,7 @@ from .schema import (
     POSE_COMMENTS_SCHEMA,
     CUSTOM_POSE_DATA_SCHEMA,
     CUSTOM_LIGAND_DATA_SCHEMA,
+    CALCULATIONS_SCHEMA,
     MINIMIZED_COLUMNS,
     ROW_ID_OWNERS,
     ROW_ID_TABLES,
@@ -469,6 +470,16 @@ class StorageManager(ABC):
 
         bookmark_name = f"similar_{ligname}_{cluster_name}"
         return ligands, bookmark_name, cluster_name
+
+    def insert_calculation(self, name: str, expression: str, columns: list[str], output_name: str, output_type: type):
+        # create if not exist
+        self._create_calculation_table()
+        existing_dyn_cols = self.fetch_dynamic_table_column_names("custom_pose_data")
+        non_existing_cols = [col for col in columns if col not in existing_dyn_cols]
+        logger.warning(f'The following columns do not exist yet, but will be created when calculation is ran: {",".join(non_existing_cols)}')
+        columns = json.dumps(columns)
+        
+
 
     def table_length(self, table: str, distinct_column: str = None) -> int:
         """
@@ -3426,11 +3437,18 @@ class StorageManager(ABC):
             self.db_query(sql)
 
     def _create_custom_pose_table(self):
-        """Creates a table of each pose-interaction combination."""
+        """Creates a table for custom properties, columns will be added as they appear in docking data."""
         for sql in build_create_table(
             CUSTOM_POSE_DATA_SCHEMA.name, CUSTOM_POSE_DATA_SCHEMA, self.dialect
         ):
             self.db_query(sql)
+
+    def _create_calculation_table(self):
+            """Creates a table to hold custom calculations."""
+            for sql in build_create_table(
+                CALCULATIONS_SCHEMA.name, CALCULATIONS_SCHEMA, self.dialect
+            ):
+                self.db_query(sql)
 
     def _create_db_properties_table(self):
         """Create table of database properties used during write session to the database."""

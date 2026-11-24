@@ -8,7 +8,7 @@ import itertools
 import glob
 import os
 import re
-from typing import Callable
+from typing import Callable, Any
 import functools
 from collections.abc import Iterable
 import json
@@ -1340,6 +1340,87 @@ class RingtailCore:
                 f"Number of similar ligands: {len(similar_ligands) if similar_ligands else 0}"
             )
         return similar_ligands, bookmark_name, cluster_name
+
+    @_wrap_exceptions
+    def add_custom_calculation(self, name: str, expression: str, columns: list[str], output_name: str, output_type: type):
+        '''
+        #TODO
+        1. preview it
+        2. approve/reject it
+        3. register it
+        4. apply to database
+
+
+        Args:
+            name (str): _description_
+            expression (str): _description_
+            columns (list[str]): _description_
+            output_name (str): _description_
+            output_type (type): _description_
+        '''
+        pass
+
+    @_wrap_exceptions
+    def register_calculation(self, name: str, expression: str, columns: list[str], output_name: str, output_type: type):
+        '''
+        Register a custom calculation per pose, based on existing columns.
+        Currently a calculation can only be performed on a per pose_id bases.
+        You cannot choose an output_name that already exist as a column in Results
+        or custom_pose_data. 
+
+        Each expression will get an id, and if it is deleted after its calculation
+        was applied to data, the table will 
+
+        Args:
+            name (str): name of custom function, cannot use an existing name
+            expression (str): expression, which must use the column names exactly as listed in the columns list
+            columns (list[str]): list of columns used in the calculation, need not be in the order first used in the expression
+            output_name (str): name of the custom column that will hold the output 
+            output_type (str): what the output type will be
+        
+        #TODO
+        # 1st pass: use numeric values directly
+        # 2nd pass: probably want to use rd Mol somehow
+        '''
+        pass
+
+    _wrap_exceptions
+    def delete_calculation(self, name: str, delete_calculated_data: bool=False):
+        '''
+        Delete an existing registered calculation, and delete associated calculated data if requested
+        If calcualted data is not deleted, there will be a stale reference in the custom
+        calculation table
+
+        Args:
+            name (str): name of custom calculation
+        '''
+        pass
+
+    @_wrap_exceptions
+    def preview_calcuation(self, name: str, limit: int=5) -> list[tuple[int, Any]]:
+        '''
+        Preview a custom registered calculation
+
+        Args:
+            name (str): name of calculation
+            limit (int, optional): number of database rows/poses to preview. Defaults to 5.
+
+        Returns:
+            list: list of calculated values
+        '''
+        pass
+
+    @_wrap_exceptions
+    def apply_calculation(self, name: str):
+        '''
+        Apply calculation, to all data (bookmark=None) or to a select subset of data.
+        If the entry being calculated for (most likely pose_id) does not have the required
+        input fields/columns, it will be excluded from calculation 
+
+        Args:
+            name (str): name of custom calculation
+        '''
+        pass
 
     @_wrap_exceptions
     def export_columns_to_csv(
